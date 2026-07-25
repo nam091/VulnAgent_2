@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="SeCoRa",
+    name="VulnAgent",
     version="0.1.0",
     author="nam091",
     author_email="prkatt001@gmail.com",
-    description="Secure Code Review AI Agent for detecting and remediating security vulnerabilities in codebases.",
+    description="VulnAgent - AI-powered vulnerability detection and remediation for codebases.",
     long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type="text/markdown",
     url="https://github.com/nam091/VulnAgent_2",
@@ -28,7 +28,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'secora=main:main',  # Corrected entry point
+            'vulnagent=main:main',
         ],
     },
     classifiers=[

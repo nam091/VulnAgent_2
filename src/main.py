@@ -10,7 +10,7 @@ from models.vulnerability import VulnerabilityReport
 from utils.file_handler import process_uploaded_file
 
 app = FastAPI(
-    title="Secure Code Review AI Agent (SeCoRA) - AI SAST",
+    title="VulnAgent - AI SAST",
     description="AI-powered security vulnerability detection and remediation",
     version="0.1.0"
 )

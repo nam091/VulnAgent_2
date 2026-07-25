@@ -1,9 +1,9 @@
-# SeCoRA (Secure Code Review AI Agent) 🛡️
+# VulnAgent 🛡️
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> An AI-powered tool for detecting and remediating security vulnerabilities in codebases. This tool uses advanced language models to perform static analysis, vulnerability chaining, and provide actionable security recommendations.
+> **VulnAgent** is an AI-powered tool for detecting and remediating security vulnerabilities in codebases. It uses advanced language models for static analysis, vulnerability chaining, and actionable security recommendations.
 
 ## ✨ Features
 
@@ -58,7 +58,7 @@ cp .env.example .env
 ```bash
 python3 src/main.py
 # OR
-secora
+vulnagent
 ```
 
 2. Access the API documentation at `http://localhost:8000/docs`
