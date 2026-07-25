@@ -3,12 +3,12 @@ from setuptools import setup, find_packages
 setup(
     name="SeCoRa",
     version="0.1.0",
-    author="Shivam Saraswat",
-    author_email="thecybersapien@protonmail.com",
+    author="nam091",
+    author_email="prkatt001@gmail.com",
     description="Secure Code Review AI Agent for detecting and remediating security vulnerabilities in codebases.",
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/secure-code-review-bot",
+    url="https://github.com/nam091/VulnAgent_2",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[

@@ -11,16 +11,26 @@ load_dotenv()
 class AIClient:
     def __init__(self) -> None:
         """
-        Initialize AI clients with API keys from environment variables
+        Initialize AI clients with API keys from environment variables.
+        Supports OpenAI-compatible providers via OPENAI_BASE_URL / OPENAI_MODEL.
         """
 
-        # Initialize Ollama, OpenAI, and Anthropic clients
+        # Initialize Ollama, OpenAI-compatible, and Anthropic clients
         # self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.openai_client = openai.Client(api_key=os.getenv("OPENAI_API_KEY"))
-        self.anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_base_url = os.getenv("OPENAI_BASE_URL")  # e.g. https://api.xiaomimimo.com/v1
+        client_kwargs: Dict[str, Any] = {"api_key": openai_api_key}
+        if openai_base_url:
+            client_kwargs["base_url"] = openai_base_url
+        self.openai_client = openai.Client(**client_kwargs)
 
-        # Default to gpt-4o-mini for security analysis (OpenAI)
-        self.openai_default_model = "o1-mini-2024-09-12"
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.anthropic_client = (
+            anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
+        )
+
+        # Default model (override with OPENAI_MODEL for compatible APIs)
+        self.openai_default_model = os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12")
 
         # Default to local model for security analysis (Local Model)
         # self.local_default_model = "deepseek-r1:32b"  # or any other model you have pulled in Ollama
@@ -44,15 +54,17 @@ class AIClient:
             # if self._validate_response(response):
             #     return response
 
-            # Try with OpenAI second
-            response = await self._analyze_with_openai(self.openai_client, prompt, self.openai_default_model)
+            # Try with OpenAI-compatible API first
+            selected_model = model or self.openai_default_model
+            response = await self._analyze_with_openai(self.openai_client, prompt, selected_model)
             if self._validate_response(response):
                 return response
 
-            # Fallback to Anthropic if OpenAI response is invalid (not tested enough)
-            response = await self._analyze_with_anthropic(prompt)
-            if self._validate_response(response):
-                return response
+            # Fallback to Anthropic if configured and OpenAI response is invalid
+            if self.anthropic_client is not None:
+                response = await self._analyze_with_anthropic(prompt)
+                if self._validate_response(response):
+                    return response
 
             raise ValueError("AI models failed to provide valid analysis")
 
@@ -101,15 +113,14 @@ class AIClient:
         """
 
         messages = [
-            {"role": "assistant", "content": self._get_system_prompt()},
+            {"role": "system", "content": self._get_system_prompt()},
             {"role": "user", "content": prompt}
         ]
 
+        # store= is OpenAI-only; omit for OpenAI-compatible providers (e.g. Mimo)
         response = client.chat.completions.create(
             model=model,
-            store=True,
             messages=messages,
-            # temperature=0.1
         )
 
         return self._parse_openai_response(response)
@@ -288,8 +299,23 @@ class AIClient:
         """
 
         try:
+            import json
+            import re
+
             content = response.choices[0].message.content
-            return eval(content)  # Safe since we validate the response
+            if not content:
+                raise ValueError("Empty model response")
+
+            content = content.strip()
+            # Strip markdown code fences if the model wraps JSON
+            fence = re.match(r"^```(?:json|python)?\s*([\s\S]*?)\s*```$", content)
+            if fence:
+                content = fence.group(1).strip()
+
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                return eval(content)  # fallback for Python-literal style output
         except Exception as e:
             raise ValueError(f"Failed to parse OpenAI response: {str(e)}")
 

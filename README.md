@@ -26,8 +26,8 @@
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/shivamsaraswat/secora.git
-cd secora
+git clone https://github.com/nam091/VulnAgent_2.git
+cd VulnAgent_2
 ```
 
 2. Create a virtual environment and activate it:
