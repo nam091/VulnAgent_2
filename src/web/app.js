@@ -298,26 +298,47 @@ function renderScan() {
   document.getElementById('go').onclick = () => submit(pane);
 }
 
+const MAX_FILES = 2000;
+
 function setFiles(files) {
   // Keep only what the backend can scan, so the count shown is honest.
   const keep = /\.(py|pyi|txt|cfg|ini|toml|ya?ml)$/i;
   const skip = /(^|\/)(venv|\.venv|node_modules|\.git|__pycache__|dist|build)(\/|$)/i;
-  pendingFiles = files.filter(f => {
+  const eligible = files.filter(f => {
     const path = f.webkitRelativePath || f.name;
     return keep.test(path) && !skip.test(path);
   });
 
+  // A selection over the cap is trimmed rather than rejected, but never
+  // silently: a scan that quietly covered part of a tree reads as a clean
+  // bill of health for the part it never looked at.
+  let dropped = 0;
+  if (eligible.length > MAX_FILES) {
+    dropped = eligible.length - MAX_FILES;
+    pendingFiles = eligible.slice(0, MAX_FILES);
+  } else {
+    pendingFiles = eligible;
+  }
+
   const list = document.getElementById('filelist');
   if (!pendingFiles.length) {
     list.innerHTML = `<div class="banner warn" style="margin:12px 0 0">
-      No scannable source files in that selection.</div>`;
+      No scannable source files in that selection.
+      ${files.length ? `Looked at ${files.length} file(s).` : ''}</div>`;
     return;
   }
   const shown = pendingFiles.slice(0, 40)
     .map(f => `<div>${esc(f.webkitRelativePath || f.name)}</div>`).join('');
   list.innerHTML = `<div class="filelist">${shown}${
     pendingFiles.length > 40 ? `<div style="color:var(--fg-faint)">…and ${pendingFiles.length - 40} more</div>` : ''
-  }</div><p class="muted" style="margin-top:8px">${pendingFiles.length} file(s) ready.</p>`;
+  }</div>
+  ${dropped ? `<div class="banner warn" style="margin:10px 0 0">
+      Selection capped at ${MAX_FILES} files. <b>${dropped} file(s) will NOT be
+      scanned.</b> For a tree this large use the command line, which has no cap:
+      <code>vulnagent scan &lt;path&gt;</code></div>` : ''}
+  <p class="muted" style="margin-top:8px">${pendingFiles.length} file(s) ready${
+    files.length > eligible.length
+      ? `, ${files.length - eligible.length} skipped as not scannable` : ''}.</p>`;
 }
 
 async function filesFromDrop(transfer) {

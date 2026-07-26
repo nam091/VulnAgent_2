@@ -39,8 +39,8 @@ ALLOWED_GIT_HOSTS = {
     "gitlab.com", "www.gitlab.com",
     "bitbucket.org", "www.bitbucket.org",
 }
-MAX_UPLOAD_FILES = 400
-MAX_TOTAL_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_FILES = 2000
+MAX_TOTAL_UPLOAD_BYTES = 60 * 1024 * 1024
 MAX_SINGLE_FILE_BYTES = 2 * 1024 * 1024
 MAX_CODE_CHARS = 200_000
 SCANNABLE_SUFFIXES = {".py", ".pyi", ".txt", ".cfg", ".ini", ".toml", ".env", ".yml", ".yaml"}

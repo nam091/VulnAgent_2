@@ -122,6 +122,8 @@ class Metrics:
     seconds: float = 0.0
     partial: bool = False
     unmatched: int = 0
+    fp_on_clean: int = 0
+    fp_wrong_type: int = 0
     missed: List[str] = field(default_factory=list)
     spurious: List[str] = field(default_factory=list)
 
@@ -155,6 +157,8 @@ class Metrics:
             "recall": round(self.recall, 4),
             "f1": None if self.partial else round(self.f1, 4),
             "unmatched": self.unmatched,
+            "fp_on_clean_files": self.fp_on_clean,
+            "fp_wrong_type_right_file": self.fp_wrong_type,
             "partial_ground_truth": self.partial,
             "seconds": round(self.seconds, 2),
             "missed": self.missed,
@@ -269,6 +273,16 @@ def match(
         f"{l.file}:{l.line} {l.type or 'CWE-' + l.cwe}"
         for i, l in enumerate(labels) if i not in claimed_labels
     ]
+    # Two different failures hide in the false-positive column. A finding in
+    # a file known to be clean is simply wrong. A finding in a vulnerable
+    # file under the wrong CWE found the right place and mislabelled it,
+    # which is a far milder error and worth separating.
+    labelled_files = {l.file for l in labels}
+    metrics.fp_on_clean = sum(
+        1 for i, d in enumerate(detections)
+        if i not in matched_detections and d.file not in labelled_files
+    )
+    metrics.fp_wrong_type = metrics.false_positives - metrics.fp_on_clean
     metrics.spurious = [
         f"{d.file}:{d.line} {d.type or 'CWE-' + d.cwe}"
         for i, d in enumerate(detections) if i not in matched_detections
@@ -446,16 +460,23 @@ async def main() -> int:
     print(f"Dataset : {meta['name']}")
     if meta.get("source"):
         print(f"Source  : {meta['source']}")
-    print(f"Labels  : {len(labels)} across {len(files)} file(s)")
+    clean = meta.get("clean_files") or []
+    print(f"Labels  : {len(labels)} vulnerability(ies) across {len(files)} file(s)")
+    if clean:
+        print(f"          plus {len(clean)} file(s) known to be clean, where any")
+        print(f"          finding is a false positive")
     print(f"Matching: {meta['match_mode']}-level"
           + (f" (+/-{LINE_TOLERANCE} lines)" if meta["match_mode"] == "line" else ""))
     if meta["partial_labels"]:
         print("          ground truth is PARTIAL, so precision and F1 are not")
         print("          measurable here - an unmatched detection may well be a")
         print("          real defect nobody labelled. This run measures RECALL.")
-    if meta["match_mode"] == "file":
-        print("          every sample is known-vulnerable and there are no clean")
-        print("          counterparts, so this run measures RECALL, not precision.")
+    # Precision is only meaningful when the corpus contains code that is
+    # known to be safe. Saying otherwise on a corpus that has 778 such files
+    # would throw away the one measurement it exists to provide.
+    if meta["match_mode"] == "file" and not clean and not meta["partial_labels"]:
+        print("          no file is known to be clean, so an unmatched detection")
+        print("          cannot be judged: this run measures RECALL only.")
     print()
 
     selected = args.only or list(CONFIGURATIONS)
@@ -484,6 +505,15 @@ async def main() -> int:
     print()
     print(render_table(results))
     print()
+
+    if clean:
+        print("False positives split:")
+        for metrics in results:
+            if metrics.partial:
+                continue
+            print(f"  {metrics.name:<22} {metrics.fp_on_clean:>4} in clean files"
+                  f"   {metrics.fp_wrong_type:>4} right file, wrong CWE")
+        print()
 
     # In file-mode the false-positive column is not interpretable, since a
     # sample can legitimately contain defects beyond the one it is labelled
