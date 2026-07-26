@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -142,13 +143,22 @@ class AIClient:
         if not self._is_reasoning_model(model):
             kwargs["temperature"] = 0
 
+        # openai.Client is synchronous. Awaiting nothing and calling it
+        # straight from a coroutine blocked the event loop for the whole
+        # request, which made asyncio.gather over these calls run them one
+        # after another and froze the web server for the length of every
+        # scan. Off-thread, the concurrency limit finally means something.
         try:
-            response = client.chat.completions.create(**kwargs)
+            response = await asyncio.to_thread(
+                lambda: client.chat.completions.create(**kwargs)
+            )
         except openai.BadRequestError:
             # Some compatible providers reject temperature on models we did
             # not recognise as reasoning models; retry without it.
             kwargs.pop("temperature", None)
-            response = client.chat.completions.create(**kwargs)
+            response = await asyncio.to_thread(
+                lambda: client.chat.completions.create(**kwargs)
+            )
 
         return self._parse_openai_response(response)
 

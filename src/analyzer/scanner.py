@@ -49,7 +49,8 @@ class ScanOptions:
         verify: bool = False,
         verify_all: bool = False,
         verify_turns: int = 6,
-        progress: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_partial: Optional[Callable[[List[VulnerabilityReport]], None]] = None
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -71,6 +72,10 @@ class ScanOptions:
         # completes, so a caller can show real progress rather than a
         # spinner that says nothing.
         self.progress = progress
+        # Called with the reports as soon as they exist, before verification
+        # runs. Verification can take minutes; showing what has already been
+        # found beats an empty screen with a moving bar.
+        self.on_partial = on_partial
 
 
 class ScanResult:
@@ -147,7 +152,9 @@ class Scanner:
         root = target_path if target_path.is_dir() else target_path.parent
 
         self._emit("discovery", "Discovering source files", 2)
-        files = discover(self.options.target, extra_excludes=self.options.excludes)
+        files = await asyncio.to_thread(
+            discover, self.options.target, self.options.excludes
+        )
         if not files:
             logging.warning(f"No source files found under {self.options.target}")
             self._emit("done", "No source files found", 100)
@@ -160,12 +167,14 @@ class Scanner:
         # Tier 1: one semgrep invocation for the whole tree.
         self._emit("rules", "Running rule engine over every file", 10)
         rule_started = time.perf_counter()
-        rule_by_file = self._run_rule_tier(root, {f.relative for f in files})
+        rule_by_file = await self._run_rule_tier(root, {f.relative for f in files})
         rule_elapsed = time.perf_counter() - rule_started
         rule_total = sum(len(v) for v in rule_by_file.values())
         self._emit(
-            "rules", f"Rule engine found {rule_total} finding(s)", 25,
-            rule_findings=rule_total
+            "rules",
+            f"Rule engine: {rule_total} finding(s) in {len(rule_by_file)} of "
+            f"{len(files)} file(s), {rule_elapsed:.1f}s",
+            25, rule_findings=rule_total, files_with_findings=len(rule_by_file)
         )
 
         # Tier 2: LLM over the routed subset only.
@@ -182,15 +191,35 @@ class Scanner:
 
         if routed:
             self._emit(
-                "llm", f"Analysing {len(routed)} file(s) with the LLM", 28,
-                total=len(routed), current=0
+                "llm",
+                f"Sending {len(routed)} of {len(files)} file(s) to the LLM "
+                f"(the rest carry no risk signal)",
+                28, total=len(routed), current=0
             )
+        elif self.options.use_llm:
+            self._emit("llm", "No file cleared the risk threshold for the LLM tier", 70)
         llm_started = time.perf_counter()
         llm_by_file, tier_status = await self._run_llm_tier(routed)
         llm_elapsed = time.perf_counter() - llm_started
 
         self._emit("fusion", "Merging results from both tiers", 72)
         reports = self._assemble(files, rule_by_file, llm_by_file, tier_status)
+
+        found = sum(len(r.vulnerabilities) for r in reports)
+        confirmed = sum(
+            1 for r in reports for v in r.vulnerabilities
+            if v.source == FindingSource.CONFIRMED
+        )
+        self._emit(
+            "fusion",
+            f"Merged: {found} finding(s), {confirmed} confirmed by both tiers",
+            74, findings=found, confirmed=confirmed
+        )
+        if self.options.on_partial is not None:
+            try:
+                self.options.on_partial(reports)
+            except Exception as e:
+                logging.debug(f"Partial-result callback raised: {e}")
 
         verify_stats: Dict[str, Any] = {}
         if self.options.verify:
@@ -209,9 +238,14 @@ class Scanner:
             **verify_stats,
         }
         logging.info(f"Scan complete: {stats}")
+        total_found = sum(len(r.vulnerabilities) for r in reports)
+        chains = sum(len(r.chained_vulnerabilities) for r in reports)
         self._emit(
-            "done", "Scan complete", 100,
-            findings=sum(len(r.vulnerabilities) for r in reports)
+            "done",
+            f"Complete: {total_found} finding(s)"
+            + (f", {chains} attack chain(s)" if chains else "")
+            + f" in {stats['total_seconds']}s",
+            100, findings=total_found, chains=chains
         )
 
         return ScanResult(reports, root, stats)
@@ -248,7 +282,7 @@ class Scanner:
         except Exception as e:
             logging.debug(f"Progress callback raised: {e}")
 
-    def _run_rule_tier(
+    async def _run_rule_tier(
         self,
         root: Path,
         in_scope: Set[str]
@@ -270,7 +304,11 @@ class Scanner:
             return {}
 
         try:
-            findings = self.semgrep.scan(self.options.target)
+            # semgrep is a blocking subprocess run. Called directly from the
+            # event loop it froze the whole server for the length of the scan:
+            # no progress frames, no other requests answered, and a progress
+            # bar that could not move because nothing could be delivered.
+            findings = await asyncio.to_thread(self.semgrep.scan, self.options.target)
         except SemgrepUnavailable as e:
             logging.error(f"Rule tier failed: {e}")
             self._rule_error = str(e)
@@ -324,9 +362,11 @@ class Scanner:
             completed["n"] += 1
             # The LLM tier owns the 28-70 band of the overall progress bar.
             percent = 28 + 42 * (completed["n"] / total)
+            found = sum(len(v) for v in results.values())
             self._emit(
-                "llm", f"Analysed {completed['n']}/{total}: {relative}", percent,
-                current=completed["n"], total=total
+                "llm",
+                f"[{completed['n']}/{total}] {relative} - {found} finding(s) so far",
+                percent, current=completed["n"], total=total, findings=found
             )
 
         async def analyse(item: DiscoveredFile) -> None:
@@ -422,9 +462,13 @@ class Scanner:
                 done["n"] += 1
                 self._emit(
                     "verify",
-                    f"Verified {done['n']}/{total}: {vuln.type.value} -> {verdict.verdict}",
+                    f"[{done['n']}/{total}] {vuln.type.value} at "
+                    f"{Path(vuln.location.file_path).name}:{vuln.location.start_line}"
+                    f" -> {verdict.verdict}"
+                    f"  ({counters['confirmed']} upheld, {counters['refuted']} refuted)",
                     75 + 23 * (done["n"] / total),
-                    current=done["n"], total=total
+                    current=done["n"], total=total,
+                    upheld=counters["confirmed"], refuted=counters["refuted"]
                 )
                 vuln.verification = verdict.as_dict()
                 counters["tool_calls"] += verdict.tool_calls

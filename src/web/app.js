@@ -468,7 +468,9 @@ function paintJob(job) {
   }
 
   if (running) {
-    body.innerHTML = progressCard(job);
+    body.innerHTML = progressCard(job) + partialResults(job);
+    body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
+      head.nextElementSibling.classList.toggle('hide'));
     return;
   }
 
@@ -556,6 +558,27 @@ function paintJob(job) {
   });
 }
 
+/* Findings already merged, shown while verification is still running. */
+function partialResults(job) {
+  const result = job.result;
+  const found = (result && result.findings) || [];
+  if (!found.length) return '';
+
+  const counts = result.counts || {};
+  const sorted = [...found].sort(
+    (a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
+
+  return `
+    <div class="card">
+      <div class="card-title">Found so far &mdash; scan still running</div>
+      ${severityStack(counts)}
+      <div style="margin-top:16px">${sorted.map(findingCard).join('')}</div>
+      <p class="muted" style="margin-top:12px">
+        These are merged results. The verification agent may still remove some
+        of them, and later phases may add more.</p>
+    </div>`;
+}
+
 function progressCard(job) {
   const current = PHASES.findIndex(([key]) => key === job.phase);
   return `
@@ -570,10 +593,15 @@ function progressCard(job) {
         <div class="progress-fill live" style="width:${job.percent}%"></div>
       </div>
       <div class="phases">
-        ${PHASES.map(([key, label], i) => `
-          <span class="phase ${key === job.phase ? 'active' : (current > i ? 'done' : '')}">
-            ${current > i ? '✓' : '○'} ${label}
-          </span>`).join('')}
+        ${PHASES.map(([key, label], i) => {
+          const done = current > i;
+          const active = key === job.phase;
+          const note = phaseNote(job, key);
+          return `<span class="phase ${active ? 'active' : (done ? 'done' : '')}">
+            ${done ? '✓' : (active ? '●' : '○')} ${label}
+            ${note ? `<br><span style="opacity:.75">${esc(note)}</span>` : ''}
+          </span>`;
+        }).join('')}
       </div>
       <div class="log" id="log">
         <div><span class="t"></span><span class="cursor"></span></div>
@@ -585,6 +613,24 @@ function progressCard(job) {
         This page is safe to reload or close — the scan keeps running and this view
         reconnects to it.</p>
     </div>`;
+}
+
+/* Pull the headline number each finished phase reported, so the strip shows
+   what happened rather than only how far along the scan is. */
+function phaseNote(job, phase) {
+  const events = (job.events || []).filter(e => e.phase === phase);
+  if (!events.length) return '';
+  const last = events[events.length - 1];
+  if (phase === 'discovery' && last.files_discovered) return `${last.files_discovered} files`;
+  if (phase === 'rules' && last.rule_findings !== undefined) return `${last.rule_findings} found`;
+  if (phase === 'llm' && last.total) return `${last.current || 0}/${last.total}`;
+  if (phase === 'fusion' && last.findings !== undefined) return `${last.findings} merged`;
+  if (phase === 'verify' && last.total) {
+    return `${last.current || 0}/${last.total}` +
+      (last.refuted ? ` · ${last.refuted} cut` : '');
+  }
+  if (phase === 'done' && last.findings !== undefined) return `${last.findings} findings`;
+  return '';
 }
 
 function findingCard(f) {
@@ -676,8 +722,11 @@ function follow(id) {
   };
 
   liveStream = new EventSource(`/api/jobs/${id}/events`);
+  let lastPhase = null;
   liveStream.onmessage = event => {
     const update = JSON.parse(event.data);
+
+    // Cheap path: move the bar and the message in place.
     const bar = document.querySelector('.progress-fill');
     if (bar) {
       bar.style.width = update.percent + '%';
@@ -686,6 +735,14 @@ function follow(id) {
       const pct = view.querySelector('#job-body .row span[style*="tabular-nums"]');
       if (pct) pct.textContent = Math.round(update.percent) + '%';
     }
+
+    // A phase boundary changes the log, the phase strip and possibly the
+    // partial results, so re-fetch rather than patching each piece.
+    if (update.phase !== lastPhase) {
+      lastPhase = update.phase;
+      refresh().catch(() => {});
+    }
+
     if (update.status !== 'running' && update.status !== 'queued') {
       stopFollowing();
       refresh().catch(() => {});

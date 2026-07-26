@@ -315,6 +315,7 @@ select { width: auto; cursor: pointer; }
 }
 .phase {
   flex: 1; padding: 9px 6px; text-align: center; color: var(--text-faint);
+  min-height: 40px; display: flex; flex-direction: column; justify-content: center;
   font: var(--label-weight) 9px/1.4 var(--ui-font); letter-spacing: var(--label-spacing);
   text-transform: uppercase; border-right: var(--border) solid var(--edge); transition: all .2s;
 }

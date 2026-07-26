@@ -301,11 +301,40 @@ def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[
 
     options.progress = lambda event: store.record_event(job, event)
 
+    # Publish what has been found before verification runs, so the page shows
+    # accumulating results instead of a bar moving over an empty screen.
+    def publish_partial(reports: Any) -> None:
+        store.update(job, result={
+            **_package(_PartialResult(reports)),
+            "partial": True,
+        })
+
+    options.on_partial = publish_partial
+
     async def execute() -> None:
         await run_job(store, job, lambda: Scanner(options).scan(), _package)
 
     background.add_task(execute)
     return job.as_summary()
+
+
+class _PartialResult:
+    """
+    Enough of a ScanResult to package interim findings for the UI.
+    """
+
+    def __init__(self, reports: Any) -> None:
+        self.reports = reports
+        self.root = Path(".")
+        self.stats: Dict[str, Any] = {}
+
+    @property
+    def vulnerabilities(self) -> List[Vulnerability]:
+        return [v for report in self.reports for v in report.vulnerabilities]
+
+    @property
+    def degraded(self) -> bool:
+        return any(report.degraded for report in self.reports)
 
 
 @app.get("/")
@@ -548,6 +577,9 @@ async def scan_repository(
         verify=request.verify,
     )
     options.progress = lambda event: store.record_event(job, event)
+    options.on_partial = lambda reports: store.update(job, result={
+        **_package(_PartialResult(reports)), "partial": True,
+    })
 
     async def execute() -> None:
         import git

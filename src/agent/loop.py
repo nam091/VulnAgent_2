@@ -10,6 +10,7 @@ investigation and the loop reports when it hit the cap rather than
 presenting a truncated investigation as a finished one.
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -99,7 +100,7 @@ class ToolCallingAgent:
         for turn in range(self.max_turns):
             run.turns = turn + 1
             try:
-                message = self._complete(messages, with_tools=not run.tools_unsupported)
+                message = await self._complete(messages, with_tools=not run.tools_unsupported)
             except _ToolsUnsupported:
                 # Some OpenAI-compatible providers reject the tools parameter.
                 # Degrade to a single-shot answer rather than failing outright,
@@ -108,7 +109,7 @@ class ToolCallingAgent:
                     "Provider rejected tool calling; falling back to single-shot analysis"
                 )
                 run.tools_unsupported = True
-                message = self._complete(messages, with_tools=False)
+                message = await self._complete(messages, with_tools=False)
 
             tool_calls = getattr(message, "tool_calls", None)
             if not tool_calls:
@@ -144,14 +145,14 @@ class ToolCallingAgent:
             ),
         })
         try:
-            message = self._complete(messages, with_tools=False)
+            message = await self._complete(messages, with_tools=False)
             run.text = message.content or ""
         except Exception as e:
             logging.error(f"Agent failed on final turn: {e}")
             run.text = ""
         return run
 
-    def _complete(self, messages: List[Dict[str, Any]], with_tools: bool) -> Any:
+    async def _complete(self, messages: List[Dict[str, Any]], with_tools: bool) -> Any:
         """
         Make one chat completion request.
 
@@ -173,15 +174,21 @@ class ToolCallingAgent:
             kwargs["tools"] = self.tool_schemas
             kwargs["tool_choice"] = "auto"
 
+        # Synchronous client: run it off-thread or every agent turn stalls
+        # the event loop and the "concurrent" verification runs serially.
         try:
-            response = self.client.chat.completions.create(**kwargs)
+            response = await asyncio.to_thread(
+                lambda: self.client.chat.completions.create(**kwargs)
+            )
         except Exception as e:
             text = str(e).lower()
             if with_tools and ("tool" in text or "function" in text):
                 raise _ToolsUnsupported(str(e))
             if "temperature" in text and self.temperature is not None:
                 kwargs.pop("temperature", None)
-                response = self.client.chat.completions.create(**kwargs)
+                response = await asyncio.to_thread(
+                    lambda: self.client.chat.completions.create(**kwargs)
+                )
                 return response.choices[0].message
             raise
 
