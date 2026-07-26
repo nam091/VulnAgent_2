@@ -120,11 +120,15 @@ class Metrics:
     false_positives: int = 0
     false_negatives: int = 0
     seconds: float = 0.0
+    partial: bool = False
+    unmatched: int = 0
     missed: List[str] = field(default_factory=list)
     spurious: List[str] = field(default_factory=list)
 
     @property
     def precision(self) -> float:
+        if self.partial:
+            return float("nan")   # not measurable against partial ground truth
         denominator = self.true_positives + self.false_positives
         return self.true_positives / denominator if denominator else 0.0
 
@@ -135,6 +139,8 @@ class Metrics:
 
     @property
     def f1(self) -> float:
+        if self.partial:
+            return float("nan")   # follows precision
         if not (self.precision + self.recall):
             return 0.0
         return 2 * self.precision * self.recall / (self.precision + self.recall)
@@ -145,9 +151,11 @@ class Metrics:
             "tp": self.true_positives,
             "fp": self.false_positives,
             "fn": self.false_negatives,
-            "precision": round(self.precision, 4),
+            "precision": None if self.partial else round(self.precision, 4),
             "recall": round(self.recall, 4),
-            "f1": round(self.f1, 4),
+            "f1": None if self.partial else round(self.f1, 4),
+            "unmatched": self.unmatched,
+            "partial_ground_truth": self.partial,
             "seconds": round(self.seconds, 2),
             "missed": self.missed,
             "spurious": self.spurious,
@@ -193,6 +201,11 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
         # corpora that label a sample without annotating a line.
         "match_mode": payload.get("match_mode", "line"),
         "clean_files": payload.get("clean_files", []),
+        # A corpus that labels only some of its real defects cannot measure
+        # precision: an unmatched detection may be a genuine finding that
+        # nobody wrote a label for. Scoring those as false positives would
+        # punish an engine for being more thorough than the ground truth.
+        "partial_labels": bool(payload.get("partial_labels", False)),
     }
     return labels, meta
 
@@ -201,7 +214,8 @@ def match(
     detections: Sequence[Detection],
     labels: Sequence[Label],
     name: str,
-    match_mode: str = "line"
+    match_mode: str = "line",
+    partial_labels: bool = False
 ) -> Metrics:
     """
     Score detections against ground truth.
@@ -240,8 +254,16 @@ def match(
             break
 
     metrics.true_positives = len(claimed_labels)
-    metrics.false_positives = len(detections) - len(matched_detections)
     metrics.false_negatives = len(labels) - len(claimed_labels)
+    metrics.partial = partial_labels
+    # With partial ground truth an unmatched detection is unclassifiable, not
+    # wrong, so it is counted separately and kept out of precision.
+    unmatched = len(detections) - len(matched_detections)
+    if partial_labels:
+        metrics.false_positives = 0
+        metrics.unmatched = unmatched
+    else:
+        metrics.false_positives = unmatched
 
     metrics.missed = [
         f"{l.file}:{l.line} {l.type or 'CWE-' + l.cwe}"
@@ -370,10 +392,13 @@ def render_table(results: List[Metrics]) -> str:
     )
     lines = [header, "-" * len(header)]
     for metrics in results:
+        fp = "  n/a" if metrics.partial else f"{metrics.false_positives:>4}"
+        precision = "       n/a" if metrics.partial else f"{metrics.precision:>10.3f}"
+        f1 = "    n/a" if metrics.partial else f"{metrics.f1:>7.3f}"
         lines.append(
-            f"{metrics.name:<22} {metrics.true_positives:>4} {metrics.false_positives:>4} "
-            f"{metrics.false_negatives:>4} {metrics.precision:>10.3f} "
-            f"{metrics.recall:>8.3f} {metrics.f1:>7.3f} {metrics.seconds:>7.1f}"
+            f"{metrics.name:<22} {metrics.true_positives:>4} {fp} "
+            f"{metrics.false_negatives:>4} {precision} "
+            f"{metrics.recall:>8.3f} {f1} {metrics.seconds:>7.1f}"
         )
     return "\n".join(lines)
 
@@ -424,6 +449,10 @@ async def main() -> int:
     print(f"Labels  : {len(labels)} across {len(files)} file(s)")
     print(f"Matching: {meta['match_mode']}-level"
           + (f" (+/-{LINE_TOLERANCE} lines)" if meta["match_mode"] == "line" else ""))
+    if meta["partial_labels"]:
+        print("          ground truth is PARTIAL, so precision and F1 are not")
+        print("          measurable here - an unmatched detection may well be a")
+        print("          real defect nobody labelled. This run measures RECALL.")
     if meta["match_mode"] == "file":
         print("          every sample is known-vulnerable and there are no clean")
         print("          counterparts, so this run measures RECALL, not precision.")
@@ -440,7 +469,7 @@ async def main() -> int:
         detections, seconds = await run_vulnagent(
             samples_dir, concurrency=args.concurrency, **kwargs
         )
-        metrics = match(detections, labels, name, meta["match_mode"])
+        metrics = match(detections, labels, name, meta["match_mode"], meta["partial_labels"])
         metrics.seconds = seconds
         results.append(metrics)
 
@@ -448,7 +477,7 @@ async def main() -> int:
         print("running Bandit...")
         detections, seconds = run_bandit(samples_dir)
         if detections:
-            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"])
+            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"], meta["partial_labels"])
             metrics.seconds = seconds
             results.append(metrics)
 
@@ -459,7 +488,7 @@ async def main() -> int:
     # In file-mode the false-positive column is not interpretable, since a
     # sample can legitimately contain defects beyond the one it is labelled
     # for. Only the misses are worth listing.
-    show_spurious = meta["match_mode"] == "line"
+    show_spurious = meta["match_mode"] == "line" and not meta["partial_labels"]
     for metrics in results:
         if metrics.missed:
             print(f"{metrics.name} missed {len(metrics.missed)}:")
