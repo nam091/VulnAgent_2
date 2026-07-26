@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -208,6 +208,26 @@ def _package(result: Any) -> Dict[str, Any]:
     }
 
 
+def _safe_label(name: str) -> str:
+    """
+    Reduce a client-supplied name to something safe to store and display.
+
+    The label is persisted to disk and rendered in the job list, so only the
+    basename is kept: keeping the rest lets a caller write "../../.." into
+    the scan history for no benefit.
+
+    Args:
+        name: The name as submitted
+
+    Returns:
+        str: The basename, with separators and unprintable characters removed
+    """
+
+    base = re.split(r"[\\/]+", str(name or ""))[-1].strip()
+    base = "".join(ch for ch in base if ch.isprintable())
+    return base[:120] or "snippet.py"
+
+
 def _safe_relative(name: str) -> Optional[str]:
     """
     Turn a client-supplied upload path into a safe relative path.
@@ -387,7 +407,10 @@ async def scan_snippet(
 
     job = store.create(
         kind="snippet",
-        label=request.filename or "snippet.py",
+        # Client text that ends up on disk and on screen. Only the basename
+        # is meaningful, and keeping the rest lets a caller write "../../.."
+        # into the job list for no benefit.
+        label=_safe_label(request.filename),
         options={"mode": request.mode, "verify": request.verify},
         workspace=str(workspace),
     )
@@ -485,7 +508,7 @@ async def scan_repository(
 
 
 @app.get("/api/jobs")
-async def list_jobs(limit: int = 50) -> Dict[str, Any]:
+async def list_jobs(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
     """
     List recent jobs.
 

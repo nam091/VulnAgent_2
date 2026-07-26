@@ -187,6 +187,9 @@ class JobStore:
             List[Job]: Recent jobs
         """
 
+        # A negative or zero limit would slice from the wrong end and drop
+        # jobs silently rather than returning nothing.
+        limit = max(1, int(limit))
         return sorted(
             self._jobs.values(), key=lambda j: j.created_at, reverse=True
         )[:limit]
