@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "description": "Hand-labelled ground truth for VulnAgent evaluation. One entry per real vulnerability. Files listed under samples/ with no entries are expected to be clean, and any finding in them counts as a false positive.",
+  "line_convention": "1-based line of the vulnerable sink (the call that performs the unsafe operation), not the tainted assignment above it.",
+  "clean_files": [
+    "safe_handlers.py"
+  ],
+  "labels": [
+    {
+      "file": "vulnerable_app.py",
+      "line": 17,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "f-string interpolation of request path parameter into cursor.execute"
+    },
+    {
+      "file": "vulnerable_app.py",
+      "line": 21,
+      "cwe": "79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "note": "user input embedded in a template string then render_template_string"
+    },
+    {
+      "file": "vulnerable_app.py",
+      "line": 31,
+      "cwe": "22",
+      "type": "PATH_TRAVERSAL",
+      "note": "open() on an unvalidated query parameter"
+    },
+    {
+      "file": "vulnerable_app.py",
+      "line": 38,
+      "cwe": "78",
+      "type": "OS_COMMAND_INJECTION",
+      "note": "subprocess with shell=True and interpolated query parameter"
+    },
+    {
+      "file": "vulnerable_app.py",
+      "line": 47,
+      "cwe": "798",
+      "type": "HARDCODED_CREDENTIALS",
+      "note": "admin/admin123 compared literally in source"
+    },
+    {
+      "file": "vulnerable_app.py",
+      "line": 53,
+      "cwe": "16",
+      "type": "SECURITY_MISCONFIGURATION",
+      "note": "binds 0.0.0.0, exposing the dev server on all interfaces"
+    },
+    {
+      "file": "insecure_api.py",
+      "line": 17,
+      "cwe": "502",
+      "type": "INSECURE_DESERIALIZATION",
+      "note": "pickle.loads on request body"
+    },
+    {
+      "file": "insecure_api.py",
+      "line": 24,
+      "cwe": "918",
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "note": "requests.get on a caller-supplied URL with no allow-list"
+    },
+    {
+      "file": "insecure_api.py",
+      "line": 31,
+      "cwe": "328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "note": "md5 used to hash a password, unsalted"
+    },
+    {
+      "file": "insecure_api.py",
+      "line": 37,
+      "cwe": "330",
+      "type": "SECURE_RANDOMNESS",
+      "note": "random.choice for a security token instead of secrets"
+    },
+    {
+      "file": "insecure_api.py",
+      "line": 44,
+      "cwe": "611",
+      "type": "XML_EXTERNAL_ENTITY",
+      "note": "ElementTree.fromstring on untrusted XML"
+    }
+  ]
+}

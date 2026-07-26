@@ -1,5 +1,19 @@
 .env
 .venv
+venv/
 .vscode
 __pycache__
+*.egg-info/
 SeCoRA.egg-info
+VulnAgent.egg-info
+
+# Generated analysis reports and other runtime artifacts
+output/*
+!output/.gitkeep
+
+# Content-hash cache for LLM analyses
+.vulnagent-cache/
+
+# Scan artifacts
+*.sarif
+
