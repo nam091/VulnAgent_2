@@ -127,6 +127,12 @@ class Scanner:
         # Set when the rule tier fails, so a hung or missing engine is
         # reported as a degraded scan rather than as a clean one.
         self._rule_error: str = ""
+        # Per-scan counters. These were class attributes, which meant every
+        # Scanner shared them: in the web server, where one process runs many
+        # scans, each result reported the running total of every scan before
+        # it rather than its own.
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     async def scan(self) -> ScanResult:
         """
@@ -209,9 +215,6 @@ class Scanner:
         )
 
         return ScanResult(reports, root, stats)
-
-    _cache_hits = 0
-    _cache_misses = 0
 
     def _emit(
         self,
@@ -338,13 +341,13 @@ class Scanner:
 
                 cached = self._cache_get(content)
                 if cached is not None:
-                    Scanner._cache_hits += 1
+                    self._cache_hits += 1
                     results[relative] = self.analyzer._process_ai_response(cached, relative)
                     status[relative] = "ok"
                     tick(relative)
                     return
 
-                Scanner._cache_misses += 1
+                self._cache_misses += 1
                 parsed = self.analyzer.code_parser.parse(content, relative)
                 prompt = self.analyzer._generate_security_prompt(parsed)
                 try:

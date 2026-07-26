@@ -260,3 +260,59 @@ class TestTaintChaining:
             ],
         )
         assert self.analyzer._check_data_flow_relationship(first, second)
+
+
+class TestScannerIsolation:
+    def test_cache_counters_are_per_scan(self):
+        """These were class attributes, so in the web server - one process,
+        many scans - every result carried the running total of every scan
+        before it."""
+        from analyzer.scanner import ScanOptions, Scanner
+
+        first = Scanner(ScanOptions(target="examples"))
+        second = Scanner(ScanOptions(target="examples"))
+        first._cache_hits += 3
+        first._cache_misses += 2
+
+        assert second._cache_hits == 0
+        assert second._cache_misses == 0
+
+    def test_rule_error_starts_clear(self):
+        from analyzer.scanner import ScanOptions, Scanner
+
+        assert Scanner(ScanOptions(target="examples"))._rule_error == ""
+
+
+class TestJobStore:
+    def test_nonsense_limit_never_slices_from_the_wrong_end(self, tmp_path):
+        """A negative limit reached list()[:limit] and returned everything
+        *except* the newest few, which read as 'no scans' while scans
+        existed. The guarantee is that whatever comes back is a prefix of
+        newest-first order, never a slice off the far end."""
+        from jobs import JobStore
+
+        store = JobStore(directory=tmp_path / "jobs")
+        for i in range(3):
+            store.create(kind="snippet", label=f"job {i}", options={})
+
+        newest = store.list(limit=3)[0].label
+        for bad in (-5, 0):
+            result = store.list(limit=bad)
+            assert result, f"limit={bad} returned nothing"
+            assert result[0].label == newest, f"limit={bad} skipped the newest job"
+
+        assert len(store.list(limit=2)) == 2
+
+    def test_interrupted_jobs_are_marked_failed_on_reload(self, tmp_path):
+        """A job left running when the process died did not survive it, and
+        must not reappear as perpetually in-progress."""
+        from jobs import JobStore
+
+        directory = tmp_path / "jobs"
+        store = JobStore(directory=directory)
+        job = store.create(kind="snippet", label="interrupted", options={})
+        store.update(job, status="running")
+
+        reloaded = JobStore(directory=directory).get(job.id)
+        assert reloaded.status == "failed"
+        assert "restart" in reloaded.error.lower()
