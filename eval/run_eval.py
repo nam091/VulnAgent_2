@@ -28,9 +28,7 @@ load_dotenv()
 from analyzer.scanner import ScanOptions, Scanner  # noqa: E402
 from models.vulnerability import FindingSource, Vulnerability  # noqa: E402
 
-DATASET_DIR = Path(__file__).resolve().parent / "dataset"
-LABELS_FILE = DATASET_DIR / "labels.json"
-SAMPLES_DIR = DATASET_DIR / "samples"
+DEFAULT_DATASET = Path(__file__).resolve().parent / "dataset"
 
 # A detection counts as a hit when it lands within this many lines of the
 # labelled location. Static analysers anchor on the sink, humans sometimes
@@ -156,36 +154,55 @@ class Metrics:
         }
 
 
-def load_labels() -> List[Label]:
+def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
     """
-    Read the ground-truth labels.
+    Read a dataset's labels and configuration.
+
+    Args:
+        dataset_dir: Directory holding labels.json and samples/
 
     Returns:
-        List[Label]: Every labelled vulnerability
+        Tuple[List[Label], Dict[str, Any]]: Labels and dataset metadata
 
     Raises:
         SystemExit: When the dataset is missing
     """
 
-    if not LABELS_FILE.is_file():
-        print(f"error: no labels at {LABELS_FILE}", file=sys.stderr)
+    labels_file = dataset_dir / "labels.json"
+    if not labels_file.is_file():
+        print(f"error: no labels at {labels_file}", file=sys.stderr)
         print("Create it following the schema in eval/README.md.", file=sys.stderr)
         raise SystemExit(2)
 
-    payload = json.loads(LABELS_FILE.read_text(encoding="utf-8"))
+    payload = json.loads(labels_file.read_text(encoding="utf-8"))
     labels = []
     for entry in payload.get("labels", []):
         labels.append(Label(
             file=entry["file"],
-            line=int(entry["line"]),
+            line=int(entry.get("line", 0)),
             cwe=str(entry["cwe"]).replace("CWE-", "").strip(),
             type=entry.get("type", ""),
             note=entry.get("note", "")
         ))
-    return labels
+
+    meta = {
+        "name": payload.get("name", dataset_dir.name),
+        "source": payload.get("source", ""),
+        # "line" requires the detection to land near the annotated sink.
+        # "file" only requires the right CWE somewhere in the file, for
+        # corpora that label a sample without annotating a line.
+        "match_mode": payload.get("match_mode", "line"),
+        "clean_files": payload.get("clean_files", []),
+    }
+    return labels, meta
 
 
-def match(detections: Sequence[Detection], labels: Sequence[Label], name: str) -> Metrics:
+def match(
+    detections: Sequence[Detection],
+    labels: Sequence[Label],
+    name: str,
+    match_mode: str = "line"
+) -> Metrics:
     """
     Score detections against ground truth.
 
@@ -212,7 +229,8 @@ def match(detections: Sequence[Detection], labels: Sequence[Label], name: str) -
                 continue
             if detection.file != label.file:
                 continue
-            if abs(detection.line - label.line) > LINE_TOLERANCE:
+            # File-mode corpora label the sample, not the sink line.
+            if match_mode == "line" and abs(detection.line - label.line) > LINE_TOLERANCE:
                 continue
             # CWE is the interoperable key; type names differ per engine.
             if not cwe_matches(detection.cwe, label.cwe):
@@ -257,9 +275,11 @@ def _to_detection(vuln: Vulnerability) -> Detection:
 
 
 async def run_vulnagent(
+    samples_dir: Path,
     use_llm: bool,
     use_semgrep: bool,
-    confirmed_only: bool = False
+    confirmed_only: bool = False,
+    concurrency: int = 5
 ) -> Tuple[List[Detection], float]:
     """
     Run one VulnAgent configuration over the dataset.
@@ -274,10 +294,10 @@ async def run_vulnagent(
     """
 
     options = ScanOptions(
-        target=str(SAMPLES_DIR),
+        target=str(samples_dir),
         use_llm=use_llm,
         use_semgrep=use_semgrep,
-        concurrency=5,
+        concurrency=concurrency,
         use_cache=True,
     )
     result = await Scanner(options).scan()
@@ -289,7 +309,7 @@ async def run_vulnagent(
     return [_to_detection(v) for v in findings], result.stats.get("total_seconds", 0.0)
 
 
-def run_bandit() -> Tuple[List[Detection], float]:
+def run_bandit(samples_dir: Path) -> Tuple[List[Detection], float]:
     """
     Run Bandit as an external baseline.
 
@@ -305,7 +325,7 @@ def run_bandit() -> Tuple[List[Detection], float]:
     import time
     started = time.perf_counter()
     proc = subprocess.run(
-        [executable, "-r", str(SAMPLES_DIR), "-f", "json", "-q"],
+        [executable, "-r", str(samples_dir), "-f", "json", "-q"],
         capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     elapsed = time.perf_counter() - started
@@ -372,16 +392,33 @@ async def main() -> int:
 
     parser = argparse.ArgumentParser(description="Evaluate VulnAgent against labelled data.")
     parser.add_argument(
+        "--dataset", default=str(DEFAULT_DATASET),
+        help="Dataset directory containing labels.json and samples/"
+    )
+    parser.add_argument(
         "--only", choices=list(CONFIGURATIONS) + ["bandit"], action="append",
         help="Run only the named configuration (repeatable)"
     )
     parser.add_argument("--json", help="Write full results to a JSON file")
     parser.add_argument("--no-bandit", action="store_true", help="Skip the Bandit baseline")
+    parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
     args = parser.parse_args()
 
-    labels = load_labels()
+    dataset_dir = Path(args.dataset)
+    samples_dir = dataset_dir / "samples"
+    labels, meta = load_dataset(dataset_dir)
     files = sorted({l.file for l in labels})
-    print(f"Dataset: {len(labels)} labelled vulnerabilities across {len(files)} file(s)\n")
+
+    print(f"Dataset : {meta['name']}")
+    if meta.get("source"):
+        print(f"Source  : {meta['source']}")
+    print(f"Labels  : {len(labels)} across {len(files)} file(s)")
+    print(f"Matching: {meta['match_mode']}-level"
+          + (f" (+/-{LINE_TOLERANCE} lines)" if meta["match_mode"] == "line" else ""))
+    if meta["match_mode"] == "file":
+        print("          every sample is known-vulnerable and there are no clean")
+        print("          counterparts, so this run measures RECALL, not precision.")
+    print()
 
     selected = args.only or list(CONFIGURATIONS)
     results: List[Metrics] = []
@@ -391,16 +428,18 @@ async def main() -> int:
             continue
         name, kwargs = CONFIGURATIONS[key]
         print(f"running {name}...")
-        detections, seconds = await run_vulnagent(**kwargs)
-        metrics = match(detections, labels, name)
+        detections, seconds = await run_vulnagent(
+            samples_dir, concurrency=args.concurrency, **kwargs
+        )
+        metrics = match(detections, labels, name, meta["match_mode"])
         metrics.seconds = seconds
         results.append(metrics)
 
     if not args.no_bandit and (not args.only or "bandit" in selected):
         print("running Bandit...")
-        detections, seconds = run_bandit()
+        detections, seconds = run_bandit(samples_dir)
         if detections:
-            metrics = match(detections, labels, "Bandit (baseline)")
+            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"])
             metrics.seconds = seconds
             results.append(metrics)
 
@@ -408,23 +447,35 @@ async def main() -> int:
     print(render_table(results))
     print()
 
+    # In file-mode the false-positive column is not interpretable, since a
+    # sample can legitimately contain defects beyond the one it is labelled
+    # for. Only the misses are worth listing.
+    show_spurious = meta["match_mode"] == "line"
     for metrics in results:
         if metrics.missed:
-            print(f"{metrics.name} missed:")
-            for item in metrics.missed:
+            print(f"{metrics.name} missed {len(metrics.missed)}:")
+            for item in metrics.missed[:20]:
                 print(f"    {item}")
-        if metrics.spurious:
+            if len(metrics.missed) > 20:
+                print(f"    ... and {len(metrics.missed) - 20} more")
+            print()
+        if show_spurious and metrics.spurious:
             print(f"{metrics.name} false positives:")
             for item in metrics.spurious:
                 print(f"    {item}")
-        if metrics.missed or metrics.spurious:
             print()
 
     if args.json:
         Path(args.json).write_text(
             json.dumps(
                 {
-                    "dataset": {"labels": len(labels), "files": len(files)},
+                    "dataset": {
+                        "name": meta["name"],
+                        "source": meta["source"],
+                        "match_mode": meta["match_mode"],
+                        "labels": len(labels),
+                        "files": len(files),
+                    },
                     "line_tolerance": LINE_TOLERANCE,
                     "results": [m.as_dict() for m in results],
                 },
@@ -436,9 +487,9 @@ async def main() -> int:
 
     if len(labels) < 30:
         print(
-            f"\nNOTE: {len(labels)} labels is too few for the numbers above to be "
-            "meaningful. Treat this as a smoke test until the dataset reaches "
-            "roughly 50-100 labelled vulnerabilities."
+            f"\nNOTE: {len(labels)} labels is too few for the numbers above to "
+            "be meaningful. Treat this as a smoke test until the dataset "
+            "reaches roughly 50-100 labelled vulnerabilities."
         )
 
     return 0

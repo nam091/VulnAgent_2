@@ -17,3 +17,10 @@ output/*
 # Scan artifacts
 *.sarif
 
+# Third-party evaluation corpora. Regenerate with the prepare_*.py scripts
+# rather than vendoring them: SecurityEval ships a CITATION.cff but no
+# licence, so redistributing its samples here would be an unlicensed
+# redistribution of someone else's code.
+eval/datasets/*/samples/
+eval/datasets/*/labels.json
+
