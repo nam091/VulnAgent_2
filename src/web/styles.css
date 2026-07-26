@@ -1,9 +1,8 @@
-/* VulnAgent dashboard.
+/* VulnAgent dashboard — console treatment, dark and light.
 
-   Four themes, switchable at runtime. Everything that differs between them —
-   colour, corner radius, typeface, label treatment, border weight, density —
-   is a custom property, so the structural CSS below is written once and each
-   theme is a block of variable overrides rather than a parallel stylesheet.
+   One design in two tones. Everything the two share is written once in the
+   combined block below them; only surface colours differ, so switching does
+   not change the shape of the interface.
 
    Self-contained: no external fonts, no CDN, no network requests. */
 
@@ -12,76 +11,49 @@
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-/* ============ 1. CONSOLE — dark, monospace-led, sharp ============ */
+/* ============ DARK — the default treatment ============ */
 
-[data-theme="console"] {
+[data-theme="dark"] {
   --void: #0c0e11;  --deck: #101317;  --panel: #14171c;
   --raised: #1a1e24; --edge: #24292f; --edge-hot: #333941;
   --text: #e4e6e9;  --text-dim: #9aa1ab; --text-faint: #6b727c;
   --signal: #b8c2cf; --signal-dim: rgba(184,194,207,.09); --on-signal: #14171c;
   --crit: #c84a52; --high: #c1803e; --med: #b09a45; --low: #4e9478; --info: #626973;
   --on-crit: #fff; --on-high: #1a0c00; --on-med: #1a1400; --on-low: #002a1c;
+  --texture-ink: 255, 255, 255; --texture: .014;
+  --sweep: 255, 255, 255;
+}
 
+/* ============ LIGHT — the same tool, inverted ============
+
+   Not a different design: same monospace, same square corners, same corner
+   marks and density. Only the surfaces flip, so the interface still reads as
+   an instrument rather than a document.
+
+   Severity hues are darkened rather than reused. The dark theme's #c84a52
+   is legible on near-black and washes out on near-white, and severity is the
+   one thing here that has to stay readable on a projector in a lit room. */
+
+[data-theme="light"] {
+  --void: #e8eaee;  --deck: #f1f3f6;  --panel: #fbfcfd;
+  --raised: #eef0f4; --edge: #ccd2da; --edge-hot: #a3acb9;
+  --text: #14171c;  --text-dim: #4a525e; --text-faint: #767e8b;
+  --signal: #39414c; --signal-dim: rgba(57,65,76,.08); --on-signal: #fbfcfd;
+  --crit: #a82730; --high: #8c5715; --med: #766014; --low: #1f6349; --info: #5c646f;
+  --on-crit: #fff; --on-high: #fff; --on-med: #fff; --on-low: #fff;
+  --texture-ink: 0, 0, 0; --texture: .022;
+  --sweep: 0, 0, 0;
+}
+
+/* Shared form: identical in both, so switching changes tone and nothing else. */
+
+[data-theme="dark"], [data-theme="light"] {
   --radius: 0; --radius-sm: 0; --border: 1px;
   --ui-font: var(--mono); --data-font: var(--mono); --display-font: var(--sans);
   --label-transform: uppercase; --label-spacing: 1.6px; --label-weight: 500;
   --heading-size: 26px; --heading-weight: 600; --heading-spacing: -.9px;
   --metric-size: 30px; --card-pad: 18px 20px; --gap: 14px;
-  --corner-marks: block; --texture: .014; --panel-shadow: none;
-}
-
-/* ============ 2. PRODUCT — soft dark, familiar, generous ============ */
-
-[data-theme="product"] {
-  --void: #0d1117;  --deck: #10151c;  --panel: #161b22;
-  --raised: #1c2230; --edge: #262d38; --edge-hot: #3a434f;
-  --text: #e6edf3;  --text-dim: #8b949e; --text-faint: #6e7681;
-  --signal: #4b90f0; --signal-dim: rgba(75,144,240,.13); --on-signal: #fff;
-  --crit: #f0616d; --high: #f0883e; --med: #e3b341; --low: #3fb950; --info: #7d8590;
-  --on-crit: #fff; --on-high: #24170a; --on-med: #241d0a; --on-low: #052e16;
-
-  --radius: 10px; --radius-sm: 6px; --border: 1px;
-  --ui-font: var(--sans); --data-font: var(--mono); --display-font: var(--sans);
-  --label-transform: none; --label-spacing: .1px; --label-weight: 500;
-  --heading-size: 28px; --heading-weight: 650; --heading-spacing: -.7px;
-  --metric-size: 32px; --card-pad: 22px 24px; --gap: 18px;
-  --corner-marks: none; --texture: 0; --panel-shadow: 0 1px 3px rgba(0,0,0,.3);
-}
-
-/* ============ 3. REPORT — light, print-like, projector-safe ============ */
-
-[data-theme="report"] {
-  --void: #f2f3f5;  --deck: #ffffff;  --panel: #ffffff;
-  --raised: #f6f7f9; --edge: #d8dce2; --edge-hot: #b4bbc5;
-  --text: #14181f;  --text-dim: #4d5666; --text-faint: #78818f;
-  --signal: #1f4e8c; --signal-dim: rgba(31,78,140,.08); --on-signal: #fff;
-  --crit: #b3232f; --high: #9c5a12; --med: #8a6d0f; --low: #17683f; --info: #6b7280;
-  --on-crit: #fff; --on-high: #fff; --on-med: #fff; --on-low: #fff;
-
-  --radius: 3px; --radius-sm: 2px; --border: 1px;
-  --ui-font: var(--sans); --data-font: var(--mono); --display-font: var(--sans);
-  --label-transform: uppercase; --label-spacing: 1.1px; --label-weight: 650;
-  --heading-size: 27px; --heading-weight: 700; --heading-spacing: -.6px;
-  --metric-size: 32px; --card-pad: 20px 22px; --gap: 15px;
-  --corner-marks: none; --texture: 0; --panel-shadow: 0 1px 2px rgba(20,24,31,.06);
-}
-
-/* ============ 4. STARK — high contrast, huge type, no chrome ============ */
-
-[data-theme="stark"] {
-  --void: #000000;  --deck: #000000;  --panel: #000000;
-  --raised: #0d0d0d; --edge: #3a3a3a; --edge-hot: #ffffff;
-  --text: #ffffff;  --text-dim: #a8a8a8; --text-faint: #6e6e6e;
-  --signal: #ffffff; --signal-dim: rgba(255,255,255,.1); --on-signal: #000;
-  --crit: #ff2d3d; --high: #ff9500; --med: #ffd60a; --low: #30d158; --info: #8e8e93;
-  --on-crit: #fff; --on-high: #000; --on-med: #000; --on-low: #000;
-
-  --radius: 0; --radius-sm: 0; --border: 2px;
-  --ui-font: var(--sans); --data-font: var(--mono); --display-font: var(--sans);
-  --label-transform: uppercase; --label-spacing: 2.4px; --label-weight: 700;
-  --heading-size: 40px; --heading-weight: 800; --heading-spacing: -2px;
-  --metric-size: 52px; --card-pad: 22px 0; --gap: 0;
-  --corner-marks: none; --texture: 0; --panel-shadow: none;
+  --corner-marks: block; --panel-shadow: none;
 }
 
 /* ================= structure (theme-independent) ================= */
@@ -98,8 +70,8 @@ body {
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background-image:
-    linear-gradient(rgba(128,128,128,var(--texture)) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(128,128,128,var(--texture)) 1px, transparent 1px);
+    linear-gradient(rgba(var(--texture-ink), var(--texture)) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--texture-ink), var(--texture)) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
@@ -147,7 +119,7 @@ body::before {
 .dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; background: var(--info); }
 .dot.up { background: var(--low); } .dot.down { background: var(--crit); }
 
-.theme-picker { display: flex; gap: 4px; padding: 12px 14px 0; flex-wrap: wrap; }
+.theme-picker { display: flex; gap: 4px; padding: 12px 14px 0; }
 .theme-btn {
   flex: 1; min-width: 40px; padding: 6px 4px; cursor: pointer;
   border: var(--border) solid var(--edge); background: var(--panel);
@@ -231,7 +203,7 @@ body::before {
 .stack-seg { position: relative; transition: flex .5s cubic-bezier(.4,0,.2,1); min-width: 2px; }
 .stack-seg span {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font: 700 11px/1 var(--data-font); color: rgba(0,0,0,.75);
+  font: 700 11px/1 var(--data-font); color: var(--on-crit); mix-blend-mode: normal;
 }
 .stack-key { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
 .stack-key-item {
@@ -332,7 +304,7 @@ select { width: auto; cursor: pointer; }
 }
 .progress-fill.live::after {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--sweep), .5), transparent);
   animation: sweep 1.5s ease-in-out infinite;
 }
 @keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
@@ -520,13 +492,6 @@ pre.diff .del { color: var(--crit); display: block; }
 ::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--edge-hot); }
 
-/* Stark strips the panel chrome entirely: rules and type carry the
-   structure instead of boxes. */
-[data-theme="stark"] .card,
-[data-theme="stark"] .metrics { border-left: 0; border-right: 0; background: transparent; }
-[data-theme="stark"] .metric { border-right-width: var(--border); }
-[data-theme="stark"] .finding { border-left-width: 5px; }
-[data-theme="stark"] .page-head { border-bottom-width: 3px; border-bottom-color: var(--text); }
 
 @media (max-width: 790px) {
   .shell { flex-direction: column; }

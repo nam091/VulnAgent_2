@@ -725,10 +725,10 @@ async function checkHealth() {
 
 /* ---------------- theme ---------------- */
 
-const THEMES = ['console', 'product', 'report', 'stark'];
+const THEMES = ['dark', 'light'];
 
 function applyTheme(name) {
-  const theme = THEMES.includes(name) ? name : 'console';
+  const theme = THEMES.includes(name) ? name : 'dark';
   document.documentElement.setAttribute('data-theme', theme);
   try { localStorage.setItem('vulnagent-theme', theme); } catch (e) { /* private mode */ }
   document.querySelectorAll('.theme-btn').forEach(b =>
@@ -736,9 +736,13 @@ function applyTheme(name) {
 }
 
 function initTheme() {
-  let saved = 'console';
-  try { saved = localStorage.getItem('vulnagent-theme') || 'console'; } catch (e) { /* ignore */ }
-  applyTheme(saved);
+  // Follow the operating system on a first visit, then respect whatever the
+  // user picked here afterwards.
+  const preferred = window.matchMedia
+    && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  let saved = null;
+  try { saved = localStorage.getItem('vulnagent-theme'); } catch (e) { /* private mode */ }
+  applyTheme(saved || preferred);
   document.querySelectorAll('.theme-btn').forEach(b =>
     b.onclick = () => applyTheme(b.dataset.themeName));
 }
