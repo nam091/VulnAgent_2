@@ -21,14 +21,13 @@ setup(
         "gitpython",
         "typing-extensions",
         "python-multipart",
-        "flask",
-        "waitress",
         "aiofiles",
+        "semgrep",
         "setuptools"
     ],
     entry_points={
         'console_scripts': [
-            'vulnagent=main:main',
+            'vulnagent=cli:main',
         ],
     },
     classifiers=[

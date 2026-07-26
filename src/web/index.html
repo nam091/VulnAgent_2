@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VulnAgent</title>
+<style>
+:root{
+  --bg:#0f1117; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+  --fg:#e6e8ee; --muted:#9199a8; --accent:#5b8cff;
+  --crit:#ff5f56; --high:#ff9f43; --med:#ffd166; --low:#4dd4ac; --info:#7a8296;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --line:#dfe3e8;
+         --fg:#1a1d23; --muted:#5f6672; --accent:#2563eb; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+h1{font-size:24px;margin:0;letter-spacing:-.3px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:7px 14px;border-radius:7px;border:1px solid var(--line);background:transparent;
+  color:var(--muted);cursor:pointer;font-size:13px;font-family:inherit}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+textarea,input[type=text]{width:100%;background:var(--panel2);color:var(--fg);
+  border:1px solid var(--line);border-radius:7px;padding:11px;font-size:13px;font-family:inherit}
+textarea{min-height:190px;font-family:ui-monospace,"SF Mono",Consolas,monospace;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+button.go{background:var(--accent);color:#fff;border:0;border-radius:7px;
+  padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+button.go:disabled{opacity:.55;cursor:default}
+select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+  border-radius:7px;padding:9px;font-size:13px;font-family:inherit}
+.hint{color:var(--muted);font-size:12px}
+.hidden{display:none}
+.metrics{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.metric{background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:10px 16px;min-width:96px}
+.metric .n{font-size:21px;font-weight:650;line-height:1.2}
+.metric .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.finding{border:1px solid var(--line);border-left-width:3px;border-radius:8px;
+  padding:12px 14px;margin-bottom:9px;background:var(--panel2)}
+.finding.CRITICAL{border-left-color:var(--crit)} .finding.HIGH{border-left-color:var(--high)}
+.finding.MEDIUM{border-left-color:var(--med)} .finding.LOW{border-left-color:var(--low)}
+.finding.INFO{border-left-color:var(--info)}
+.fhead{display:flex;gap:9px;align-items:center;flex-wrap:wrap;cursor:pointer}
+.sev{font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;color:#0f1117}
+.sev.CRITICAL{background:var(--crit)} .sev.HIGH{background:var(--high)}
+.sev.MEDIUM{background:var(--med)} .sev.LOW{background:var(--low)}
+.sev.INFO{background:var(--info);color:#fff}
+.badge{font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--line);color:var(--muted)}
+.badge.confirmed{border-color:var(--low);color:var(--low)}
+.badge.llm-only{border-color:var(--med);color:var(--med)}
+.ftype{font-weight:600;font-size:13.5px}
+.floc{color:var(--muted);font-size:12px;font-family:ui-monospace,monospace}
+.fbody{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.6}
+.fbody b{color:var(--fg);font-weight:600}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:11px;
+  overflow-x:auto;font-size:12px;font-family:ui-monospace,monospace;margin:8px 0 0}
+.chain{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:9px}
+.steps{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:7px;font-size:12px}
+.step{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 9px;font-family:ui-monospace,monospace}
+.arrow{color:var(--accent);font-weight:700}
+.warn{background:#3a2a12;border:1px solid var(--high);color:var(--high);
+  border-radius:7px;padding:10px 13px;font-size:13px;margin-bottom:14px}
+@media (prefers-color-scheme: light){ .warn{background:#fff4e5} }
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+h2{font-size:15px;margin:22px 0 10px;letter-spacing:-.2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>VulnAgent</h1><span class="hint">hybrid scanner</span></header>
+  <div class="sub">Rule-based static analysis + LLM semantic analysis. Findings confirmed by both engines are marked.</div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab on" data-tab="code">Paste code</button>
+      <button class="tab" data-tab="file">Upload file</button>
+      <button class="tab" data-tab="repo">GitHub repo</button>
+    </div>
+
+    <div id="pane-code">
+      <textarea id="code" placeholder="Paste Python source here..." spellcheck="false"></textarea>
+    </div>
+    <div id="pane-file" class="hidden">
+      <input type="file" id="file" accept=".py,.txt">
+      <div class="hint" style="margin-top:8px">Max 2 MB, UTF-8 text.</div>
+    </div>
+    <div id="pane-repo" class="hidden">
+      <input type="text" id="repo" placeholder="https://github.com/owner/repo">
+      <input type="text" id="branch" placeholder="main" style="margin-top:9px">
+      <div class="hint" style="margin-top:8px">Public repos on github, gitlab or bitbucket only.</div>
+    </div>
+
+    <div class="row">
+      <button class="go" id="go">Scan</button>
+      <select id="mode">
+        <option value="deep">Deep — rules + LLM</option>
+        <option value="fast">Fast — rules only (~1s)</option>
+      </select>
+      <span class="hint" id="status"></span>
+    </div>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let tab = 'code';
+
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  tab = b.dataset.tab;
+  ['code','file','repo'].forEach(t =>
+    $('#pane-' + t).classList.toggle('hidden', t !== tab));
+});
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function scan() {
+  const mode = $('#mode').value;
+  let url, opts;
+
+  if (tab === 'code') {
+    const code = $('#code').value;
+    if (!code.trim()) return say('Paste some code first.');
+    url = '/api/scan/code';
+    opts = { method:'POST', headers:{'Content-Type':'application/json'},
+             body: JSON.stringify({ code, filename:'snippet.py', mode }) };
+  } else if (tab === 'file') {
+    const f = $('#file').files[0];
+    if (!f) return say('Choose a file first.');
+    const fd = new FormData(); fd.append('file', f);
+    url = '/api/scan/file?mode=' + mode;
+    opts = { method:'POST', body: fd };
+  } else {
+    const repo = $('#repo').value.trim();
+    if (!repo) return say('Enter a repository URL.');
+    url = '/api/scan/repository';
+    opts = { method:'POST', headers:{'Content-Type':'application/json'},
+             body: JSON.stringify({ repository_url: repo,
+                                    branch: $('#branch').value.trim() || 'main', mode }) };
+  }
+
+  $('#go').disabled = true;
+  say('<span class="spin"></span>scanning' + (mode === 'deep' ? ' (deep mode takes a while)' : ''));
+  $('#results').innerHTML = '';
+
+  try {
+    const res = await fetch(url, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    render(data);
+    say('');
+  } catch (e) {
+    say('');
+    $('#results').innerHTML = '<div class="warn">' + esc(e.message) + '</div>';
+  } finally {
+    $('#go').disabled = false;
+  }
+}
+
+const say = h => $('#status').innerHTML = h;
+
+function render(d) {
+  const f = d.findings || [];
+  let html = '';
+
+  if (d.degraded)
+    html += '<div class="warn">One analysis tier did not complete. Results are incomplete.</div>';
+
+  const order = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+  html += '<div class="metrics">';
+  html += metric(f.length, 'findings');
+  html += metric(d.risk_score ?? 0, 'risk score');
+  order.forEach(s => { if (d.counts?.[s]) html += metric(d.counts[s], s.toLowerCase()); });
+  html += '</div>';
+
+  const src = d.sources || {};
+  html += '<div class="hint" style="margin-bottom:16px">' +
+    (src['confirmed'] || 0) + ' confirmed by both engines &middot; ' +
+    (src['rule-only'] || 0) + ' rule-only &middot; ' +
+    (src['llm-only'] || 0) + ' llm-only &middot; ' +
+    (d.stats?.total_seconds ?? '?') + 's</div>';
+
+  if (!f.length) {
+    html += '<div class="card">No vulnerabilities found.</div>';
+    $('#results').innerHTML = html;
+    return;
+  }
+
+  if (d.chains?.length) {
+    html += '<h2>Attack chains</h2>';
+    d.chains.forEach(c => {
+      html += '<div class="chain"><span class="sev ' + esc(c.severity) + '">' +
+        esc(c.severity) + '</span> <span class="hint">likelihood ' +
+        esc(c.likelihood) + '</span><div class="steps">';
+      html += c.steps.map(s => '<span class="step">' + esc(s.type) +
+        ' <span class="hint">L' + esc(s.line) + '</span></span>').join('<span class="arrow">&rarr;</span>');
+      html += '</div></div>';
+    });
+  }
+
+  html += '<h2>Findings</h2>';
+  f.sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
+  f.forEach((v, i) => {
+    html += '<div class="finding ' + esc(v.severity) + '">' +
+      '<div class="fhead" onclick="document.getElementById(\'d' + i + '\').classList.toggle(\'hidden\')">' +
+        '<span class="sev ' + esc(v.severity) + '">' + esc(v.severity) + '</span>' +
+        '<span class="ftype">' + esc(v.type) + '</span>' +
+        '<span class="badge ' + esc(v.source) + '">' + esc(v.source) + ' ' + esc(v.confidence) + '</span>' +
+        '<span class="floc">' + esc(v.file) + ':' + esc(v.start_line) + '</span>' +
+        (v.cwe ? '<span class="badge">' + esc(v.cwe) + '</span>' : '') +
+      '</div>' +
+      '<div class="fbody" id="d' + i + '">' +
+        (v.description ? '<div>' + esc(v.description) + '</div>' : '') +
+        (v.impact ? '<div style="margin-top:7px"><b>Impact:</b> ' + esc(v.impact) + '</div>' : '') +
+        (v.remediation ? '<div style="margin-top:7px"><b>Fix:</b> ' + esc(v.remediation) + '</div>' : '') +
+        (v.snippet ? '<pre>' + esc(v.snippet) + '</pre>' : '') +
+        (v.secure_code_example ? '<div style="margin-top:9px"><b>Suggested rewrite:</b></div><pre>' +
+          esc(v.secure_code_example) + '</pre>' : '') +
+      '</div></div>';
+  });
+
+  $('#results').innerHTML = html;
+}
+
+const metric = (n, l) => '<div class="metric"><div class="n">' + esc(n) +
+  '</div><div class="l">' + esc(l) + '</div></div>';
+
+$('#go').onclick = scan;
+</script>
+</body>
+</html>

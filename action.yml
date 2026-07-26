@@ -1,0 +1,119 @@
+name: 'VulnAgent Security Scan'
+description: 'Hybrid vulnerability scanning: rule-based static analysis plus LLM semantic analysis.'
+author: 'nam091'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'File or directory to scan'
+    required: false
+    default: '.'
+  mode:
+    description: 'deep (rules + LLM) or fast (rules only)'
+    required: false
+    default: 'deep'
+  fail-on:
+    description: 'Severity at or above which the job fails: critical, high, medium, low, info, never'
+    required: false
+    default: 'high'
+  confirmed-only:
+    description: 'Only findings corroborated by both engines can fail the job'
+    required: false
+    default: 'true'
+  baseline:
+    description: 'Path to a baseline file; when set, only new findings can fail the job'
+    required: false
+    default: ''
+  upload-sarif:
+    description: 'Upload results to GitHub code scanning'
+    required: false
+    default: 'true'
+  openai-api-key:
+    description: 'API key for the LLM tier. Omit to run in fast mode.'
+    required: false
+    default: ''
+  openai-base-url:
+    description: 'Base URL for an OpenAI-compatible provider'
+    required: false
+    default: ''
+  openai-model:
+    description: 'Model name for the LLM tier'
+    required: false
+    default: ''
+
+outputs:
+  findings:
+    description: 'Total number of findings'
+    value: ${{ steps.scan.outputs.findings }}
+  sarif-file:
+    description: 'Path to the generated SARIF file'
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install VulnAgent
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "${{ github.action_path }}"
+
+    - name: Run scan
+      id: scan
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        OPENAI_BASE_URL: ${{ inputs.openai-base-url }}
+        OPENAI_MODEL: ${{ inputs.openai-model }}
+      run: |
+        set +e
+
+        ARGS=("${{ inputs.path }}" --format sarif --output vulnagent.sarif)
+        ARGS+=(--fail-on "${{ inputs.fail-on }}")
+
+        # Without a key the LLM tier cannot run; fall back rather than fail.
+        if [ -z "${{ inputs.openai-api-key }}" ] || [ "${{ inputs.mode }}" = "fast" ]; then
+          echo "::notice::Running in fast mode (rule engine only)."
+          ARGS+=(--no-llm)
+        fi
+
+        if [ "${{ inputs.confirmed-only }}" = "true" ]; then
+          ARGS+=(--confirmed-only)
+        fi
+
+        if [ -n "${{ inputs.baseline }}" ]; then
+          ARGS+=(--baseline "${{ inputs.baseline }}" --fail-on-new)
+        fi
+
+        vulnagent scan "${ARGS[@]}"
+        SCAN_EXIT=$?
+
+        COUNT=$(python -c "import json;d=json.load(open('vulnagent.sarif'));print(len(d['runs'][0]['results']))" 2>/dev/null || echo 0)
+        echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=vulnagent.sarif" >> "$GITHUB_OUTPUT"
+        echo "scan-exit=$SCAN_EXIT" >> "$GITHUB_OUTPUT"
+
+        echo "### VulnAgent: $COUNT finding(s)" >> "$GITHUB_STEP_SUMMARY"
+        exit 0
+
+    - name: Upload SARIF
+      if: inputs.upload-sarif == 'true' && hashFiles('vulnagent.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: vulnagent.sarif
+        category: vulnagent
+
+    - name: Enforce gate
+      shell: bash
+      run: |
+        if [ "${{ steps.scan.outputs.scan-exit }}" != "0" ]; then
+          echo "::error::VulnAgent gate failed: findings at or above ${{ inputs.fail-on }}."
+          exit 1
+        fi

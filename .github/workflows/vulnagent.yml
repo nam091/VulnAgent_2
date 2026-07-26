@@ -1,0 +1,32 @@
+name: VulnAgent
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF to code scanning
+
+jobs:
+  scan:
+    name: Hybrid security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: VulnAgent
+        uses: ./
+        with:
+          path: src
+          mode: deep
+          fail-on: high
+          # LLM-only findings vary slightly between runs even at temperature 0,
+          # so only corroborated findings are allowed to block a merge. The
+          # rest still appear in the Security tab.
+          confirmed-only: 'true'
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-base-url: ${{ secrets.OPENAI_BASE_URL }}
+          openai-model: ${{ secrets.OPENAI_MODEL }}

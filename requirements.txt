@@ -7,7 +7,7 @@ pydantic
 gitpython
 typing-extensions
 python-multipart
-flask
-waitress
 aiofiles
+semgrep
+mcp
 setuptools
