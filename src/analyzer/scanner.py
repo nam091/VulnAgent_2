@@ -14,13 +14,14 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from analyzer import fusion
 from analyzer.code_analyzer import CodeAnalyzer
 from analyzer.discovery import DiscoveredFile, discover, route_to_llm
 from analyzer.semgrep_runner import SemgrepRunner, SemgrepUnavailable
 from models.vulnerability import (
+    FindingSource,
     Vulnerability,
     VulnerabilityReport,
 )
@@ -44,7 +45,11 @@ class ScanOptions:
         max_llm_files: Optional[int] = None,
         excludes: Optional[List[str]] = None,
         use_cache: bool = True,
-        cache_dir: Optional[str] = None
+        cache_dir: Optional[str] = None,
+        verify: bool = False,
+        verify_all: bool = False,
+        verify_turns: int = 6,
+        progress: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -55,6 +60,17 @@ class ScanOptions:
         self.excludes = excludes or []
         self.use_cache = use_cache
         self.cache_dir = cache_dir
+        # Adversarial verification. By default it runs only on LLM-only
+        # findings, which is where the measured false positives are; findings
+        # two independent engines already agreed on do not need a third
+        # opinion, and paying for one on every finding is mostly waste.
+        self.verify = verify
+        self.verify_all = verify_all
+        self.verify_turns = verify_turns
+        # Called with a progress event after each phase and after each file
+        # completes, so a caller can show real progress rather than a
+        # spinner that says nothing.
+        self.progress = progress
 
 
 class ScanResult:
@@ -121,15 +137,27 @@ class Scanner:
         target_path = Path(self.options.target).resolve()
         root = target_path if target_path.is_dir() else target_path.parent
 
+        self._emit("discovery", "Discovering source files", 2)
         files = discover(self.options.target, extra_excludes=self.options.excludes)
         if not files:
             logging.warning(f"No source files found under {self.options.target}")
+            self._emit("done", "No source files found", 100)
             return ScanResult([], root, {"files_discovered": 0})
+        self._emit(
+            "discovery", f"Found {len(files)} source file(s)", 6,
+            files_discovered=len(files)
+        )
 
         # Tier 1: one semgrep invocation for the whole tree.
+        self._emit("rules", "Running rule engine over every file", 10)
         rule_started = time.perf_counter()
         rule_by_file = self._run_rule_tier(root, {f.relative for f in files})
         rule_elapsed = time.perf_counter() - rule_started
+        rule_total = sum(len(v) for v in rule_by_file.values())
+        self._emit(
+            "rules", f"Rule engine found {rule_total} finding(s)", 25,
+            rule_findings=rule_total
+        )
 
         # Tier 2: LLM over the routed subset only.
         rule_hits = {path: len(v) for path, v in rule_by_file.items()}
@@ -143,11 +171,23 @@ class Scanner:
             if self.options.use_llm else []
         )
 
+        if routed:
+            self._emit(
+                "llm", f"Analysing {len(routed)} file(s) with the LLM", 28,
+                total=len(routed), current=0
+            )
         llm_started = time.perf_counter()
         llm_by_file, tier_status = await self._run_llm_tier(routed)
         llm_elapsed = time.perf_counter() - llm_started
 
+        self._emit("fusion", "Merging results from both tiers", 72)
         reports = self._assemble(files, rule_by_file, llm_by_file, tier_status)
+
+        verify_stats: Dict[str, Any] = {}
+        if self.options.verify:
+            verify_started = time.perf_counter()
+            verify_stats = await self._run_verification(reports, root)
+            verify_stats["verify_seconds"] = round(time.perf_counter() - verify_started, 2)
 
         stats = {
             "files_discovered": len(files),
@@ -157,13 +197,50 @@ class Scanner:
             "total_seconds": round(time.perf_counter() - started, 2),
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
+            **verify_stats,
         }
         logging.info(f"Scan complete: {stats}")
+        self._emit(
+            "done", "Scan complete", 100,
+            findings=sum(len(r.vulnerabilities) for r in reports)
+        )
 
         return ScanResult(reports, root, stats)
 
     _cache_hits = 0
     _cache_misses = 0
+
+    def _emit(
+        self,
+        phase: str,
+        message: str,
+        percent: float,
+        **extra: Any
+    ) -> None:
+        """
+        Report progress to the caller, if one asked for it.
+
+        A failing progress callback must never take the scan down with it.
+
+        Args:
+            phase: Which stage is running
+            message: Human-readable description
+            percent: Overall completion, 0-100
+            **extra: Additional fields for the event
+        """
+
+        if self.options.progress is None:
+            return
+        event = {
+            "phase": phase,
+            "message": message,
+            "percent": round(max(0.0, min(100.0, percent)), 1),
+            **extra,
+        }
+        try:
+            self.options.progress(event)
+        except Exception as e:
+            logging.debug(f"Progress callback raised: {e}")
 
     def _run_rule_tier(
         self,
@@ -233,6 +310,17 @@ class Scanner:
         semaphore = asyncio.Semaphore(self.options.concurrency)
         results: Dict[str, List[Vulnerability]] = {}
         status: Dict[str, str] = {}
+        completed = {"n": 0}
+        total = len(routed)
+
+        def tick(relative: str) -> None:
+            completed["n"] += 1
+            # The LLM tier owns the 28-70 band of the overall progress bar.
+            percent = 28 + 42 * (completed["n"] / total)
+            self._emit(
+                "llm", f"Analysed {completed['n']}/{total}: {relative}", percent,
+                current=completed["n"], total=total
+            )
 
         async def analyse(item: DiscoveredFile) -> None:
             async with semaphore:
@@ -241,6 +329,7 @@ class Scanner:
                     content = item.path.read_text(encoding="utf-8", errors="replace")
                 except OSError as e:
                     status[relative] = f"failed: {e}"
+                    tick(relative)
                     return
 
                 cached = self._cache_get(content)
@@ -248,6 +337,7 @@ class Scanner:
                     Scanner._cache_hits += 1
                     results[relative] = self.analyzer._process_ai_response(cached, relative)
                     status[relative] = "ok"
+                    tick(relative)
                     return
 
                 Scanner._cache_misses += 1
@@ -258,14 +348,118 @@ class Scanner:
                 except Exception as e:
                     logging.error(f"LLM tier failed for {relative}: {e}")
                     status[relative] = f"failed: {e}"
+                    tick(relative)
                     return
 
                 self._cache_put(content, raw)
                 results[relative] = self.analyzer._process_ai_response(raw, relative)
                 status[relative] = "ok"
+                tick(relative)
 
         await asyncio.gather(*(analyse(item) for item in routed))
         return results, status
+
+    async def _run_verification(
+        self,
+        reports: List[VulnerabilityReport],
+        root: Path
+    ) -> Dict[str, Any]:
+        """
+        Send candidate findings through the adversarial verification agent.
+
+        Findings the agent refutes with a named mitigating control are
+        dropped; findings it upholds gain a confidence boost and the taint
+        path it traced. Findings it could not settle are kept unchanged,
+        because deleting a real vulnerability is worse than reporting an
+        unverified one.
+
+        Args:
+            reports: Reports to verify in place
+            root: Scan root the agent's tools are confined to
+
+        Returns:
+            Dict[str, Any]: Verification counters for the scan statistics
+        """
+
+        from agent.verifier import VerificationAgent
+
+        candidates: List[Tuple[VulnerabilityReport, Vulnerability]] = []
+        for report in reports:
+            for vuln in report.vulnerabilities:
+                if self.options.verify_all or vuln.source == FindingSource.LLM:
+                    candidates.append((report, vuln))
+
+        if not candidates:
+            return {"verified_candidates": 0}
+
+        agent = VerificationAgent(
+            client=self.analyzer.ai_client.openai_client,
+            model=self.analyzer.ai_client.openai_default_model,
+            root=root,
+            max_turns=self.options.verify_turns,
+            temperature=None if self.analyzer.ai_client._is_reasoning_model(
+                self.analyzer.ai_client.openai_default_model
+            ) else 0,
+        )
+
+        semaphore = asyncio.Semaphore(self.options.concurrency)
+        counters = {"confirmed": 0, "refuted": 0, "uncertain": 0, "tool_calls": 0}
+        refuted_ids: set = set()
+        done = {"n": 0}
+        total = len(candidates)
+        self._emit("verify", f"Verifying {total} candidate finding(s)", 75, total=total, current=0)
+
+        async def check(report: VulnerabilityReport, vuln: Vulnerability) -> None:
+            async with semaphore:
+                verdict = await agent.verify(vuln)
+                done["n"] += 1
+                self._emit(
+                    "verify",
+                    f"Verified {done['n']}/{total}: {vuln.type.value} -> {verdict.verdict}",
+                    75 + 23 * (done["n"] / total),
+                    current=done["n"], total=total
+                )
+                vuln.verification = verdict.as_dict()
+                counters["tool_calls"] += verdict.tool_calls
+                counters[verdict.verdict] = counters.get(verdict.verdict, 0) + 1
+
+                if verdict.confirmed:
+                    vuln.taint_path = verdict.taint_path
+                    # Corroboration by independent investigation, not by a
+                    # second engine - kept below CONFIRMED-by-fusion.
+                    vuln.confidence = max(vuln.confidence, 0.85)
+                elif verdict.refuted:
+                    refuted_ids.add(vuln.id)
+
+        await asyncio.gather(*(check(r, v) for r, v in candidates))
+
+        dropped = 0
+        for report in reports:
+            before = len(report.vulnerabilities)
+            report.vulnerabilities = [
+                v for v in report.vulnerabilities if v.id not in refuted_ids
+            ]
+            dropped += before - len(report.vulnerabilities)
+            if before != len(report.vulnerabilities):
+                report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
+                    report.vulnerabilities
+                )
+                report.calculate_summary()
+                report.calculate_risk_score()
+
+        logging.info(
+            "Verification: %d candidate(s) -> %d confirmed, %d refuted, %d uncertain",
+            len(candidates), counters["confirmed"], counters["refuted"], counters["uncertain"]
+        )
+
+        return {
+            "verified_candidates": len(candidates),
+            "verify_confirmed": counters["confirmed"],
+            "verify_refuted": counters["refuted"],
+            "verify_uncertain": counters["uncertain"],
+            "verify_dropped": dropped,
+            "verify_tool_calls": counters["tool_calls"],
+        }
 
     def _assemble(
         self,

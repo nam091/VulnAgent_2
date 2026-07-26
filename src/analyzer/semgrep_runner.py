@@ -204,7 +204,54 @@ class SemgrepRunner:
 
         raw = self._run(target)
         findings = [self._to_vulnerability(r) for r in raw]
-        return self._deduplicate([f for f in findings if f is not None])
+        findings = [f for f in findings if f is not None]
+        self._attach_snippets(findings)
+        return self._deduplicate(findings)
+
+    def _attach_snippets(self, findings: List[Vulnerability]) -> None:
+        """
+        Replace each finding's snippet with the real source from disk.
+
+        Unauthenticated semgrep does not return matched source: it substitutes
+        the literal string "requires login" for every result. Passing that
+        through is not just a display problem - the finding fingerprint is
+        derived from the snippet, so a constant placeholder collapses every
+        same-type finding in a file to one identifier and silently breaks
+        baselines and suppressions.
+
+        Args:
+            findings: Findings to fill in, modified in place
+        """
+
+        cache: Dict[str, List[str]] = {}
+
+        for finding in findings:
+            path = finding.location.file_path
+            if path not in cache:
+                try:
+                    cache[path] = Path(path).read_text(
+                        encoding="utf-8", errors="replace"
+                    ).split("\n")
+                except OSError as e:
+                    logging.debug(f"Could not read {path} for a snippet: {e}")
+                    cache[path] = []
+
+            lines = cache[path]
+            if not lines:
+                finding.location.context = ""
+            else:
+                start = max(1, finding.location.start_line)
+                end = min(
+                    max(finding.location.end_line or start, start),
+                    len(lines),
+                    start + 12          # long matches would swamp the report
+                )
+                finding.location.context = "\n".join(lines[start - 1:end]).strip()
+
+            # The snippet just changed, so the identifier derived from it must
+            # be recomputed rather than left pointing at the placeholder.
+            finding.id = ""
+            finding.id = finding.fingerprint()
 
     def _run(self, target: str) -> List[Dict[str, Any]]:
         """
@@ -316,7 +363,9 @@ class SemgrepRunner:
             end_line=end.get("line", start.get("line", 0)),
             start_col=start.get("col"),
             end_col=end.get("col"),
-            context=(extra.get("lines") or "").strip()
+            # Filled in by _attach_snippets from the file itself; semgrep's
+            # own value is a placeholder unless the CLI is logged in.
+            context=""
         )
 
         references = [r for r in (metadata.get("references") or []) if isinstance(r, str)]

@@ -61,6 +61,22 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
         "--exclude", action="append", default=[], metavar="GLOB",
         help="Additional path pattern to skip (repeatable)"
     )
+    parser.add_argument(
+        "--verify-findings", action="store_true", dest="verify_findings",
+        help=(
+            "Send findings through an adversarial verification agent that reads "
+            "the surrounding code and tries to refute them. Drops false positives "
+            "and attaches a traced taint path to those it upholds."
+        )
+    )
+    parser.add_argument(
+        "--verify-all", action="store_true",
+        help="Verify every finding, not just the LLM-only ones"
+    )
+    parser.add_argument(
+        "--verify-turns", type=int, default=6,
+        help="Investigation budget per finding, in model turns (default: 6)"
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
 
@@ -181,6 +197,9 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
         max_llm_files=args.max_llm_files,
         excludes=args.exclude,
         use_cache=not args.no_cache,
+        verify=getattr(args, "verify_findings", False),
+        verify_all=getattr(args, "verify_all", False),
+        verify_turns=getattr(args, "verify_turns", 6),
     )
 
 

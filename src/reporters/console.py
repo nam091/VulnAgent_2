@@ -83,6 +83,17 @@ def render(result: ScanResult, verbose: bool = False) -> str:
     if cache_hits:
         lines.append(paint(f"  {cache_hits} cached, {stats.get('cache_misses', 0)} fresh", _DIM))
 
+    if stats.get("verified_candidates"):
+        lines.append(paint(
+            f"  verification agent: {stats['verified_candidates']} candidate(s) -> "
+            f"{stats.get('verify_confirmed', 0)} upheld, "
+            f"{stats.get('verify_refuted', 0)} refuted, "
+            f"{stats.get('verify_uncertain', 0)} uncertain"
+            f"  ({stats.get('verify_tool_calls', 0)} tool calls, "
+            f"{stats.get('verify_seconds', 0)}s)",
+            _DIM
+        ))
+
     if not vulns:
         lines.append("")
         lines.append("  No vulnerabilities found.")

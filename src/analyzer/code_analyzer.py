@@ -5,7 +5,7 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import git
 
@@ -708,7 +708,17 @@ Format response as JSON matching the Vulnerability model structure.
 
     def _check_data_flow_relationship(self, vuln1: Vulnerability, vuln2: Vulnerability) -> bool:
         """
-        Check if vulnerabilities are related through data flow.
+        Check whether two vulnerabilities are connected by data flow.
+
+        When the verification agent has traced a taint path for both, that
+        evidence is used directly: two defects are related when their paths
+        touch the same program point, or when one's sink is the other's
+        source. That is real dataflow, established by reading the code.
+
+        Without traced paths this falls back to comparing the vocabulary of
+        the two descriptions, which is a weak proxy - it matches on words in
+        prose the model wrote, not on how values actually move. Run with
+        --verify-findings to get the real thing.
 
         Args:
             vuln1: First vulnerability
@@ -717,6 +727,9 @@ Format response as JSON matching the Vulnerability model structure.
         Returns:
             bool: True if vulnerabilities are related through data flow
         """
+
+        if vuln1.taint_path and vuln2.taint_path:
+            return self._taint_paths_intersect(vuln1, vuln2)
 
         # Check if vulnerabilities involve similar data patterns
         data_patterns = {
@@ -740,6 +753,50 @@ Format response as JSON matching the Vulnerability model structure.
         vuln2_categories = get_data_categories(vuln2)
 
         return bool(vuln1_categories & vuln2_categories)
+
+    @staticmethod
+    def _taint_paths_intersect(vuln1: Vulnerability, vuln2: Vulnerability) -> bool:
+        """
+        Decide whether two traced taint paths are connected.
+
+        Two paths are connected when they pass through the same program
+        point, or when the sink of one is a point on the other - the shape
+        that lets an attacker use the first defect to reach the second.
+
+        Args:
+            vuln1: First vulnerability, with a traced path
+            vuln2: Second vulnerability, with a traced path
+
+        Returns:
+            bool: True when the paths touch
+        """
+
+        def points(vuln: Vulnerability) -> Set[Tuple[str, int]]:
+            found = set()
+            for step in vuln.taint_path:
+                path = str(step.get("file") or vuln.location.file_path)
+                line = step.get("line")
+                if not isinstance(line, int) or line <= 0:
+                    continue
+                normalised = Path(path).name.lower()
+                # Adjacent lines describe the same statement often enough
+                # that requiring exact equality loses real connections.
+                found.update((normalised, line + offset) for offset in (-1, 0, 1))
+            return found
+
+        points1, points2 = points(vuln1), points(vuln2)
+        if points1 & points2:
+            return True
+
+        def sinks(vuln: Vulnerability) -> Set[Tuple[str, int]]:
+            return {
+                (Path(str(s.get("file") or vuln.location.file_path)).name.lower(), s["line"])
+                for s in vuln.taint_path
+                if str(s.get("kind", "")).lower() == "sink"
+                and isinstance(s.get("line"), int) and s["line"] > 0
+            }
+
+        return bool(sinks(vuln1) & points2 or sinks(vuln2) & points1)
 
     def _share_security_context(self, vuln1: Vulnerability, vuln2: Vulnerability) -> bool:
         """

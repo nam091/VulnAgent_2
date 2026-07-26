@@ -1,11 +1,17 @@
-"""HTTP API and web UI.
+"""HTTP API and web dashboard.
 
 Wraps the same Scanner the CLI and MCP server use. Nothing analytical lives
-here - this layer only handles transport, input validation and rendering.
+here - this layer handles transport, input validation, job lifecycle and
+progress streaming.
+
+Scans run as background jobs rather than inside a request, so the browser
+can be refreshed, closed or reopened without losing one.
 """
 
 import asyncio
+import json
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -14,47 +20,54 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from analyzer.scanner import ScanOptions, Scanner
+from jobs import Job, JobStore, run_job
 from models.vulnerability import FindingSource, Vulnerability
 
 STATIC_DIR = Path(__file__).resolve().parent / "web"
 
-# Cloning arbitrary URLs on request is a server-side request forgery primitive.
-# Only well-known code hosts over https are accepted.
+# Cloning arbitrary URLs on request is a server-side request forgery
+# primitive, so only well-known code hosts over https are accepted.
 ALLOWED_GIT_HOSTS = {
     "github.com", "www.github.com",
     "gitlab.com", "www.gitlab.com",
     "bitbucket.org", "www.bitbucket.org",
 }
-MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+MAX_UPLOAD_FILES = 400
+MAX_TOTAL_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_SINGLE_FILE_BYTES = 2 * 1024 * 1024
 MAX_CODE_CHARS = 200_000
-REPO_SCAN_TIMEOUT = 600
+SCANNABLE_SUFFIXES = {".py", ".pyi", ".txt", ".cfg", ".ini", ".toml", ".env", ".yml", ".yaml"}
 
 app = FastAPI(
     title="VulnAgent",
-    description="Hybrid vulnerability detection: rule-based static analysis + LLM",
+    description="Hybrid vulnerability detection: rule-based static analysis + LLM agent",
     version="1.0.0"
 )
+
+store = JobStore()
 
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-class CodeScanRequest(BaseModel):
+class SnippetRequest(BaseModel):
     code: str = Field(..., description="Source code to analyse")
     filename: str = Field("snippet.py", description="Name used for language detection")
     mode: str = Field("deep", description="'fast' for rules only, 'deep' for both tiers")
+    verify: bool = Field(False, description="Run the adversarial verification agent")
 
 
-class RepositoryScanRequest(BaseModel):
+class RepositoryRequest(BaseModel):
     repository_url: str
     branch: str = "main"
     mode: str = "deep"
+    verify: bool = False
     max_files: int = Field(40, ge=1, le=200)
 
 
@@ -92,16 +105,17 @@ def _serialise(vuln: Vulnerability) -> Dict[str, Any]:
         "remediation": vuln.remediation,
         "secure_code_example": vuln.secure_code_example,
         "snippet": vuln.location.context,
+        "verification": vuln.verification,
+        "taint_path": vuln.taint_path,
     }
 
 
-def _package(result, elapsed_note: Optional[str] = None) -> Dict[str, Any]:
+def _package(result: Any) -> Dict[str, Any]:
     """
-    Build the response body shared by every scan endpoint.
+    Build the response body shared by every scan.
 
     Args:
         result: A ScanResult
-        elapsed_note: Optional extra note for the client
 
     Returns:
         Dict[str, Any]: The response payload
@@ -135,47 +149,85 @@ def _package(result, elapsed_note: Optional[str] = None) -> Dict[str, Any]:
         for chain in report.chained_vulnerabilities
     ]
 
-    risk = round(sum(r.risk_score or 0 for r in result.reports), 2)
+    files = [
+        {
+            "file": report.file_name,
+            "findings": len(report.vulnerabilities),
+            "risk_score": report.risk_score or 0,
+            "tiers": report.tiers,
+        }
+        for report in result.reports
+    ]
 
     return {
         "findings": [_serialise(v) for v in vulns],
         "counts": counts,
         "sources": sources,
         "chains": chains,
-        "risk_score": risk,
+        "files": files,
+        "risk_score": round(sum(r.risk_score or 0 for r in result.reports), 2),
         "stats": result.stats,
         "degraded": result.degraded,
-        "note": elapsed_note,
     }
 
 
-async def _scan_path(target: str, mode: str, concurrency: int = 5) -> Dict[str, Any]:
+def _safe_relative(name: str) -> Optional[str]:
     """
-    Run a scan over a path and package the result.
+    Turn a client-supplied upload path into a safe relative path.
+
+    Browsers send the folder structure as part of each filename. That string
+    is attacker-controlled, so it is rebuilt from its parts rather than
+    trusted: anything absolute, containing "..", or otherwise escaping is
+    rejected outright.
 
     Args:
-        target: File or directory to scan
-        mode: "fast" or "deep"
-        concurrency: Concurrent LLM calls
+        name: The filename from the upload
 
     Returns:
-        Dict[str, Any]: The response payload
+        Optional[str]: A safe relative path, or None to reject the file
     """
 
-    options = ScanOptions(
-        target=target,
-        use_llm=(mode != "fast"),
-        use_semgrep=True,
-        concurrency=concurrency,
-    )
-    result = await Scanner(options).scan()
-    return _package(result)
+    if not name:
+        return None
+
+    parts = [p for p in re.split(r"[\\/]+", name) if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return None
+    if re.match(r"^[a-zA-Z]:$", parts[0]):     # drive letter
+        return None
+    if any(p.startswith(("venv", ".git", "node_modules", "__pycache__")) for p in parts):
+        return None
+
+    cleaned = [re.sub(r'[<>:"|?*\x00-\x1f]', "_", p) for p in parts]
+    return "/".join(cleaned)
+
+
+def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[str, Any]:
+    """
+    Attach progress reporting and queue the scan.
+
+    Args:
+        job: The job to run
+        options: Scan configuration
+        background: FastAPI background task registry
+
+    Returns:
+        Dict[str, Any]: The job summary to return immediately
+    """
+
+    options.progress = lambda event: store.record_event(job, event)
+
+    async def execute() -> None:
+        await run_job(store, job, lambda: Scanner(options).scan(), _package)
+
+    background.add_task(execute)
+    return job.as_summary()
 
 
 @app.get("/")
 async def index():
     """
-    Serve the web UI.
+    Serve the dashboard.
     """
 
     page = STATIC_DIR / "index.html"
@@ -184,16 +236,105 @@ async def index():
     return FileResponse(str(page))
 
 
-@app.post("/api/scan/code")
-async def scan_code(request: CodeScanRequest) -> Dict[str, Any]:
+@app.post("/api/jobs/folder")
+async def scan_folder(
+    background: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    mode: str = Form("deep"),
+    verify: bool = Form(False),
+    concurrency: int = Form(5)
+) -> Dict[str, Any]:
     """
-    Analyse a snippet of code supplied in the request body.
+    Scan an uploaded folder.
 
     Args:
-        request: The code and options
+        background: FastAPI background tasks
+        files: Uploaded files, named with their path inside the folder
+        mode: "fast" or "deep"
+        verify: Run the verification agent
+        concurrency: Concurrent LLM calls
 
     Returns:
-        Dict[str, Any]: Findings and summary
+        Dict[str, Any]: The created job
+    """
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many files ({len(files)}); the limit is {MAX_UPLOAD_FILES}"
+        )
+
+    workspace = Path(tempfile.mkdtemp(prefix="vulnagent_upload_"))
+    total = 0
+    written = 0
+    root_name = ""
+
+    try:
+        for upload in files:
+            relative = _safe_relative(upload.filename or "")
+            if not relative:
+                continue
+            if Path(relative).suffix.lower() not in SCANNABLE_SUFFIXES:
+                continue
+
+            raw = await upload.read()
+            if len(raw) > MAX_SINGLE_FILE_BYTES:
+                continue
+            total += len(raw)
+            if total > MAX_TOTAL_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="Upload exceeds 20 MB")
+
+            destination = workspace / relative
+            # Belt and braces: confirm the resolved path is still inside.
+            if workspace.resolve() not in destination.resolve().parents:
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            written += 1
+            if not root_name:
+                root_name = relative.split("/")[0]
+
+        if not written:
+            raise HTTPException(
+                status_code=400,
+                detail="No scannable source files found in the upload"
+            )
+    except HTTPException:
+        shutil.rmtree(workspace, ignore_errors=True)
+        raise
+
+    job = store.create(
+        kind="folder",
+        label=f"{root_name or 'upload'} ({written} files)",
+        options={"mode": mode, "verify": verify, "files": written},
+        workspace=str(workspace),
+    )
+    options = ScanOptions(
+        target=str(workspace),
+        use_llm=(mode != "fast"),
+        use_semgrep=True,
+        concurrency=max(1, min(concurrency, 10)),
+        verify=verify,
+    )
+    return _start(job, options, background)
+
+
+@app.post("/api/jobs/snippet")
+async def scan_snippet(
+    request: SnippetRequest,
+    background: BackgroundTasks
+) -> Dict[str, Any]:
+    """
+    Scan a snippet pasted into the UI.
+
+    Args:
+        request: Code and options
+        background: FastAPI background tasks
+
+    Returns:
+        Dict[str, Any]: The created job
     """
 
     if not request.code.strip():
@@ -201,59 +342,25 @@ async def scan_code(request: CodeScanRequest) -> Dict[str, Any]:
     if len(request.code) > MAX_CODE_CHARS:
         raise HTTPException(status_code=413, detail="Code too large (max 200k characters)")
 
-    # Only the extension of the supplied name is used; building a path out
-    # of client-controlled text is the traversal bug this tool reports.
+    workspace = Path(tempfile.mkdtemp(prefix="vulnagent_snippet_"))
+    # Only the extension of the supplied name is used; building a path from
+    # client text is the traversal defect this tool reports.
     suffix = Path(request.filename or "snippet.py").suffix or ".py"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="vulnagent_api_"))
-    tmp_file = tmp_dir / f"snippet{suffix}"
+    (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
-    try:
-        tmp_file.write_text(request.code, encoding="utf-8")
-        payload = await _scan_path(str(tmp_file), request.mode)
-        for finding in payload["findings"]:
-            finding["file"] = request.filename
-        return payload
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-@app.post("/api/scan/file")
-async def scan_file(file: UploadFile = File(...), mode: str = "deep") -> Dict[str, Any]:
-    """
-    Analyse an uploaded file.
-
-    Args:
-        file: The uploaded file
-        mode: "fast" or "deep"
-
-    Returns:
-        Dict[str, Any]: Findings and summary
-    """
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    raw = await file.read()
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 2MB)")
-
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 text")
-
-    suffix = Path(file.filename).suffix or ".py"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="vulnagent_api_"))
-    tmp_file = tmp_dir / f"upload{suffix}"
-
-    try:
-        tmp_file.write_text(content, encoding="utf-8")
-        payload = await _scan_path(str(tmp_file), mode)
-        for finding in payload["findings"]:
-            finding["file"] = file.filename
-        return payload
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    job = store.create(
+        kind="snippet",
+        label=request.filename or "snippet.py",
+        options={"mode": request.mode, "verify": request.verify},
+        workspace=str(workspace),
+    )
+    options = ScanOptions(
+        target=str(workspace),
+        use_llm=(request.mode != "fast"),
+        use_semgrep=True,
+        verify=request.verify,
+    )
+    return _start(job, options, background)
 
 
 def _validate_repo_url(url: str) -> str:
@@ -283,54 +390,181 @@ def _validate_repo_url(url: str) -> str:
     return url
 
 
-@app.post("/api/scan/repository")
-async def scan_repository(request: RepositoryScanRequest) -> Dict[str, Any]:
+@app.post("/api/jobs/repository")
+async def scan_repository(
+    request: RepositoryRequest,
+    background: BackgroundTasks
+) -> Dict[str, Any]:
     """
-    Clone a public repository and analyse it.
+    Clone a public repository and scan it.
 
     Args:
         request: Repository URL, branch and options
+        background: FastAPI background tasks
 
     Returns:
-        Dict[str, Any]: Findings and summary
+        Dict[str, Any]: The created job
     """
-
-    import git
 
     url = _validate_repo_url(request.repository_url)
     if not re.match(r"^[\w./-]{1,100}$", request.branch):
         raise HTTPException(status_code=400, detail="Invalid branch name")
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="vulnagent_repo_"))
-    try:
-        try:
+    workspace = Path(tempfile.mkdtemp(prefix="vulnagent_repo_"))
+    job = store.create(
+        kind="repository",
+        label=f"{url.rstrip('/').split('/')[-1]}@{request.branch}",
+        options={"mode": request.mode, "verify": request.verify, "url": url},
+        workspace=str(workspace),
+    )
+
+    options = ScanOptions(
+        target=str(workspace),
+        use_llm=(request.mode != "fast"),
+        use_semgrep=True,
+        concurrency=5,
+        max_llm_files=request.max_files,
+        verify=request.verify,
+    )
+    options.progress = lambda event: store.record_event(job, event)
+
+    async def execute() -> None:
+        import git
+
+        async def scan_after_clone() -> Any:
+            store.record_event(job, {
+                "phase": "clone", "message": f"Cloning {url}", "percent": 1
+            })
             await asyncio.to_thread(
-                git.Repo.clone_from,
-                url, str(tmp_dir), branch=request.branch, depth=1
+                git.Repo.clone_from, url, str(workspace),
+                branch=request.branch, depth=1
             )
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Clone failed: {e}")
+            return await Scanner(options).scan()
 
-        options = ScanOptions(
-            target=str(tmp_dir),
-            use_llm=(request.mode != "fast"),
-            use_semgrep=True,
-            concurrency=5,
-            max_llm_files=request.max_files,
-        )
+        await run_job(store, job, scan_after_clone, _package)
+
+    background.add_task(execute)
+    return job.as_summary()
+
+
+@app.get("/api/jobs")
+async def list_jobs(limit: int = 50) -> Dict[str, Any]:
+    """
+    List recent jobs.
+
+    Args:
+        limit: Maximum jobs to return
+
+    Returns:
+        Dict[str, Any]: Job summaries, newest first
+    """
+
+    return {"jobs": [job.as_summary() for job in store.list(limit=limit)]}
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str) -> Dict[str, Any]:
+    """
+    Fetch a job, including its result when finished.
+
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        Dict[str, Any]: The full job record
+    """
+
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+
+    return {
+        **job.as_summary(),
+        "options": job.options,
+        "result": job.result,
+        "events": job.events[-80:],
+    }
+
+
+@app.delete("/api/jobs/{job_id}")
+async def delete_job(job_id: str) -> Dict[str, Any]:
+    """
+    Delete a job and its stored result.
+
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        Dict[str, Any]: Confirmation
+    """
+
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+
+    JobStore.cleanup_workspace(job)
+    store._jobs.pop(job_id, None)
+    try:
+        (store.directory / f"{job_id}.json").unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"deleted": job_id}
+
+
+@app.get("/api/jobs/{job_id}/events")
+async def stream_job(job_id: str) -> StreamingResponse:
+    """
+    Stream live progress for one job as server-sent events.
+
+    The first frame is the current state, so a browser that reconnects after
+    a reload is immediately correct rather than blank until the next update.
+
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        StreamingResponse: An SSE stream
+    """
+
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+
+    async def events():
+        queue = store.subscribe(job_id)
         try:
-            result = await asyncio.wait_for(
-                Scanner(options).scan(), timeout=REPO_SCAN_TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Scan exceeded {REPO_SCAN_TIMEOUT}s. Try mode='fast' or a smaller repo."
-            )
+            yield f"data: {json.dumps(job.as_summary())}\n\n"
+            if job.status in ("done", "failed", "cancelled"):
+                return
+            while True:
+                try:
+                    update = await asyncio.wait_for(queue.get(), timeout=20)
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield f"data: {json.dumps(update)}\n\n"
+                if update.get("status") in ("done", "failed", "cancelled"):
+                    return
+        finally:
+            store.unsubscribe(job_id, queue)
 
-        return _package(result, elapsed_note=f"{request.repository_url}@{request.branch}")
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/stats")
+async def stats() -> Dict[str, Any]:
+    """
+    Aggregate metrics across every completed job.
+
+    Returns:
+        Dict[str, Any]: Dashboard totals
+    """
+
+    return store.aggregate()
 
 
 @app.get("/health")
@@ -343,7 +577,6 @@ async def health_check() -> Dict[str, Any]:
     """
 
     from analyzer.semgrep_runner import SemgrepRunner
-    import os
 
     runner = SemgrepRunner()
     return {
@@ -351,6 +584,7 @@ async def health_check() -> Dict[str, Any]:
         "rule_engine": runner.available,
         "llm_configured": bool(os.getenv("OPENAI_API_KEY")),
         "model": os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12"),
+        "jobs": len(store.list(limit=1000)),
     }
 
 

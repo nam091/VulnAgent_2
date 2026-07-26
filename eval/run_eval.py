@@ -279,6 +279,8 @@ async def run_vulnagent(
     use_llm: bool,
     use_semgrep: bool,
     confirmed_only: bool = False,
+    verify: bool = False,
+    verify_all: bool = False,
     concurrency: int = 5
 ) -> Tuple[List[Detection], float]:
     """
@@ -299,6 +301,8 @@ async def run_vulnagent(
         use_semgrep=use_semgrep,
         concurrency=concurrency,
         use_cache=True,
+        verify=verify,
+        verify_all=verify_all,
     )
     result = await Scanner(options).scan()
 
@@ -379,6 +383,11 @@ CONFIGURATIONS = {
     "confirmed": ("VulnAgent (confirmed)", dict(use_llm=True, use_semgrep=True, confirmed_only=True)),
     "semgrep": ("Semgrep only", dict(use_llm=False, use_semgrep=True)),
     "llm": ("LLM only", dict(use_llm=True, use_semgrep=False)),
+    # The agentic configurations. "verified" is the question the thesis
+    # actually asks: does letting the model investigate and try to refute its
+    # own findings fix the precision problem that single-shot prompting has?
+    "verified": ("VulnAgent (agent-verified)", dict(use_llm=True, use_semgrep=True, verify=True)),
+    "llm-verified": ("LLM only + agent verify", dict(use_llm=True, use_semgrep=False, verify=True, verify_all=True)),
 }
 
 
