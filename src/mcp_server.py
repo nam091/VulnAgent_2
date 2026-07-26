@@ -202,9 +202,16 @@ async def _scan_target(
     result = await Scanner(options).scan()
     vulns = result.vulnerabilities
 
+    # A degraded scan must never be reported as clean. An agent reading
+    # "No vulnerabilities found" will ship the code.
+    summary = _summarise(vulns, result.stats.get("total_seconds"))
+    if result.degraded:
+        summary = ("INCOMPLETE SCAN - an analysis engine did not finish, so "
+                   "this result cannot be trusted. " + summary)
+
     return {
-        "summary": _summarise(vulns, result.stats.get("total_seconds")),
-        "clean": not vulns,
+        "summary": summary,
+        "clean": (not vulns) and not result.degraded,
         "mode": mode,
         "findings": [_to_dict(v) for v in vulns],
         "attack_chains": [

@@ -156,6 +156,14 @@ class SemgrepUnavailable(RuntimeError):
     """Raised when the semgrep executable cannot be found or invoked."""
 
 
+class SemgrepTimeout(SemgrepUnavailable):
+    """Raised when a semgrep scan exceeds its time budget.
+
+    Kept distinct from a clean result on purpose: a rule tier that hung and
+    a rule tier that found nothing must never look the same to the caller.
+    """
+
+
 class SemgrepRunner:
     """
     Wrapper around the semgrep CLI that returns Vulnerability objects.
@@ -287,14 +295,24 @@ class SemgrepRunner:
             proc = subprocess.run(
                 cmd,
                 capture_output=True,
+                # stdin must be detached explicitly. Under the MCP server the
+                # parent's stdin is the protocol pipe; a child that inherits
+                # it can block on a read that will never be answered, and the
+                # scan then hangs until the timeout and reports the file as
+                # clean. Capturing stdout and stderr is not enough.
+                stdin=subprocess.DEVNULL,
                 text=True,
                 timeout=self.timeout,
                 encoding="utf-8",
                 errors="replace"
             )
         except subprocess.TimeoutExpired:
-            logging.error(f"Semgrep timed out after {self.timeout}s on {target}")
-            return []
+            # Returning [] here would be indistinguishable from "found
+            # nothing", which is how a hung rule tier turns into a clean bill
+            # of health. Raise so the caller records a failed tier instead.
+            raise SemgrepTimeout(
+                f"semgrep exceeded {self.timeout}s on {target}"
+            )
         except OSError as e:
             raise SemgrepUnavailable(f"Failed to execute semgrep: {e}")
 

@@ -124,6 +124,9 @@ class Scanner:
         self.analyzer = CodeAnalyzer(use_semgrep=False)  # rule tier is run here
         self.semgrep = SemgrepRunner() if options.use_semgrep else None
         self._cache_dir: Optional[Path] = None
+        # Set when the rule tier fails, so a hung or missing engine is
+        # reported as a degraded scan rather than as a clean one.
+        self._rule_error: str = ""
 
     async def scan(self) -> ScanResult:
         """
@@ -266,7 +269,8 @@ class Scanner:
         try:
             findings = self.semgrep.scan(self.options.target)
         except SemgrepUnavailable as e:
-            logging.warning(f"Rule tier skipped: {e}")
+            logging.error(f"Rule tier failed: {e}")
+            self._rule_error = str(e)
             return {}
 
         grouped: Dict[str, List[Vulnerability]] = defaultdict(list)
@@ -563,17 +567,21 @@ class Scanner:
         """
 
         reports = []
-        semgrep_status = (
-            "ok" if (self.semgrep and self.semgrep.available)
-            else ("disabled" if self.semgrep is None else "unavailable")
-        )
+        if self.semgrep is None:
+            semgrep_status = "disabled"
+        elif self._rule_error:
+            semgrep_status = f"failed: {self._rule_error}"
+        elif not self.semgrep.available:
+            semgrep_status = "unavailable"
+        else:
+            semgrep_status = "ok"
 
         for item in files:
             relative = item.relative
             rule_findings = rule_by_file.get(relative, [])
             llm_findings = llm_by_file.get(relative, [])
 
-            if not rule_findings and not llm_findings:
+            if not rule_findings and not llm_findings and not self._rule_error:
                 continue
 
             fused = fusion.fuse(rule_findings, llm_findings)
