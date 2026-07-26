@@ -20,9 +20,13 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+# The form parser produces Starlette's UploadFile, and fastapi.UploadFile is
+# a subclass of it, so an isinstance check against the FastAPI class silently
+# matches nothing.
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from pydantic import BaseModel, Field
 
 from analyzer.fixer import classify_patch, unified_diff
@@ -39,10 +43,33 @@ ALLOWED_GIT_HOSTS = {
     "gitlab.com", "www.gitlab.com",
     "bitbucket.org", "www.bitbucket.org",
 }
-MAX_UPLOAD_FILES = 2000
-MAX_TOTAL_UPLOAD_BYTES = 60 * 1024 * 1024
-MAX_SINGLE_FILE_BYTES = 2 * 1024 * 1024
-MAX_CODE_CHARS = 200_000
+def _limit(name: str, default: int) -> int:
+    """
+    Read a size limit from the environment.
+
+    Args:
+        name: Environment variable name
+        default: Value to use when unset or unparseable
+
+    Returns:
+        int: The limit, where 0 means no limit
+    """
+
+    try:
+        return max(0, int(os.getenv(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+# Generous by default and overridable, because the corpora people actually
+# want to scan are large: the OWASP Benchmark for Python alone is 1,230
+# files. Set either to 0 to remove the limit entirely. Note that Chrome caps
+# its own directory picker at 1,000 files regardless of what the server
+# accepts, so a bigger tree has to come through the CLI.
+MAX_UPLOAD_FILES = _limit("VULNAGENT_MAX_UPLOAD_FILES", 50_000)
+MAX_TOTAL_UPLOAD_BYTES = _limit("VULNAGENT_MAX_UPLOAD_BYTES", 1024 * 1024 * 1024)
+MAX_SINGLE_FILE_BYTES = _limit("VULNAGENT_MAX_FILE_BYTES", 8 * 1024 * 1024)
+MAX_CODE_CHARS = _limit("VULNAGENT_MAX_CODE_CHARS", 2_000_000)
 SCANNABLE_SUFFIXES = {".py", ".pyi", ".txt", ".cfg", ".ini", ".toml", ".env", ".yml", ".yaml"}
 
 app = FastAPI(
@@ -294,38 +321,54 @@ async def index():
 
 
 @app.post("/api/jobs/folder")
-async def scan_folder(
-    background: BackgroundTasks,
-    files: List[UploadFile] = File(...),
-    mode: str = Form("deep"),
-    verify: bool = Form(False),
-    concurrency: int = Form(5)
-) -> Dict[str, Any]:
+async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str, Any]:
     """
     Scan an uploaded folder.
 
+    The form is parsed by hand rather than through File()/Form() parameters
+    because Starlette caps multipart uploads at 1,000 parts by default and
+    that ceiling is not reachable from a dependency signature. Uploading the
+    OWASP Benchmark for Python, 1,230 files, failed on that limit with a
+    message that looks like it comes from the browser.
+
     Args:
+        request: The incoming request, parsed with raised multipart limits
         background: FastAPI background tasks
-        files: Uploaded files, named with their path inside the folder
-        mode: "fast" or "deep"
-        verify: Run the verification agent
-        concurrency: Concurrent LLM calls
 
     Returns:
         Dict[str, Any]: The created job
     """
 
+    part_cap = MAX_UPLOAD_FILES + 64 if MAX_UPLOAD_FILES else float("inf")
+    try:
+        form = await request.form(max_files=part_cap, max_fields=part_cap)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read the upload: {e}")
+
+    files = [v for v in form.getlist("files") if isinstance(v, StarletteUploadFile)]
+    mode = str(form.get("mode") or "deep")
+    verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
+    try:
+        concurrency = int(form.get("concurrency") or 5)
+    except (TypeError, ValueError):
+        concurrency = 5
+
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
-    if len(files) > MAX_UPLOAD_FILES:
+    if MAX_UPLOAD_FILES and len(files) > MAX_UPLOAD_FILES:
         raise HTTPException(
             status_code=413,
-            detail=f"Too many files ({len(files)}); the limit is {MAX_UPLOAD_FILES}"
+            detail=(
+                f"Too many files ({len(files)}); the limit is {MAX_UPLOAD_FILES}. "
+                "Raise VULNAGENT_MAX_UPLOAD_FILES, set it to 0 to remove the "
+                "limit, or scan the tree with the CLI instead."
+            )
         )
 
     workspace = Path(tempfile.mkdtemp(prefix="vulnagent_upload_"))
     total = 0
     written = 0
+    oversized = 0
     root_name = ""
 
     try:
@@ -337,11 +380,18 @@ async def scan_folder(
                 continue
 
             raw = await upload.read()
-            if len(raw) > MAX_SINGLE_FILE_BYTES:
+            if MAX_SINGLE_FILE_BYTES and len(raw) > MAX_SINGLE_FILE_BYTES:
+                oversized += 1
                 continue
             total += len(raw)
-            if total > MAX_TOTAL_UPLOAD_BYTES:
-                raise HTTPException(status_code=413, detail="Upload exceeds 20 MB")
+            if MAX_TOTAL_UPLOAD_BYTES and total > MAX_TOTAL_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Upload exceeds {MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)} MB. "
+                        "Raise VULNAGENT_MAX_UPLOAD_BYTES or set it to 0."
+                    )
+                )
 
             destination = workspace / relative
             # Belt and braces: confirm the resolved path is still inside.
@@ -362,10 +412,18 @@ async def scan_folder(
         shutil.rmtree(workspace, ignore_errors=True)
         raise
 
+    if oversized:
+        logging.warning(
+            "%d uploaded file(s) exceeded the per-file limit and were skipped", oversized
+        )
+
     job = store.create(
         kind="folder",
         label=f"{root_name or 'upload'} ({written} files)",
-        options={"mode": mode, "verify": verify, "files": written},
+        options={
+            "mode": mode, "verify": verify, "files": written,
+            "skipped_oversized": oversized,
+        },
         workspace=str(workspace),
     )
     options = ScanOptions(
@@ -396,8 +454,11 @@ async def scan_snippet(
 
     if not request.code.strip():
         raise HTTPException(status_code=400, detail="No code supplied")
-    if len(request.code) > MAX_CODE_CHARS:
-        raise HTTPException(status_code=413, detail="Code too large (max 200k characters)")
+    if MAX_CODE_CHARS and len(request.code) > MAX_CODE_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Code too large (max {MAX_CODE_CHARS} characters)"
+        )
 
     workspace = Path(tempfile.mkdtemp(prefix="vulnagent_snippet_"))
     # Only the extension of the supplied name is used; building a path from

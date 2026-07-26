@@ -298,7 +298,10 @@ function renderScan() {
   document.getElementById('go').onclick = () => submit(pane);
 }
 
-const MAX_FILES = 2000;
+// No artificial client-side cap: the server decides. Chrome's own directory
+// picker stops at 1,000 files, which is a browser limit nothing here can
+// raise, so a larger tree has to go through the CLI.
+const CHROME_PICKER_CAP = 1000;
 
 function setFiles(files) {
   // Keep only what the backend can scan, so the count shown is honest.
@@ -309,16 +312,7 @@ function setFiles(files) {
     return keep.test(path) && !skip.test(path);
   });
 
-  // A selection over the cap is trimmed rather than rejected, but never
-  // silently: a scan that quietly covered part of a tree reads as a clean
-  // bill of health for the part it never looked at.
-  let dropped = 0;
-  if (eligible.length > MAX_FILES) {
-    dropped = eligible.length - MAX_FILES;
-    pendingFiles = eligible.slice(0, MAX_FILES);
-  } else {
-    pendingFiles = eligible;
-  }
+  pendingFiles = eligible;
 
   const list = document.getElementById('filelist');
   if (!pendingFiles.length) {
@@ -332,10 +326,11 @@ function setFiles(files) {
   list.innerHTML = `<div class="filelist">${shown}${
     pendingFiles.length > 40 ? `<div style="color:var(--fg-faint)">…and ${pendingFiles.length - 40} more</div>` : ''
   }</div>
-  ${dropped ? `<div class="banner warn" style="margin:10px 0 0">
-      Selection capped at ${MAX_FILES} files. <b>${dropped} file(s) will NOT be
-      scanned.</b> For a tree this large use the command line, which has no cap:
-      <code>vulnagent scan &lt;path&gt;</code></div>` : ''}
+  ${files.length >= CHROME_PICKER_CAP ? `<div class="banner warn" style="margin:10px 0 0">
+      The browser handed over exactly ${files.length} files, which is Chrome's
+      own directory-picker limit. <b>Your folder may contain more that were
+      never offered.</b> To be certain the whole tree is covered, scan it from
+      the command line: <code>vulnagent scan &lt;path&gt;</code></div>` : ''}
   <p class="muted" style="margin-top:8px">${pendingFiles.length} file(s) ready${
     files.length > eligible.length
       ? `, ${files.length - eligible.length} skipped as not scannable` : ''}.</p>`;
