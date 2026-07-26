@@ -1,5 +1,8 @@
+import json
+import logging
 import os
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 
 import anthropic
 import httpx
@@ -7,6 +10,11 @@ import openai
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+class AIAnalysisError(RuntimeError):
+    """Raised when no AI backend produced a usable analysis."""
+
 
 class AIClient:
     def __init__(self) -> None:
@@ -47,30 +55,37 @@ class AIClient:
             Dict[str, Any]: The analysis result
         """
 
-        try:
-            # NOTE: Ollama currently is not able to perform security analysis
-            # Try Ollama first (local model)
-            # response = await self._analyze_with_ollama(prompt)
-            # if self._validate_response(response):
-            #     return response
+        # NOTE: Ollama currently is not able to perform security analysis
+        # response = await self._analyze_with_ollama(prompt)
 
-            # Try with OpenAI-compatible API first
-            selected_model = model or self.openai_default_model
+        selected_model = model or self.openai_default_model
+        errors = []
+
+        try:
             response = await self._analyze_with_openai(self.openai_client, prompt, selected_model)
             if self._validate_response(response):
                 return response
+            errors.append(f"{selected_model}: response failed schema validation")
+        except Exception as e:
+            errors.append(f"{selected_model}: {e}")
+            logging.warning(f"OpenAI-compatible tier failed: {e}")
 
-            # Fallback to Anthropic if configured and OpenAI response is invalid
-            if self.anthropic_client is not None:
+        # Fallback to Anthropic if configured
+        if self.anthropic_client is not None:
+            try:
                 response = await self._analyze_with_anthropic(prompt)
                 if self._validate_response(response):
                     return response
+                errors.append("anthropic: response failed schema validation")
+            except Exception as e:
+                errors.append(f"anthropic: {e}")
+                logging.warning(f"Anthropic tier failed: {e}")
 
-            raise ValueError("AI models failed to provide valid analysis")
-
-        except Exception as e:
-            print(f"Error in security analysis: {str(e)}")
-            return {"vulnerabilities": []}
+        # Raising rather than returning an empty result is deliberate. In a
+        # two-tier system, "the model found nothing" and "the model call
+        # blew up" must not look identical - swallowing the error here also
+        # made the caller's retry loop unreachable.
+        raise AIAnalysisError("; ".join(errors) or "no AI backend produced a valid analysis")
 
     async def _analyze_with_ollama(self, prompt: str) -> Dict[str, Any]:
         """
@@ -118,12 +133,39 @@ class AIClient:
         ]
 
         # store= is OpenAI-only; omit for OpenAI-compatible providers (e.g. Mimo)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-        )
+        kwargs: Dict[str, Any] = {"model": model, "messages": messages}
+
+        # Deterministic output matters here: baselines, suppressions and
+        # run-to-run comparison all break if the same file yields different
+        # findings each scan. Reasoning models reject the parameter outright,
+        # so it is only sent to models that accept it.
+        if not self._is_reasoning_model(model):
+            kwargs["temperature"] = 0
+
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except openai.BadRequestError:
+            # Some compatible providers reject temperature on models we did
+            # not recognise as reasoning models; retry without it.
+            kwargs.pop("temperature", None)
+            response = client.chat.completions.create(**kwargs)
 
         return self._parse_openai_response(response)
+
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """
+        Whether a model rejects sampling parameters such as temperature.
+
+        Args:
+            model: The model identifier
+
+        Returns:
+            bool: True for known reasoning-model families
+        """
+
+        name = (model or "").lower()
+        return name.startswith(("o1", "o3", "o4")) or "-thinking" in name
 
     async def _analyze_with_anthropic(self, prompt: str) -> Dict[str, Any]:
         """
@@ -289,35 +331,26 @@ class AIClient:
 
     def _parse_openai_response(self, response) -> Dict[str, Any]:
         """
-        Parse OpenAI response into standardized format
+        Parse an OpenAI-compatible response into standardized format
 
         Args:
-            response: The OpenAI response
+            response: The chat completion response
 
         Returns:
             Dict[str, Any]: The parsed response
         """
 
-        try:
-            import json
-            import re
+        choice = response.choices[0]
+        content = choice.message.content
 
-            content = response.choices[0].message.content
-            if not content:
-                raise ValueError("Empty model response")
+        finish_reason = getattr(choice, "finish_reason", None)
+        if finish_reason == "length":
+            logging.warning(
+                "Model output was truncated by the token limit; "
+                "salvaging whatever complete findings are present."
+            )
 
-            content = content.strip()
-            # Strip markdown code fences if the model wraps JSON
-            fence = re.match(r"^```(?:json|python)?\s*([\s\S]*?)\s*```$", content)
-            if fence:
-                content = fence.group(1).strip()
-
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError:
-                return eval(content)  # fallback for Python-literal style output
-        except Exception as e:
-            raise ValueError(f"Failed to parse OpenAI response: {str(e)}")
+        return self._parse_content(content, "OpenAI-compatible")
 
     def _parse_anthropic_response(self, response) -> Dict[str, Any]:
         """
@@ -330,11 +363,7 @@ class AIClient:
             Dict[str, Any]: The parsed response
         """
 
-        try:
-            content = response.content[0].text
-            return eval(content)  # Safe since we validate the response
-        except Exception as e:
-            raise ValueError(f"Failed to parse Anthropic response: {str(e)}")
+        return self._parse_content(response.content[0].text, "Anthropic")
 
     def _parse_ollama_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -347,8 +376,216 @@ class AIClient:
             Dict[str, Any]: The parsed response
         """
 
-        try:
-            content = response.get("response", "")
-            return eval(content)  # Safe since we validate the response
-        except Exception as e:
-            raise ValueError(f"Failed to parse Ollama response: {str(e)}")
+        return self._parse_content(response.get("response", ""), "Ollama")
+
+    def _parse_content(self, content: Optional[str], origin: str) -> Dict[str, Any]:
+        """
+        Turn raw model text into a analysis dictionary.
+
+        Models routinely wrap JSON in prose or code fences, emit Python
+        literals instead of JSON, leave trailing commas, or get cut off
+        mid-array by the token limit. Each of those is recovered from in
+        turn. eval() is deliberately not used: executing model output inside
+        a security scanner would be the very class of defect this tool exists
+        to report.
+
+        Args:
+            content: Raw text returned by the model
+            origin: Backend name, used in error messages
+
+        Returns:
+            Dict[str, Any]: A dict containing a "vulnerabilities" list
+
+        Raises:
+            ValueError: When nothing usable can be recovered
+        """
+
+        if not content or not content.strip():
+            raise ValueError(f"Failed to parse {origin} response: empty content")
+
+        text = self._strip_fences(content.strip())
+
+        for candidate in self._candidates(text):
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                parsed.setdefault("vulnerabilities", [])
+                return parsed
+            if isinstance(parsed, list):
+                return {"vulnerabilities": parsed}
+
+        # Last resort: pull out individual finding objects. This is what
+        # rescues a response that hit the token ceiling mid-array.
+        salvaged = self._salvage_objects(text)
+        if salvaged:
+            logging.warning(
+                f"{origin} response was malformed; salvaged {len(salvaged)} finding(s)"
+            )
+            return {"vulnerabilities": salvaged}
+
+        preview = text[:200].replace("\n", " ")
+        raise ValueError(f"Failed to parse {origin} response: no JSON found near '{preview}'")
+
+    @staticmethod
+    def _strip_fences(text: str) -> str:
+        """
+        Remove markdown code fences that wrap the payload.
+
+        Args:
+            text: Raw model text
+
+        Returns:
+            str: Text with any surrounding fence removed
+        """
+
+        fence = re.match(r"^```(?:json|python)?\s*([\s\S]*?)\s*```\s*$", text)
+        if fence:
+            return fence.group(1).strip()
+        # Unbalanced opening fence, common when output is truncated.
+        if text.startswith("```"):
+            return re.sub(r"^```(?:json|python)?\s*", "", text).strip()
+        return text
+
+    @classmethod
+    def _candidates(cls, text: str) -> List[str]:
+        """
+        Produce progressively more repaired versions of the payload.
+
+        Args:
+            text: Fence-stripped model text
+
+        Returns:
+            List[str]: Strings to attempt json.loads on, best first
+        """
+
+        candidates = [text]
+
+        outermost = cls._extract_outermost(text)
+        if outermost and outermost != text:
+            candidates.append(outermost)
+
+        for base in list(candidates):
+            repaired = cls._repair(base)
+            if repaired != base:
+                candidates.append(repaired)
+
+        return candidates
+
+    @staticmethod
+    def _extract_outermost(text: str) -> Optional[str]:
+        """
+        Extract the outermost balanced JSON object, ignoring surrounding prose.
+
+        Args:
+            text: Model text that may contain commentary around the JSON
+
+        Returns:
+            Optional[str]: The object substring, or None
+        """
+
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escaped = False
+
+        for i in range(start, len(text)):
+            char = text[i]
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1]
+
+        return None
+
+    @staticmethod
+    def _repair(text: str) -> str:
+        """
+        Apply conservative fixes for the ways models break JSON.
+
+        Args:
+            text: A JSON-ish string
+
+        Returns:
+            str: The repaired string
+        """
+
+        repaired = text
+        # Python literals leaking into JSON output.
+        repaired = re.sub(r"\bTrue\b", "true", repaired)
+        repaired = re.sub(r"\bFalse\b", "false", repaired)
+        repaired = re.sub(r"\bNone\b", "null", repaired)
+        # Trailing commas before a closing bracket or brace.
+        repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+        return repaired
+
+    @classmethod
+    def _salvage_objects(cls, text: str) -> List[Dict[str, Any]]:
+        """
+        Recover complete finding objects from a malformed or truncated payload.
+
+        Args:
+            text: Model text containing at least one finding object
+
+        Returns:
+            List[Dict[str, Any]]: Every object that parsed and looks like a finding
+        """
+
+        findings: List[Dict[str, Any]] = []
+        depth = 0
+        in_string = False
+        escaped = False
+        start = None
+
+        for i, char in enumerate(text):
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+
+            if char == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    chunk = text[start:i + 1]
+                    for variant in (chunk, cls._repair(chunk)):
+                        try:
+                            obj = json.loads(variant)
+                        except json.JSONDecodeError:
+                            continue
+                        # Only keep objects that actually look like findings.
+                        if isinstance(obj, dict) and "type" in obj and "severity" in obj:
+                            findings.append(obj)
+                        break
+                    start = None
+                elif depth < 0:
+                    depth = 0
+
+        return findings

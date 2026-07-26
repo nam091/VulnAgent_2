@@ -1,15 +1,19 @@
+import asyncio
 import logging
 import os
 import re
+import tempfile
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 import git
 
+from analyzer import fusion
+from analyzer.semgrep_runner import SemgrepRunner, SemgrepUnavailable
 from models.vulnerability import (
     CodeLocation,
+    FindingSource,
     Vulnerability,
     VulnerabilityChain,
     VulnerabilityReport,
@@ -25,14 +29,19 @@ class CodeAnalyzer:
     CodeAnalyzer class for analyzing code for security vulnerabilities
     """
 
-    def __init__(self) -> None:
+    def __init__(self, use_semgrep: bool = True) -> None:
         """
-        Initialize the code analyzer with caching enabled
+        Initialize the code analyzer.
+
+        Args:
+            use_semgrep: Run the rule tier alongside the LLM tier. Disable to
+                measure either tier in isolation during evaluation.
         """
 
         self.ai_client = AIClient()
         self.code_parser = CodeParser()
         self._repo_cache: Dict[str, str] = {}
+        self.semgrep = SemgrepRunner() if use_semgrep else None
 
         # Common attack chains based on vulnerability types
         self.attack_chains = {
@@ -102,15 +111,39 @@ class CodeAnalyzer:
         if not analysis_prompt:
             raise ValueError("Failed to generate analysis prompt")
 
-        # Get AI analysis with retry logic
+        # Run both tiers concurrently. They must stay independent: feeding
+        # the rule tier's output into the LLM prompt would remove the basis
+        # for treating agreement between them as evidence.
+        rule_task = asyncio.create_task(self._run_rule_tier(code_content, filename))
+        tiers: Dict[str, str] = {}
+
+        llm_vulnerabilities: List[Vulnerability] = []
         try:
             analysis_result = await self._get_analysis_with_retry(analysis_prompt)
+            llm_vulnerabilities = self._process_ai_response(analysis_result, filename)
+            tiers["llm"] = "ok"
         except Exception as e:
-            logging.error(f"AI analysis failed: {str(e)}")
-            raise RuntimeError(f"Security analysis failed: {str(e)}")
+            # Degrade rather than fail: rule-tier findings are still worth
+            # returning, and a scan that reports nothing because an API call
+            # hiccuped is worse than one that reports less and says so.
+            logging.error(f"LLM tier failed for {filename}: {e}")
+            tiers["llm"] = f"failed: {e}"
 
-        # Process and validate vulnerabilities
-        vulnerabilities = self._process_ai_response(analysis_result)
+        rule_vulnerabilities = await rule_task
+        if self.semgrep is None:
+            tiers["semgrep"] = "disabled"
+        elif not self.semgrep.available:
+            tiers["semgrep"] = "unavailable"
+        else:
+            tiers["semgrep"] = "ok"
+
+        if tiers["llm"] != "ok" and not rule_vulnerabilities and tiers["semgrep"] != "ok":
+            raise RuntimeError(f"Security analysis failed: no tier completed ({tiers})")
+
+        # Merge the two tiers and label each finding with its provenance
+        fused = fusion.fuse(rule_vulnerabilities, llm_vulnerabilities)
+        vulnerabilities = fused.vulnerabilities
+        logging.info(f"Fusion stats for {filename}: {fused.stats}")
 
         # Chain vulnerabilities to find compound risks
         chained_vulnerabilities = self._chain_vulnerabilities(vulnerabilities)
@@ -120,7 +153,8 @@ class CodeAnalyzer:
             file_name=filename,
             vulnerabilities=vulnerabilities,
             chained_vulnerabilities=chained_vulnerabilities,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
+            tiers=tiers
         )
 
         # Calculate summary statistics
@@ -129,10 +163,62 @@ class CodeAnalyzer:
 
         return report
 
-    @lru_cache(maxsize=100)
+    async def _run_rule_tier(self, code_content: str, filename: str) -> List[Vulnerability]:
+        """
+        Run the Semgrep tier without blocking the event loop.
+
+        Semgrep needs a real path on disk, so content that does not
+        correspond to an existing file (an API upload, for example) is
+        written to a temporary file whose name is derived from the caller's
+        filename rather than taken from it verbatim.
+
+        Args:
+            code_content: The source being analyzed
+            filename: Logical name of the file
+
+        Returns:
+            List[Vulnerability]: Rule-tier findings, empty if semgrep is absent
+        """
+
+        if self.semgrep is None or not self.semgrep.available:
+            if self.semgrep is not None:
+                logging.warning("semgrep not available; running LLM tier only")
+            return []
+
+        existing = Path(filename)
+        if existing.is_file():
+            return await asyncio.to_thread(self.semgrep.scan, str(existing))
+
+        suffix = existing.suffix or ".py"
+        tmp_dir = tempfile.mkdtemp(prefix="vulnagent_")
+        tmp_path = Path(tmp_dir) / f"source{suffix}"
+        try:
+            tmp_path.write_text(code_content, encoding="utf-8")
+            findings = await asyncio.to_thread(self.semgrep.scan, str(tmp_path))
+            # Report the caller's filename, not the temporary one.
+            for finding in findings:
+                finding.location.file_path = filename
+                finding.id = ""
+                finding.id = finding.fingerprint()
+            return findings
+        except SemgrepUnavailable as e:
+            logging.warning(f"Rule tier skipped: {e}")
+            return []
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+                Path(tmp_dir).rmdir()
+            except OSError:
+                logging.debug(f"Could not clean temp dir {tmp_dir}")
+
     async def _get_analysis_with_retry(self, prompt: str, max_retries: int = 3) -> Dict[str, Any]:
         """
-        Get AI analysis with retry logic and caching
+        Get AI analysis with retry logic
+
+        Note: this method must not be wrapped in functools.lru_cache. Caching
+        a coroutine function stores the coroutine object, not its result, so
+        the second call would replay an already-awaited coroutine and raise.
+        Result caching lives in the content-hash cache instead.
 
         Args:
             prompt: The analysis prompt
@@ -304,17 +390,51 @@ class CodeAnalyzer:
     - Confirm secure defaults
     - Ensure error handling doesn't leak secrets
 
-{parsed_code['content']}
+5. Line numbers:
+    - The source below is prefixed with its real line numbers.
+    - Report start_line and end_line using EXACTLY those numbers.
+    - Do not count lines yourself; read the prefix.
+
+--- BEGIN SOURCE ---
+{self._number_lines(parsed_code['content'])}
+--- END SOURCE ---
 
 Format response as JSON matching the Vulnerability model structure.
 """
 
-    def _process_ai_response(self, analysis_result: Dict[str, Any]) -> List[Vulnerability]:
+    @staticmethod
+    def _number_lines(content: str) -> str:
+        """
+        Prefix every source line with its line number.
+
+        Without this the model has to count lines itself and drifts
+        progressively further off as the file goes on, which makes the
+        reported locations unusable for SARIF output, editor annotations and
+        for matching against the rule tier during fusion.
+
+        Args:
+            content: Raw source code
+
+        Returns:
+            str: The same source with a right-aligned line number prefix
+        """
+
+        return "\n".join(
+            f"{i:>4} | {line}"
+            for i, line in enumerate(content.split("\n"), 1)
+        )
+
+    def _process_ai_response(
+        self,
+        analysis_result: Dict[str, Any],
+        filename: Optional[str] = None
+    ) -> List[Vulnerability]:
         """
         Process and validate the AI analysis response into Vulnerability objects.
 
         Args:
             analysis_result: Raw analysis result from AI
+            filename: File under analysis, used when the model omits the path
 
         Returns:
             List[Vulnerability]: List of validated vulnerabilities
@@ -388,6 +508,14 @@ Format response as JSON matching the Vulnerability model structure.
                         'DIRECTORY_TRAVERSAL': VulnerabilityType.PATH_TRAVERSAL,
                         'IDOR': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
                         'DIRECT_OBJECT_REFERENCE': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
+                        # Four enum values carry a parenthetical suffix; models
+                        # naturally emit the bare acronym or the bare name.
+                        'CSRF': VulnerabilityType.CSRF,
+                        'CROSS_SITE_REQUEST_FORGERY': VulnerabilityType.CSRF,
+                        'SSRF': VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
+                        'SERVER_SIDE_REQUEST_FORGERY': VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
+                        'REMOTE_CODE_EXECUTION': VulnerabilityType.REMOTE_CODE_EXECUTION,
+                        'INSECURE_DIRECT_OBJECT_REFERENCE': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
                     }
 
                     original_type = vuln_data['type']
@@ -401,10 +529,15 @@ Format response as JSON matching the Vulnerability model structure.
                     vuln_type = mapped_type
                     logging.info(f"Mapped vulnerability type '{original_type}' to '{vuln_type.value}'")
 
-                # Create CodeLocation object
+                # Create CodeLocation object. The caller always knows which
+                # file was submitted, so the model's own file_path is
+                # discarded rather than trusted - it routinely invents a
+                # plausible name such as "app.py", which would scatter
+                # findings across files that do not exist and break both
+                # fusion and grouping.
                 location_data = vuln_data.get('location', {})
                 location = CodeLocation(
-                    file_path=location_data.get('file_path', ''),
+                    file_path=filename or location_data.get('file_path') or '',
                     start_line=location_data.get('start_line', 0),
                     end_line=location_data.get('end_line', 0),
                     start_col=location_data.get('start_col', 0),
