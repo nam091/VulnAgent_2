@@ -656,12 +656,21 @@ Format response as JSON matching the Vulnerability model structure.
         # Check for common security context
         security_context_related = self._share_security_context(vuln1, vuln2)
 
-        # Calculate relationship score based on multiple factors
+        # Proximity is supporting evidence, never sufficient evidence. Under
+        # the original weights, same-file (1.0) plus within-ten-lines (1.0)
+        # reached the threshold exactly, so any two findings that happened to
+        # sit near each other were reported as an attack chain regardless of
+        # what they were - a ReDoS and a missing-log-statement three lines
+        # apart chained, and the same pair two hundred lines apart did not.
+        # That is proximity detection wearing the label of attack-path
+        # analysis. Locality now contributes at most 1.0, so a chain needs a
+        # real reason: a known escalation pattern, traced dataflow, or a
+        # shared security context plus shared prerequisites.
         relationship_score = sum([
             2.0 if in_attack_chain else 0.0,
-            1.0 if same_file else (0.5 if connected_files else 0.0),
+            0.5 if same_file else (0.25 if connected_files else 0.0),
             1.0 if common_prerequisites else 0.0,
-            1.0 if code_proximity else 0.0,
+            0.5 if code_proximity else 0.0,
             1.5 if data_flow_related else 0.0,
             1.0 if security_context_related else 0.0
         ])

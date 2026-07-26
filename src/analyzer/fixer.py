@@ -26,6 +26,78 @@ PLACEHOLDER_PATTERN = re.compile(
 CONTROL_FLOW = re.compile(r"^\s*(if|for|while|try|with|def|class|elif|else|except)\b")
 
 
+def classify_patch(original: str, replacement: str) -> List[str]:
+    """
+    List the reasons a suggested rewrite needs a human to read it.
+
+    Syntax validation cannot catch a rewrite that parses but changes
+    behaviour - duplicating a `return`, nesting a new `if` inside the block
+    it was meant to replace, or hard-coding a placeholder path. Those shapes
+    are detected here so a patch can be held back rather than applied blind.
+
+    Kept as a free function so every surface - CLI, API, MCP - classifies a
+    patch the same way instead of each inventing its own rule.
+
+    Args:
+        original: The code being replaced
+        replacement: The proposed code
+
+    Returns:
+        List[str]: Reasons, empty when the patch is a clean substitution
+    """
+
+    reasons = []
+    original_lines = [l for l in original.split("\n") if l.strip()]
+    new_lines = [l for l in replacement.split("\n") if l.strip()]
+
+    if PLACEHOLDER_PATTERN.search(replacement):
+        reasons.append("contains a placeholder the model invented")
+
+    if len(new_lines) > len(original_lines) + 1:
+        reasons.append(f"expands {len(original_lines)} line(s) into {len(new_lines)}")
+
+    added_imports = [
+        l.strip() for l in new_lines
+        if re.match(r"^\s*(import|from)\s", l) and l.strip() not in original
+    ]
+    if added_imports:
+        reasons.append(f"introduces import(s): {', '.join(added_imports[:2])}")
+
+    original_flow = sum(1 for l in original_lines if CONTROL_FLOW.match(l))
+    new_flow = sum(1 for l in new_lines if CONTROL_FLOW.match(l))
+    if new_flow > original_flow:
+        reasons.append("adds control flow that was not in the original")
+
+    # A `return` appearing in the replacement when the original had none is
+    # the shape that silently duplicates the statement below it.
+    if "return" in replacement and "return" not in original:
+        reasons.append("introduces a return statement")
+
+    return reasons
+
+
+def unified_diff(original: str, replacement: str, label: str = "patch") -> str:
+    """
+    Render a unified diff between two code fragments.
+
+    Args:
+        original: Current code
+        replacement: Proposed code
+        label: Name shown in the diff header
+
+    Returns:
+        str: A unified diff
+    """
+
+    return "".join(difflib.unified_diff(
+        original.splitlines(keepends=True),
+        replacement.splitlines(keepends=True),
+        fromfile=f"{label} (current)",
+        tofile=f"{label} (proposed)",
+        n=1
+    ))
+
+
 @dataclass
 class Patch:
     """
@@ -43,12 +115,7 @@ class Patch:
     @property
     def risk(self) -> str:
         """
-        Classify how safe this patch is to apply without human reading.
-
-        Syntax validation cannot catch a rewrite that parses but changes
-        behaviour - duplicating a `return`, nesting a new `if` inside the
-        block it was meant to replace, or hard-coding a placeholder path.
-        Patches showing any of those shapes are held back for review.
+        Whether this patch is safe to apply without a human reading it.
 
         Returns:
             str: "safe" or "review"
@@ -65,36 +132,7 @@ class Patch:
             List[str]: Reasons, empty when the patch is a clean substitution
         """
 
-        reasons = []
-        original_lines = [l for l in self.original.split("\n") if l.strip()]
-        new_lines = [l for l in self.replacement.split("\n") if l.strip()]
-
-        if PLACEHOLDER_PATTERN.search(self.replacement):
-            reasons.append("contains a placeholder the model invented")
-
-        if len(new_lines) > len(original_lines) + 1:
-            reasons.append(
-                f"expands {len(original_lines)} line(s) into {len(new_lines)}"
-            )
-
-        added_imports = [
-            l.strip() for l in new_lines
-            if re.match(r"^\s*(import|from)\s", l) and l.strip() not in self.original
-        ]
-        if added_imports:
-            reasons.append(f"introduces import(s): {', '.join(added_imports[:2])}")
-
-        original_flow = sum(1 for l in original_lines if CONTROL_FLOW.match(l))
-        new_flow = sum(1 for l in new_lines if CONTROL_FLOW.match(l))
-        if new_flow > original_flow:
-            reasons.append("adds control flow that was not in the original")
-
-        # A `return` appearing in the replacement when the original had none
-        # is the shape that silently duplicates the statement below it.
-        if "return" in self.replacement and "return" not in self.original:
-            reasons.append("introduces a return statement")
-
-        return reasons
+        return classify_patch(self.original, self.replacement)
 
     @property
     def diff(self) -> str:

@@ -452,6 +452,8 @@ class Scanner:
             len(candidates), counters["confirmed"], counters["refuted"], counters["uncertain"]
         )
 
+        chain_stats = await self._judge_chains(reports, root)
+
         return {
             "verified_candidates": len(candidates),
             "verify_confirmed": counters["confirmed"],
@@ -459,6 +461,85 @@ class Scanner:
             "verify_uncertain": counters["uncertain"],
             "verify_dropped": dropped,
             "verify_tool_calls": counters["tool_calls"],
+            **chain_stats,
+        }
+
+    async def _judge_chains(
+        self,
+        reports: List[VulnerabilityReport],
+        root: Path
+    ) -> Dict[str, Any]:
+        """
+        Ask the chain judge which proposed attack chains are real.
+
+        The proposing heuristic knows five escalation patterns and otherwise
+        reasons from locality, so it cannot tell an attack path from two
+        findings that happen to sit near each other. Chains it proposes are
+        kept only when a judge that read the code agrees an attacker could
+        walk them.
+
+        Args:
+            reports: Reports whose chains should be judged, modified in place
+            root: Scan root the judge's tools are confined to
+
+        Returns:
+            Dict[str, Any]: Chain counters for the scan statistics
+        """
+
+        from agent.chain_judge import ChainJudge
+
+        candidates = [
+            (report, chain)
+            for report in reports
+            for chain in report.chained_vulnerabilities
+        ]
+        if not candidates:
+            return {}
+
+        judge = ChainJudge(
+            client=self.analyzer.ai_client.openai_client,
+            model=self.analyzer.ai_client.openai_default_model,
+            root=root,
+            temperature=None if self.analyzer.ai_client._is_reasoning_model(
+                self.analyzer.ai_client.openai_default_model
+            ) else 0,
+        )
+
+        semaphore = asyncio.Semaphore(self.options.concurrency)
+        upheld: Dict[int, bool] = {}
+
+        async def check(index: int, chain: Any) -> None:
+            async with semaphore:
+                verdict = await judge.judge(chain)
+                chain.judgement = verdict.as_dict()
+                if verdict.is_real and verdict.narrative:
+                    chain.attack_path = verdict.narrative
+                upheld[index] = verdict.is_real
+
+        await asyncio.gather(*(
+            check(i, chain) for i, (_, chain) in enumerate(candidates)
+        ))
+
+        index = 0
+        rejected = 0
+        for report in reports:
+            kept = []
+            for chain in report.chained_vulnerabilities:
+                if upheld.get(index, False):
+                    kept.append(chain)
+                else:
+                    rejected += 1
+                index += 1
+            report.chained_vulnerabilities = kept
+
+        logging.info(
+            "Chain judging: %d proposed -> %d upheld, %d rejected",
+            len(candidates), len(candidates) - rejected, rejected
+        )
+        return {
+            "chains_proposed": len(candidates),
+            "chains_upheld": len(candidates) - rejected,
+            "chains_rejected": rejected,
         }
 
     def _assemble(

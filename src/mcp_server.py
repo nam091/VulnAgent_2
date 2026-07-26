@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
+from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner
 from analyzer.semgrep_runner import SemgrepRunner
 from models.vulnerability import FindingSource, Vulnerability
@@ -108,11 +109,46 @@ def _to_dict(vuln: Vulnerability) -> Dict[str, Any]:
         "impact": vuln.impact,
         "remediation": vuln.remediation,
     }
-    if vuln.secure_code_example:
-        payload["secure_code_example"] = vuln.secure_code_example
     if vuln.location.context:
         payload["snippet"] = vuln.location.context
+
+    fix = _fix_for(vuln)
+    if fix:
+        payload["fix"] = fix
     return payload
+
+
+def _fix_for(vuln: Vulnerability) -> Optional[Dict[str, Any]]:
+    """
+    Package a finding's suggested rewrite with a safety verdict.
+
+    An agent will act on whatever it is handed, so a rewrite is never
+    returned bare. `risk` states whether it is a clean substitution, and
+    `risk_reasons` names what an agent has to check before applying it -
+    an invented placeholder path, a duplicated return, new control flow.
+
+    Args:
+        vuln: The finding
+
+    Returns:
+        Optional[Dict[str, Any]]: Fix details, or None when no rewrite exists
+    """
+
+    replacement = (vuln.secure_code_example or "").strip()
+    if not replacement:
+        return None
+
+    original = (vuln.location.context or "").strip()
+    reasons = classify_patch(original, replacement) if original else [
+        "no original snippet captured, so the patch could not be checked"
+    ]
+    return {
+        "replacement": replacement,
+        "risk": "safe" if not reasons else "review",
+        "risk_reasons": reasons,
+        "diff": unified_diff(original, replacement, vuln.location.file_path)
+                if original else "",
+    }
 
 
 def _summarise(vulns: List[Vulnerability], elapsed: Optional[float] = None) -> str:
@@ -295,6 +331,95 @@ async def scan_directory(
         mode if mode in ("fast", "deep") else "deep",
         concurrency=concurrency
     )
+
+
+@mcp.tool(
+    description=(
+        "Scan code and return only the findings that come with an applicable "
+        "fix, each with a diff and a safety verdict. Use this after scan_code "
+        "reports something, to repair the code before showing it to the user. "
+        "Apply patches marked risk='safe' directly; for risk='review', read "
+        "risk_reasons and adapt the fix rather than pasting it."
+    )
+)
+async def suggest_fix(
+    code: str,
+    filename: str = "snippet.py",
+    mode: str = "deep"
+) -> Dict[str, Any]:
+    """
+    Return validated fixes for the vulnerabilities in a snippet.
+
+    Args:
+        code: The source to analyse
+        filename: Name used for language detection and reported locations
+        mode: "fast" (rules only, rarely yields fixes) or "deep"
+
+    Returns:
+        Dict[str, Any]: Findings that carry a fix, plus a summary
+    """
+
+    result = await scan_code(code=code, filename=filename, mode=mode)
+    findings = result.get("findings", [])
+    fixable = [f for f in findings if f.get("fix")]
+    safe = [f for f in fixable if f["fix"]["risk"] == "safe"]
+
+    # Field names are spelled out rather than abbreviated: this payload is
+    # read by another model, and "suggested_code" needs no interpretation
+    # where "replacement" invites guessing what it replaces.
+    suggestions = [
+        {
+            "line": f["start_line"],
+            "end_line": f["end_line"],
+            "severity": f["severity"],
+            "vulnerability": f["type"],
+            "cwe": f.get("cwe", ""),
+            "what_is_wrong": f.get("description", ""),
+            "impact": f.get("impact", ""),
+            "how_to_fix": f.get("remediation", ""),
+            "current_code": f.get("snippet", ""),
+            "suggested_code": f["fix"]["replacement"],
+            "diff": f["fix"]["diff"],
+            "risk": f["fix"]["risk"],
+            "risk_reasons": f["fix"]["risk_reasons"],
+            "evidence": f.get("source", ""),
+        }
+        for f in fixable
+    ]
+
+    unfixable = [
+        {
+            "line": f["start_line"],
+            "vulnerability": f["type"],
+            "severity": f["severity"],
+            "what_is_wrong": f.get("description", ""),
+            "how_to_fix": f.get("remediation", ""),
+            "note": "no code suggestion available; fix by hand",
+        }
+        for f in findings if not f.get("fix")
+    ]
+
+    return {
+        "summary": (
+            f"{len(findings)} finding(s), {len(suggestions)} with a code "
+            f"suggestion ({len(safe)} clean substitutions)"
+        ),
+        "suggestions": suggestions,
+        "no_suggestion": unfixable,
+        "how_to_use": (
+            "These are suggestions only - nothing is written to disk. Apply them "
+            "yourself with your own editing tools. risk='safe' means the "
+            "suggestion replaces the same lines cleanly. risk='review' means read "
+            "risk_reasons first and adapt it: the model may have invented a "
+            "placeholder path, added a return that duplicates one below, or "
+            "expanded one line into a block that will not splice in. After "
+            "editing, call scan_code again to confirm the finding is gone."
+        ),
+        "note": (
+            "The rule engine does not write code, so mode='fast' rarely yields "
+            "suggestions. Use mode='deep' when you want fixes."
+        ),
+    }
 
 
 @mcp.tool(

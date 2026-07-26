@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner
 from jobs import Job, JobStore, run_job
 from models.vulnerability import FindingSource, Vulnerability
@@ -107,6 +108,42 @@ def _serialise(vuln: Vulnerability) -> Dict[str, Any]:
         "snippet": vuln.location.context,
         "verification": vuln.verification,
         "taint_path": vuln.taint_path,
+        "fix": _fix_payload(vuln),
+    }
+
+
+def _fix_payload(vuln: Vulnerability) -> Optional[Dict[str, Any]]:
+    """
+    Package a finding's suggested rewrite with a diff and a safety verdict.
+
+    The uploaded workspace is deleted once a scan finishes, so the browser
+    cannot be offered an "apply" that writes back to the user's files - they
+    uploaded copies. What it can be offered is everything needed to apply the
+    fix themselves: the diff, whether the patch is a clean substitution, and
+    the reasons if it is not.
+
+    Args:
+        vuln: The finding
+
+    Returns:
+        Optional[Dict[str, Any]]: Fix details, or None when no rewrite exists
+    """
+
+    replacement = (vuln.secure_code_example or "").strip()
+    original = (vuln.location.context or "").strip()
+    if not replacement:
+        return None
+
+    reasons = classify_patch(original, replacement) if original else [
+        "no original snippet captured, so the patch could not be checked"
+    ]
+    return {
+        "original": original,
+        "replacement": replacement,
+        "diff": unified_diff(original, replacement, Path(vuln.location.file_path).name)
+                if original else "",
+        "risk": "safe" if not reasons else "review",
+        "risk_reasons": reasons,
     }
 
 

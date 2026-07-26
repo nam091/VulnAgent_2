@@ -526,6 +526,18 @@ function paintJob(job) {
 
   body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
     head.nextElementSibling.classList.toggle('hide'));
+
+  body.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async e => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
+      const was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = was; }, 1400);
+    } catch (err) {
+      btn.textContent = 'Copy failed';
+    }
+  });
 }
 
 function progressCard(job) {
@@ -586,8 +598,36 @@ function findingCard(f) {
           <h4>Verification</h4>
           <div><b>${esc(f.verification.verdict)}</b> — ${esc(f.verification.reason)}</div>` : ''}
         ${f.snippet ? `<h4>Code</h4><pre>${esc(f.snippet)}</pre>` : ''}
-        ${f.secure_code_example ? `<h4>Suggested rewrite</h4><pre>${esc(f.secure_code_example)}</pre>` : ''}
+        ${fixBlock(f)}
       </div>
+    </div>`;
+}
+
+/* Suggested fix. Shown as a diff rather than a bare block of replacement
+   code, because what matters is what changes - and the safety verdict says
+   whether it is a clean substitution or something that needs reading. */
+function fixBlock(f) {
+  const fix = f.fix;
+  if (!fix) return '';
+
+  const safe = fix.risk === 'safe';
+  const diff = (fix.diff || '').split('\n').filter(l =>
+    l.trim() && !l.startsWith('---') && !l.startsWith('+++') && !l.startsWith('@@'));
+
+  return `
+    <h4>Suggested fix
+      <span class="tag ${safe ? 'confirmed' : 'llm-only'}" style="margin-left:8px">
+        ${safe ? 'clean substitution' : 'needs review'}</span></h4>
+    ${fix.risk_reasons.length ? `<ul class="fix-warn">
+      ${fix.risk_reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
+    ${diff.length ? `<pre class="diff">${diff.map(l => {
+      const cls = l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : '';
+      return `<span class="${cls}">${esc(l)}</span>`;
+    }).join('\n')}</pre>` : `<pre>${esc(fix.replacement)}</pre>`}
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost sm" data-copy="${encodeURIComponent(fix.replacement)}">
+        Copy fix</button>
+      <span class="muted">Apply with <b>vulnagent fix</b> to get validation and rollback.</span>
     </div>`;
 }
 
@@ -683,8 +723,29 @@ async function checkHealth() {
   }
 }
 
+/* ---------------- theme ---------------- */
+
+const THEMES = ['console', 'product', 'report', 'stark'];
+
+function applyTheme(name) {
+  const theme = THEMES.includes(name) ? name : 'console';
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('vulnagent-theme', theme); } catch (e) { /* private mode */ }
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('on', b.dataset.themeName === theme));
+}
+
+function initTheme() {
+  let saved = 'console';
+  try { saved = localStorage.getItem('vulnagent-theme') || 'console'; } catch (e) { /* ignore */ }
+  applyTheme(saved);
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.onclick = () => applyTheme(b.dataset.themeName));
+}
+
 window.addEventListener('hashchange', route);
 window.addEventListener('beforeunload', stopFollowing);
+initTheme();
 route();
 checkHealth();
 setInterval(checkHealth, 30000);
