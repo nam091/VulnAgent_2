@@ -105,6 +105,7 @@ class Verdict:
     tools_unsupported: bool = False
     duration_seconds: float = 0.0
     error: str = ""
+    successful_reads: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def refuted(self) -> bool:
@@ -128,6 +129,7 @@ class Verdict:
             "tools_unsupported": self.tools_unsupported,
             "duration_seconds": self.duration_seconds,
             "error": self.error,
+            "successful_reads": self.successful_reads,
         }
 
 
@@ -207,6 +209,7 @@ class VerificationAgent:
         verdict = self._parse(run.text)
         verdict.tool_calls = run.tool_calls
         verdict.investigated = run.investigated
+        verdict.successful_reads = getattr(run, "successful_reads", [])
         verdict.duration_seconds = round(time.perf_counter() - start_time, 2)
         if hasattr(run, "hit_turn_cap"):
             verdict.hit_turn_cap = getattr(run, "hit_turn_cap", False)
@@ -221,7 +224,7 @@ class VerificationAgent:
                 )
                 verdict.verdict = "uncertain"
                 verdict.reason = "Bác bỏ không có tên hoặc mô tả biện pháp kiểm soát cụ thể."
-            elif not verdict.investigated or verdict.tool_calls == 0:
+            elif not verdict.investigated or not verdict.successful_reads:
                 logging.info(
                     f"Refutation without successful tool investigation for {vuln.type.value} "
                     f"at {vuln.location.file_path}:{vuln.location.start_line}; "
@@ -247,11 +250,47 @@ class VerificationAgent:
                         )
                         verdict.verdict = "uncertain"
                         verdict.reason = f"File bằng chứng '{verdict.evidence_file}' không tồn tại trong phạm vi quét."
-                    elif verdict.evidence_line is not None:
+                    else:
                         total_lines = len(resolved.read_text(encoding="utf-8", errors="replace").splitlines())
-                        if verdict.evidence_line < 1 or verdict.evidence_line > total_lines:
-                            verdict.verdict = "uncertain"
-                            verdict.reason = f"Dòng bằng chứng {verdict.evidence_line} ngoài phạm vi file '{verdict.evidence_file}' ({total_lines} dòng)."
+                        if verdict.evidence_line is not None and verdict.evidence_line > 0:
+                            if verdict.evidence_line > total_lines:
+                                verdict.verdict = "uncertain"
+                                verdict.reason = f"Dòng bằng chứng {verdict.evidence_line} ngoài phạm vi file '{verdict.evidence_file}' ({total_lines} dòng)."
+
+                        # Verify citation matches actual evidence gathered in successful_reads (P1 requirement)
+                        if verdict.verdict == "refuted":
+                            matched = False
+                            for sread in verdict.successful_reads:
+                                rpath = sread.get("path", "")
+                                if not rpath:
+                                    continue
+                                try:
+                                    r_resolved = (self.root / rpath.lstrip("/\\")).resolve()
+                                except Exception:
+                                    r_resolved = None
+
+                                path_match = (
+                                    (r_resolved and r_resolved == resolved)
+                                    or Path(rpath).as_posix().lstrip("./") == Path(verdict.evidence_file).as_posix().lstrip("./")
+                                    or Path(rpath).name == Path(verdict.evidence_file).name
+                                )
+                                if path_match:
+                                    r_start = sread.get("start_line", 1)
+                                    r_end = sread.get("end_line", r_start)
+                                    if verdict.evidence_line is None or verdict.evidence_line == 0:
+                                        matched = True
+                                        break
+                                    elif r_start <= verdict.evidence_line <= r_end:
+                                        matched = True
+                                        break
+
+                            if not matched:
+                                logging.info(
+                                    f"Refutation citation '{verdict.evidence_file}:{verdict.evidence_line}' "
+                                    "was never read during investigation; downgraded to uncertain"
+                                )
+                                verdict.verdict = "uncertain"
+                                verdict.reason = f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' chưa từng được đọc thành công trong phiên điều tra."
                 except Exception as e:
                     verdict.verdict = "uncertain"
                     verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"

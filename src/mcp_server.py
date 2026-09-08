@@ -573,12 +573,13 @@ async def get_finding_context(
     safe_reader = SafeReader(root)
     read_data = safe_reader.read_lines(file_rel, start_line, end_line)
 
+    raw_content = "\n".join(read_data.get("raw_lines", []))
     ev_rec = evidence_store.record_evidence(
         snapshot_id=snapshot.snapshot_id,
-        path=file_rel,
-        start_line=start_line,
-        end_line=end_line,
-        content=read_data["content"],
+        path=read_data.get("path", file_rel),
+        start_line=read_data["start_line"],
+        end_line=read_data["end_line"],
+        content=raw_content,
     )
 
     return {
@@ -590,6 +591,9 @@ async def get_finding_context(
         "enclosing_scope": scope_info,
         "snippet": vuln.location.context or "",
         "initial_evidence_id": ev_rec.evidence_id,
+        "evidence_status": ev_rec.status.value,
+        "start_line": read_data["start_line"],
+        "end_line": read_data["end_line"],
         "context_slice": read_data["content"],
         "instructions": (
             "Review whether mitigating controls sanitize the inputs. "
@@ -621,20 +625,23 @@ async def read_evidence(
 
     try:
         data = safe_reader.read_lines(path, start_line, end_line)
+        raw_content = "\n".join(data.get("raw_lines", []))
         rec = evidence_store.record_evidence(
             snapshot_id=snapshot.snapshot_id,
             path=data["path"],
             start_line=data["start_line"],
             end_line=data["end_line"],
-            content=data["content"],
+            content=raw_content,
         )
         return {
             "evidence_id": rec.evidence_id,
             "path": rec.path,
             "start_line": rec.start_line,
             "end_line": rec.end_line,
-            "content": rec.content,
-            "read_succeeded": True,
+            "content": data["content"],
+            "raw_content": raw_content,
+            "status": rec.status.value,
+            "read_succeeded": rec.read_succeeded,
         }
     except Exception as e:
         return {"error": f"Failed to read evidence: {e}", "read_succeeded": False}
@@ -787,9 +794,18 @@ async def check_fix(
     persistent = [fid for fid in target_ids if fid in current_vuln_ids]
 
     old_ids = set(session["findings"].keys())
+    scan_scope = list(session.get("expanded_files") or changed_files)
+    scope_lookup = {Path(f).as_posix().lstrip("./") for f in scan_scope} | {Path(f).name for f in scan_scope}
+
+    def is_in_scope(file_path: str) -> bool:
+        if not scan_scope:
+            return True
+        norm = Path(file_path).as_posix().lstrip("./")
+        return norm in scope_lookup or Path(file_path).name in scope_lookup
+
     new_regressions = [
         _to_dict(v) for v in new_result.vulnerabilities
-        if v.id not in old_ids and (v.location.file_path in set(changed_files) or Path(v.location.file_path).name in set(changed_files))
+        if v.id not in old_ids and is_in_scope(v.location.file_path)
     ]
 
     return {

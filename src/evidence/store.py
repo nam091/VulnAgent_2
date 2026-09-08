@@ -79,15 +79,21 @@ class EvidenceStore:
         Strictly verifies line bounds and checks that content matches the actual file on disk.
         """
         manifest = self._snapshots.get(snapshot_id)
-        manifest_file_hash = manifest.files.get(path, "") if manifest else ""
+        if not manifest:
+            return self._create_invalid_record(
+                snapshot_id, path, start_line, end_line,
+                f"Snapshot '{snapshot_id}' does not exist in evidence store",
+                origin
+            )
 
         # Safely resolve target file
         try:
             real_file = self.reader.resolve(path)
             if not real_file.is_file():
                 return self._create_invalid_record(
-                    snapshot_id, path, start_line, end_line, "File not found", origin
+                    snapshot_id, path, start_line, end_line, f"File not found: {path}", origin
                 )
+            rel_path = self.reader.to_relative(real_file)
             file_bytes = real_file.read_bytes()
             current_file_hash = hashlib.sha256(file_bytes).hexdigest()
             file_text = file_bytes.decode("utf-8", errors="replace")
@@ -98,7 +104,22 @@ class EvidenceStore:
                 snapshot_id, path, start_line, end_line, f"Read error: {e}", origin
             )
 
-        file_hash = manifest_file_hash or current_file_hash
+        manifest_file_hash = manifest.files.get(rel_path) or manifest.files.get(path)
+        if not manifest_file_hash:
+            return self._create_invalid_record(
+                snapshot_id, path, start_line, end_line,
+                f"File '{path}' is not present in snapshot '{snapshot_id}' manifest",
+                origin
+            )
+
+        if current_file_hash != manifest_file_hash:
+            return self._create_invalid_record(
+                snapshot_id, path, start_line, end_line,
+                f"File '{path}' was modified on disk after snapshot '{snapshot_id}'",
+                origin, file_hash=manifest_file_hash
+            )
+
+        file_hash = manifest_file_hash
 
         # Strict line bounds check (B03)
         if start_line < 1 or end_line < start_line or start_line > total_lines or end_line > total_lines:
@@ -194,15 +215,24 @@ class EvidenceStore:
                 f"not current '{current_snapshot_id}'"
             )
 
+        manifest = self._snapshots.get(current_snapshot_id)
+        if not manifest:
+            return False, EvidenceStatus.INVALID, f"Snapshot '{current_snapshot_id}' does not exist in store"
+
         # Check if file has changed on disk or lines are out of bounds
         try:
             target = self.reader.resolve(record.path)
             if not target.is_file():
                 return False, EvidenceStatus.STALE, f"File '{record.path}' no longer exists on disk"
 
+            rel_path = self.reader.to_relative(target)
+            manifest_file_hash = manifest.files.get(rel_path) or manifest.files.get(record.path)
+            if not manifest_file_hash:
+                return False, EvidenceStatus.INVALID, f"File '{record.path}' is not in snapshot '{current_snapshot_id}' manifest"
+
             file_bytes = target.read_bytes()
             current_hash = hashlib.sha256(file_bytes).hexdigest()
-            if record.content_hash and record.content_hash != "unknown" and current_hash != record.content_hash:
+            if current_hash != manifest_file_hash or (record.content_hash and record.content_hash != "unknown" and current_hash != record.content_hash):
                 return False, EvidenceStatus.STALE, f"File '{record.path}' was modified on disk after snapshot"
 
             file_text = file_bytes.decode("utf-8", errors="replace")

@@ -31,17 +31,19 @@ class AgentRun:
     hit_turn_cap: bool = False
     tools_unsupported: bool = False
     transcript: List[Dict[str, Any]] = field(default_factory=list)
+    successful_reads: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def investigated(self) -> bool:
         """
         Whether the agent actually gathered evidence rather than answering blind.
+        Requires at least one tool read/inspection to succeed without error.
 
         Returns:
-            bool: True when at least one tool was called
+            bool: True when at least one read succeeded without error
         """
 
-        return self.tool_calls > 0
+        return len(self.successful_reads) > 0
 
 
 class ToolCallingAgent:
@@ -137,6 +139,17 @@ class ToolCallingAgent:
 
                 run.tool_calls += 1
                 run.transcript.append({"tool": name, "args": arguments})
+
+                # Record successful reads when tool executes without error (P1 requirement)
+                if isinstance(result, dict) and "error" not in result:
+                    res_path = result.get("path") or arguments.get("path") or arguments.get("file") or ""
+                    read_entry = {
+                        "tool": name,
+                        "path": str(res_path),
+                        "start_line": int(result.get("start_line", result.get("line", arguments.get("start_line", 1)))),
+                        "end_line": int(result.get("end_line", result.get("line", arguments.get("end_line", result.get("start_line", 1))))),
+                    }
+                    run.successful_reads.append(read_entry)
 
                 # Ensure result is safely truncated without breaking JSON structure
                 if isinstance(result, dict) and "content" in result and isinstance(result["content"], str):

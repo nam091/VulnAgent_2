@@ -74,8 +74,10 @@ class SafeReader:
         Read a numbered slice of a file safely.
         """
         content = self.read_file(path_str)
-        lines = content.split("\n")
-        total_lines = len(lines)
+        lines = content.splitlines()
+        total_lines = len(lines) or 1
+        if not lines:
+            lines = [""]
 
         start = max(1, int(start_line or 1))
         end = int(end_line) if end_line else start + MAX_READ_LINES - 1

@@ -80,11 +80,15 @@ class CodeTools:
         """
 
         target = self._resolve(path)
-        lines = target.read_text(encoding="utf-8", errors="replace").split("\n")
+        content = target.read_text(encoding="utf-8", errors="replace")
+        lines = content.splitlines()
+        total_lines = len(lines) or 1
+        if not lines:
+            lines = [""]
 
         start = max(1, int(start_line or 1))
         end = int(end_line) or start + MAX_READ_LINES - 1
-        end = min(max(end, start), len(lines), start + MAX_READ_LINES - 1)
+        end = min(max(end, start), total_lines, start + MAX_READ_LINES - 1)
 
         body = "\n".join(
             f"{i:>5} | {lines[i - 1]}" for i in range(start, end + 1)
