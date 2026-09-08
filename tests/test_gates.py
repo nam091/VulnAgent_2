@@ -67,11 +67,11 @@ async def test_verifier_requires_successful_read_and_matching_citation(tmp_path:
     Test P1 Bug 2: Tool read failure must not count as investigated.
     Even if investigated, cited evidence file/lines must match actual successful reads.
     """
-    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
     app_file = tmp_path / "app.py"
     app_file.write_text("user_input = request.args.get('id')\nsafe_id = int(user_input)\n", encoding="utf-8")
     other_file = tmp_path / "other.py"
     other_file.write_text("DEBUG = True\n", encoding="utf-8")
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
 
     vuln = make_vuln(file_path="app.py", start_line=1)
 
@@ -234,3 +234,146 @@ async def test_check_fix_degraded_rejected(tmp_path: Path):
         assert res["degraded"] is True
         assert res["resolved_findings"] == []
         assert res["persistent_findings"] == [orig_vuln.id]
+
+
+import json
+
+
+class MockFunction:
+    def __init__(self, name: str, arguments: dict):
+        self.name = name
+        self.arguments = json.dumps(arguments)
+
+
+class MockToolCall:
+    def __init__(self, name: str, arguments: dict, call_id: str = "call_1"):
+        self.id = call_id
+        self.function = MockFunction(name, arguments)
+
+
+class MockMessage:
+    def __init__(self, content=None, tool_calls=None):
+        self.content = content
+        self.tool_calls = tool_calls or []
+
+
+@pytest.mark.asyncio
+async def test_e2e_verifier_rejects_different_directory_same_basename(tmp_path: Path):
+    """
+    Test P1 Bug 1 (End-to-End):
+    Model calls read_lines on a/app.py:1-5, but refutes citing b/app.py:1.
+    Must be rejected even though basename is identical.
+    """
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "app.py").write_text("def check(): return True\n", encoding="utf-8")
+    (tmp_path / "b" / "app.py").write_text("def check(): return False\n", encoding="utf-8")
+
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
+    vuln = make_vuln(file_path="b/app.py", start_line=1)
+
+    # Turn 1: model reads a/app.py
+    msg1 = MockMessage(tool_calls=[MockToolCall("read_lines", {"path": "a/app.py", "start_line": 1, "end_line": 5})])
+    # Turn 2: model claims refuted citing b/app.py
+    msg2 = MockMessage(content=json.dumps({
+        "verdict": "refuted",
+        "mitigating_control": "check returns True",
+        "evidence_file": "b/app.py",
+        "evidence_line": 1
+    }))
+
+    with patch("agent.loop.ToolCallingAgent._complete", new_callable=AsyncMock, side_effect=[msg1, msg2]):
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert "chưa từng được đọc" in verdict.reason
+
+
+@pytest.mark.asyncio
+async def test_e2e_verifier_rejects_empty_search_and_definition_not_found(tmp_path: Path):
+    """
+    Test P1 Bug 2 (End-to-End):
+    search with 0 matches and find_definition with found=False must NOT count as successful read.
+    """
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
+    vuln = make_vuln(file_path="app.py", start_line=1)
+
+    # Turn 1: search non-existent pattern -> matches=[]
+    msg1 = MockMessage(tool_calls=[MockToolCall("search", {"pattern": "NON_EXISTENT_PATTERN"})])
+    # Turn 2: find_definition non-existent func -> found=False
+    msg2 = MockMessage(tool_calls=[MockToolCall("find_definition", {"name": "non_existent_func"})])
+    # Turn 3: model claims refuted
+    msg3 = MockMessage(content=json.dumps({
+        "verdict": "refuted",
+        "mitigating_control": "sanitizer exists",
+        "evidence_file": "app.py",
+        "evidence_line": 1
+    }))
+
+    with patch("agent.loop.ToolCallingAgent._complete", new_callable=AsyncMock, side_effect=[msg1, msg2, msg3]):
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert verdict.investigated is False
+
+
+@pytest.mark.asyncio
+async def test_e2e_verifier_rejects_citation_outside_truncated_output(tmp_path: Path):
+    """
+    Test P1 Bug 3 (End-to-End):
+    Line 1 is 7000 chars, so line 2 is truncated from model output.
+    Model cites line 2 -> must be rejected as unread.
+    """
+    app_file = tmp_path / "app.py"
+    app_file.write_text("# " + "A" * 5988 + "\nx = 100\n", encoding="utf-8")
+
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
+    vuln = make_vuln(file_path="app.py", start_line=1)
+
+    # Turn 1: model reads lines 1 to 2
+    msg1 = MockMessage(tool_calls=[MockToolCall("read_lines", {"path": "app.py", "start_line": 1, "end_line": 2})])
+    # Turn 2: model claims refuted citing line 2 (which was cut from model output)
+    msg2 = MockMessage(content=json.dumps({
+        "verdict": "refuted",
+        "mitigating_control": "x is safe constant",
+        "evidence_file": "app.py",
+        "evidence_line": 2
+    }))
+
+    with patch("agent.loop.ToolCallingAgent._complete", new_callable=AsyncMock, side_effect=[msg1, msg2]):
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert "chưa từng được đọc" in verdict.reason
+
+
+@pytest.mark.asyncio
+async def test_e2e_verifier_rejects_file_modified_after_read(tmp_path: Path):
+    """
+    Test P1 Bug 4 (End-to-End):
+    File changes on disk after tool read -> verifier detects stale/invalid evidence and returns uncertain.
+    """
+    app_file = tmp_path / "app.py"
+    app_file.write_text("x = 1\n", encoding="utf-8")
+
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
+    vuln = make_vuln(file_path="app.py", start_line=1)
+
+    msg1 = MockMessage(tool_calls=[MockToolCall("read_lines", {"path": "app.py", "start_line": 1, "end_line": 1})])
+    msg2 = MockMessage(content=json.dumps({
+        "verdict": "refuted",
+        "mitigating_control": "safe constant",
+        "evidence_file": "app.py",
+        "evidence_line": 1
+    }))
+
+    async def mock_complete(messages, with_tools=True):
+        if with_tools:
+            return msg1
+        else:
+            # Modify app.py on disk after read but before verifier receives final verdict
+            app_file.write_text("x = 99999\n", encoding="utf-8")
+            return msg2
+
+    with patch("agent.loop.ToolCallingAgent._complete", new_callable=AsyncMock, side_effect=mock_complete):
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert "không còn hợp lệ" in verdict.reason or "thay đổi" in verdict.reason

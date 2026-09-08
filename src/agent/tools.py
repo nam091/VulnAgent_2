@@ -29,16 +29,25 @@ class CodeTools:
     Read-only inspection of a scan root, exposed as callable tools.
     """
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        evidence_store: Optional[Any] = None,
+        snapshot_id: Optional[str] = None
+    ) -> None:
         """
         Args:
             root: Directory that every path argument is resolved inside
+            evidence_store: Optional EvidenceStore for recording inspected code slices
+            snapshot_id: Optional snapshot identifier
         """
 
         self.root = Path(root).resolve()
         self.reader = SafeReader(self.root)
         self.call_count = 0
         self.calls: List[Dict[str, Any]] = []
+        self.evidence_store = evidence_store
+        self.snapshot_id = snapshot_id
 
     def _resolve(self, relative: str) -> Path:
         """
@@ -93,12 +102,15 @@ class CodeTools:
         body = "\n".join(
             f"{i:>5} | {lines[i - 1]}" for i in range(start, end + 1)
         )
+        rel_path = self._relative(target)
+        raw_lines = lines[start - 1:end]
         return {
-            "path": path,
+            "path": rel_path,
             "start_line": start,
             "end_line": end,
-            "total_lines": len(lines),
+            "total_lines": total_lines,
             "content": body,
+            "raw_lines": raw_lines,
         }
 
     def find_definition(self, name: str, path: Optional[str] = None) -> Dict[str, Any]:
@@ -123,7 +135,7 @@ class CodeTools:
             except (OSError, SyntaxError):
                 continue
 
-            lines = source.split("\n")
+            lines = source.splitlines()
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     continue
@@ -131,6 +143,7 @@ class CodeTools:
                     continue
                 end = getattr(node, "end_lineno", node.lineno + 30) or node.lineno + 30
                 end = min(end, node.lineno + MAX_READ_LINES)
+                slice_lines = lines[node.lineno - 1:min(end, len(lines))]
                 results.append({
                     "file": self._relative(target),
                     "start_line": node.lineno,
@@ -140,6 +153,7 @@ class CodeTools:
                         f"{i:>5} | {lines[i - 1]}"
                         for i in range(node.lineno, min(end, len(lines)) + 1)
                     ),
+                    "raw_lines": slice_lines,
                 })
                 if len(results) >= 5:
                     break

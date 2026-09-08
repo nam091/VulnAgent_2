@@ -16,6 +16,7 @@ The verdict also carries a taint path when confirmed, which is where the
 dataflow evidence for vulnerability chaining comes from.
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -26,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from agent.loop import ToolCallingAgent
 from agent.tools import TOOL_SCHEMAS, CodeTools
+from evidence.store import EvidenceStore
 from models.vulnerability import FindingSource, Vulnerability, VulnerabilityType
 
 SYSTEM_PROMPT = """You are a security engineer reviewing a vulnerability report written
@@ -144,7 +146,9 @@ class VerificationAgent:
         model: str,
         root: Path,
         max_turns: int = 6,
-        temperature: Optional[float] = 0
+        temperature: Optional[float] = 0,
+        evidence_store: Optional[EvidenceStore] = None,
+        snapshot_id: Optional[str] = None,
     ) -> None:
         """
         Args:
@@ -153,13 +157,21 @@ class VerificationAgent:
             root: Scan root the tools are confined to
             max_turns: Investigation budget per finding
             temperature: Sampling temperature, or None to omit
+            evidence_store: Optional EvidenceStore for validating reads
+            snapshot_id: Optional snapshot identifier
         """
 
         self.client = client
         self.model = model
-        self.root = Path(root)
+        self.root = Path(root).resolve()
         self.max_turns = max_turns
         self.temperature = temperature
+        self.evidence_store = evidence_store or EvidenceStore(self.root)
+        if snapshot_id:
+            self.snapshot_id = snapshot_id
+        else:
+            snapshot = self.evidence_store.create_snapshot()
+            self.snapshot_id = snapshot.snapshot_id
 
     async def verify(self, vuln: Vulnerability) -> Verdict:
         """
@@ -172,7 +184,11 @@ class VerificationAgent:
             Verdict: The outcome, with an error field set on failure
         """
 
-        tools = CodeTools(self.root)
+        tools = CodeTools(
+            self.root,
+            evidence_store=self.evidence_store,
+            snapshot_id=self.snapshot_id,
+        )
         agent = ToolCallingAgent(
             client=self.client,
             model=self.model,
@@ -180,6 +196,8 @@ class VerificationAgent:
             tool_schemas=TOOL_SCHEMAS,
             max_turns=self.max_turns,
             temperature=self.temperature,
+            evidence_store=self.evidence_store,
+            snapshot_id=self.snapshot_id,
         )
 
         prompt = USER_TEMPLATE.format(
@@ -259,7 +277,7 @@ class VerificationAgent:
 
                         # Verify citation matches actual evidence gathered in successful_reads (P1 requirement)
                         if verdict.verdict == "refuted":
-                            matched = False
+                            matched_read = None
                             for sread in verdict.successful_reads:
                                 rpath = sread.get("path", "")
                                 if not rpath:
@@ -269,28 +287,46 @@ class VerificationAgent:
                                 except Exception:
                                     r_resolved = None
 
-                                path_match = (
-                                    (r_resolved and r_resolved == resolved)
-                                    or Path(rpath).as_posix().lstrip("./") == Path(verdict.evidence_file).as_posix().lstrip("./")
-                                    or Path(rpath).name == Path(verdict.evidence_file).name
-                                )
-                                if path_match:
+                                # Strict path identity: must resolve to the identical file inside root (P1 bug 1)
+                                if r_resolved and r_resolved == resolved:
                                     r_start = sread.get("start_line", 1)
                                     r_end = sread.get("end_line", r_start)
                                     if verdict.evidence_line is None or verdict.evidence_line == 0:
-                                        matched = True
+                                        matched_read = sread
                                         break
                                     elif r_start <= verdict.evidence_line <= r_end:
-                                        matched = True
+                                        matched_read = sread
                                         break
 
-                            if not matched:
+                            if not matched_read:
                                 logging.info(
                                     f"Refutation citation '{verdict.evidence_file}:{verdict.evidence_line}' "
                                     "was never read during investigation; downgraded to uncertain"
                                 )
                                 verdict.verdict = "uncertain"
                                 verdict.reason = f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' chưa từng được đọc thành công trong phiên điều tra."
+                            else:
+                                # Validate evidence integrity with EvidenceStore (P1 bug 4)
+                                eid = matched_read.get("evidence_id")
+                                if eid:
+                                    is_valid, ev_status, msg = self.evidence_store.validate_evidence(
+                                        eid, self.snapshot_id
+                                    )
+                                    if not is_valid:
+                                        logging.info(
+                                            f"Evidence '{eid}' is invalid or stale ({msg}); downgraded to uncertain"
+                                        )
+                                        verdict.verdict = "uncertain"
+                                        verdict.reason = f"Bằng chứng '{verdict.evidence_file}' không còn hợp lệ trên đĩa: {msg}"
+                                else:
+                                    snap = self.evidence_store.get_snapshot(self.snapshot_id)
+                                    if snap:
+                                        rel_path = self.evidence_store.reader.to_relative(resolved)
+                                        manifest_hash = snap.files.get(rel_path)
+                                        current_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
+                                        if not manifest_hash or manifest_hash != current_hash:
+                                            verdict.verdict = "uncertain"
+                                            verdict.reason = f"File bằng chứng '{verdict.evidence_file}' đã bị thay đổi trên đĩa kể từ snapshot."
                 except Exception as e:
                     verdict.verdict = "uncertain"
                     verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"

@@ -13,6 +13,7 @@ presenting a truncated investigation as a finished one.
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -58,7 +59,9 @@ class ToolCallingAgent:
         dispatch: Callable[[str, Dict[str, Any]], Dict[str, Any]],
         tool_schemas: List[Dict[str, Any]],
         max_turns: int = 6,
-        temperature: Optional[float] = 0
+        temperature: Optional[float] = 0,
+        evidence_store: Optional[Any] = None,
+        snapshot_id: Optional[str] = None,
     ) -> None:
         """
         Args:
@@ -68,6 +71,8 @@ class ToolCallingAgent:
             tool_schemas: Tool definitions in OpenAI function-calling format
             max_turns: Maximum model turns before the loop gives up
             temperature: Sampling temperature, or None to omit the parameter
+            evidence_store: Optional EvidenceStore for recording read evidence
+            snapshot_id: Optional snapshot identifier
         """
 
         self.client = client
@@ -76,6 +81,8 @@ class ToolCallingAgent:
         self.tool_schemas = tool_schemas
         self.max_turns = max(1, max_turns)
         self.temperature = temperature
+        self.evidence_store = evidence_store
+        self.snapshot_id = snapshot_id
 
     async def run(
         self,
@@ -140,16 +147,15 @@ class ToolCallingAgent:
                 run.tool_calls += 1
                 run.transcript.append({"tool": name, "args": arguments})
 
-                # Record successful reads when tool executes without error (P1 requirement)
-                if isinstance(result, dict) and "error" not in result:
-                    res_path = result.get("path") or arguments.get("path") or arguments.get("file") or ""
-                    read_entry = {
-                        "tool": name,
-                        "path": str(res_path),
-                        "start_line": int(result.get("start_line", result.get("line", arguments.get("start_line", 1)))),
-                        "end_line": int(result.get("end_line", result.get("line", arguments.get("end_line", result.get("start_line", 1))))),
-                    }
-                    run.successful_reads.append(read_entry)
+                reads = self._process_tool_result_and_reads(name, arguments, result)
+
+                # Remove internal raw_lines helper before serializing to model payload
+                if isinstance(result, dict):
+                    result.pop("raw_lines", None)
+                    if "definitions" in result and isinstance(result["definitions"], list):
+                        for d in result["definitions"]:
+                            if isinstance(d, dict):
+                                d.pop("raw_lines", None)
 
                 # Ensure result is safely truncated without breaking JSON structure
                 if isinstance(result, dict) and "content" in result and isinstance(result["content"], str):
@@ -163,6 +169,9 @@ class ToolCallingAgent:
                         "note": "Tool output too large; truncated",
                         "summary": str(result)[:MAX_TOOL_RESULT_CHARS] + "..."
                     })
+                    reads = []
+
+                run.successful_reads.extend(reads)
 
                 messages.append({
                     "role": "tool",
@@ -187,6 +196,150 @@ class ToolCallingAgent:
             logging.error(f"Agent failed on final turn: {e}")
             run.text = ""
         return run
+
+    def _process_tool_result_and_reads(
+        self,
+        name: str,
+        arguments: Dict[str, Any],
+        result: Any
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract and record actual code evidence delivered to the model,
+        ensuring line ranges strictly reflect visible content after truncation.
+        """
+        if not isinstance(result, dict) or "error" in result:
+            return []
+
+        reads: List[Dict[str, Any]] = []
+
+        if name == "read_lines":
+            content = result.get("content")
+            if not isinstance(content, str) or not content.strip():
+                return []
+
+            raw_lines = result.get("raw_lines") or []
+            # Truncate line-by-line so recorded range strictly reflects what model sees (P1 bug 3)
+            if len(content) > MAX_TOOL_RESULT_CHARS:
+                body_lines = content.split("\n")
+                kept_body = []
+                kept_raw = []
+                curr_len = 0
+                has_raw_match = len(raw_lines) == len(body_lines)
+                for idx, bline in enumerate(body_lines):
+                    rline = raw_lines[idx] if has_raw_match else ""
+                    if curr_len + len(bline) + 1 > MAX_TOOL_RESULT_CHARS:
+                        break
+                    kept_body.append(bline)
+                    kept_raw.append(rline)
+                    curr_len += len(bline) + 1
+
+                if not kept_body and body_lines:
+                    kept_body.append(body_lines[0][:MAX_TOOL_RESULT_CHARS])
+                    if raw_lines:
+                        kept_raw.append(raw_lines[0][:MAX_TOOL_RESULT_CHARS])
+
+                result["content"] = "\n".join(kept_body) + "\n... [truncated]"
+                result["truncated"] = True
+                content = result["content"]
+                raw_lines = kept_raw
+
+            # Extract line numbers strictly present in the delivered output
+            visible_line_nums = [
+                int(m.group(1))
+                for m in re.finditer(r"^\s*(\d+)\s*\|", content, re.MULTILINE)
+            ]
+            if visible_line_nums:
+                actual_start = min(visible_line_nums)
+                actual_end = max(visible_line_nums)
+                result["start_line"] = actual_start
+                result["end_line"] = actual_end
+
+                target_path = result.get("path") or arguments.get("path") or ""
+                evidence_id = ""
+                if self.evidence_store and self.snapshot_id and target_path:
+                    rec = self.evidence_store.record_evidence(
+                        snapshot_id=self.snapshot_id,
+                        path=target_path,
+                        start_line=actual_start,
+                        end_line=actual_end,
+                        content="\n".join(raw_lines) if raw_lines else None,
+                        origin="read_lines",
+                    )
+                    evidence_id = rec.evidence_id if rec.read_succeeded else ""
+
+                reads.append({
+                    "tool": name,
+                    "path": target_path,
+                    "start_line": actual_start,
+                    "end_line": actual_end,
+                    "evidence_id": evidence_id,
+                })
+
+        elif name == "find_definition":
+            if result.get("found") is True and result.get("definitions"):
+                for d in result["definitions"]:
+                    dfile = d.get("file")
+                    dstart = d.get("start_line")
+                    dend = d.get("end_line")
+                    dsource = d.get("source", "")
+                    draw = d.get("raw_lines", [])
+                    if dfile and dstart is not None and dend is not None:
+                        vis_lines = [
+                            int(m.group(1))
+                            for m in re.finditer(r"^\s*(\d+)\s*\|", dsource, re.MULTILINE)
+                        ]
+                        start_line = min(vis_lines) if vis_lines else dstart
+                        end_line = max(vis_lines) if vis_lines else dend
+
+                        evidence_id = ""
+                        if self.evidence_store and self.snapshot_id:
+                            rec = self.evidence_store.record_evidence(
+                                snapshot_id=self.snapshot_id,
+                                path=dfile,
+                                start_line=start_line,
+                                end_line=end_line,
+                                content="\n".join(draw) if draw else None,
+                                origin="find_definition",
+                            )
+                            evidence_id = rec.evidence_id if rec.read_succeeded else ""
+
+                        reads.append({
+                            "tool": name,
+                            "path": dfile,
+                            "start_line": start_line,
+                            "end_line": end_line,
+                            "evidence_id": evidence_id,
+                        })
+
+        elif name == "search":
+            matches = result.get("matches")
+            if isinstance(matches, list) and matches:
+                for m in matches:
+                    mfile = m.get("file")
+                    mline = m.get("line")
+                    mtext = m.get("text", "")
+                    if mfile and mline:
+                        evidence_id = ""
+                        if self.evidence_store and self.snapshot_id:
+                            rec = self.evidence_store.record_evidence(
+                                snapshot_id=self.snapshot_id,
+                                path=mfile,
+                                start_line=mline,
+                                end_line=mline,
+                                content=mtext,
+                                origin="search",
+                            )
+                            evidence_id = rec.evidence_id if rec.read_succeeded else ""
+
+                        reads.append({
+                            "tool": name,
+                            "path": mfile,
+                            "start_line": mline,
+                            "end_line": mline,
+                            "evidence_id": evidence_id,
+                        })
+
+        return reads
 
     async def _complete(self, messages: List[Dict[str, Any]], with_tools: bool) -> Any:
         """
