@@ -94,6 +94,9 @@ def render(result: ScanResult, verbose: bool = False) -> str:
             _DIM
         ))
 
+    if result.degraded:
+        lines.append(paint("  WARNING: Scan completed with degraded or failed tiers. Results may be incomplete.", _COLORS[VulnerabilitySeverity.HIGH]))
+
     if not vulns:
         lines.append("")
         lines.append("  No vulnerabilities found.")

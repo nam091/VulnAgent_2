@@ -17,9 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-MAX_READ_LINES = 200
-MAX_MATCHES = 40
-MAX_FILE_BYTES = 512_000
+from evidence.safe_reader import MAX_FILE_BYTES, MAX_MATCHES, MAX_READ_LINES, PathEscapeError, SafeReader
 
 
 class ToolError(Exception):
@@ -38,6 +36,7 @@ class CodeTools:
         """
 
         self.root = Path(root).resolve()
+        self.reader = SafeReader(self.root)
         self.call_count = 0
         self.calls: List[Dict[str, Any]] = []
 
@@ -52,18 +51,20 @@ class CodeTools:
             Path: The resolved absolute path
 
         Raises:
-            ToolError: When the path escapes the root or does not exist
+            ToolError: When the path escapes the root, is a symlink escape, or does not exist
         """
 
-        candidate = (self.root / str(relative).lstrip("/\\")).resolve()
-        # The model's path argument is untrusted input like any other.
-        if candidate != self.root and self.root not in candidate.parents:
-            raise ToolError(f"path escapes the scan root: {relative}")
-        if not candidate.is_file():
-            raise ToolError(f"no such file: {relative}")
-        if candidate.stat().st_size > MAX_FILE_BYTES:
-            raise ToolError(f"file too large: {relative}")
-        return candidate
+        try:
+            target = self.reader.resolve(relative)
+            if not target.is_file():
+                raise ToolError(f"no such file: {relative}")
+            if target.stat().st_size > MAX_FILE_BYTES:
+                raise ToolError(f"file too large: {relative}")
+            return target
+        except PathEscapeError as e:
+            raise ToolError(f"path escapes the scan root: {relative} ({e})")
+        except Exception as e:
+            raise ToolError(str(e))
 
     def read_lines(self, path: str, start_line: int = 1, end_line: int = 0) -> Dict[str, Any]:
         """
@@ -193,17 +194,13 @@ class CodeTools:
 
     def _python_files(self) -> List[Path]:
         """
-        Every Python file under the root, excluding vendored directories.
+        Every Python file under the root, excluding vendored directories and symlink escapes.
 
         Returns:
             List[Path]: Absolute paths
         """
 
-        skip = {"venv", ".venv", "node_modules", "__pycache__", ".git", "site-packages"}
-        return [
-            p for p in self.root.rglob("*.py")
-            if p.is_file() and not any(part in skip for part in p.parts)
-        ]
+        return self.reader.list_python_files()
 
     def _relative(self, path: Path) -> str:
         """

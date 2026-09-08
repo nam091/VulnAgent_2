@@ -20,12 +20,35 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError:
+    class FastMCP:  # type: ignore
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def tool(self, *args: Any, **kwargs: Any) -> Any:
+            def decorator(f: Any) -> Any:
+                return f
+            return decorator
+
+        def run(self) -> None:
+            print("mcp package is not installed. Install with: pip install mcp", file=sys.stderr)
 
 from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner
 from analyzer.semgrep_runner import SemgrepRunner
+from context.ast_context import ASTContextExtractor
+from context.diff_scope import DiffScopeAnalyzer
+from evidence.safe_reader import SafeReader
+from evidence.store import EvidenceStore
+from models.assessment import AssessmentStatus, FindingAssessment
+from models.evidence import EvidenceStatus
 from models.vulnerability import FindingSource, Vulnerability
+import ast
+import time
+import uuid
 
 load_dotenv()
 
@@ -429,10 +452,337 @@ async def suggest_fix(
     }
 
 
+_scan_sessions: Dict[str, Dict[str, Any]] = {}
+
+
 @mcp.tool(
     description=(
-        "List the vulnerability classes the rule engine can detect, to check "
-        "whether a given concern is covered before relying on a clean scan."
+        "Scan changed files in the working tree for security candidates. "
+        "Editor mode: uses rule static analysis and local AST context with ZERO outbound LLM calls. "
+        "Returns scan_id, snapshot_id, changed files, and candidates for host investigation."
+    )
+)
+async def scan_changes(
+    target: str = ".",
+    base_ref: Optional[str] = None,
+    include_untracked: bool = True
+) -> Dict[str, Any]:
+    target_path = Path(target).resolve()
+    root = target_path if target_path.is_dir() else target_path.parent
+    evidence_store = EvidenceStore(root)
+    snapshot = evidence_store.create_snapshot(root)
+    diff_analyzer = DiffScopeAnalyzer(root)
+    changed_files = diff_analyzer.get_changed_files(base_ref=base_ref, include_untracked=include_untracked)
+
+    scan_id = f"scan_{uuid.uuid4().hex[:12]}"
+    _scan_sessions[scan_id] = {
+        "root": root,
+        "snapshot": snapshot,
+        "evidence_store": evidence_store,
+        "scanner": None,
+        "findings": {},
+        "assessments": {},
+        "changed_files": [],
+        "expanded_files": [],
+        "created_at": time.time(),
+    }
+
+    if not changed_files:
+        return {
+            "scan_id": scan_id,
+            "snapshot_id": snapshot.snapshot_id,
+            "changed_files": [],
+            "candidates": [],
+            "coverage": {"files_scanned": 0, "status": "completed"},
+            "summary": "No changed Python files found.",
+        }
+
+    expanded_files = diff_analyzer.expand_scope(changed_files, max_extra_files=3)
+
+    options = ScanOptions(
+        target=str(root),
+        use_llm=False,
+        use_semgrep=True,
+    )
+    scanner = Scanner(options)
+    result = await scanner.scan()
+
+    target_scope = set(expanded_files)
+    candidates = [
+        v for v in result.vulnerabilities
+        if v.location.file_path in target_scope or Path(v.location.file_path).name in target_scope
+    ]
+
+    scan_id = f"scan_{uuid.uuid4().hex[:12]}"
+    _scan_sessions[scan_id] = {
+        "root": root,
+        "snapshot": snapshot,
+        "evidence_store": evidence_store,
+        "scanner": scanner,
+        "findings": {v.id: v for v in candidates},
+        "assessments": {},
+        "changed_files": changed_files,
+        "expanded_files": expanded_files,
+        "created_at": time.time(),
+    }
+
+    return {
+        "scan_id": scan_id,
+        "snapshot_id": snapshot.snapshot_id,
+        "changed_files": changed_files,
+        "expanded_files": expanded_files,
+        "candidates": [_to_dict(v) for v in candidates],
+        "coverage": {
+            "files_scanned": len(expanded_files),
+            "total_files": len(result.reports),
+            "status": result.status,
+            "degraded": result.degraded,
+        },
+        "summary": f"Scanned {len(changed_files)} changed file(s); found {len(candidates)} security candidate(s).",
+    }
+
+
+@mcp.tool(
+    description=(
+        "Retrieve AST enclosing scope, context, and issue initial evidence IDs for a candidate finding."
+    )
+)
+async def get_finding_context(
+    scan_id: str,
+    finding_id: str
+) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}. Run scan_changes first."}
+
+    vuln = session["findings"].get(finding_id)
+    if not vuln:
+        return {"error": f"Unknown finding_id: {finding_id} in scan {scan_id}."}
+
+    root = session["root"]
+    evidence_store: EvidenceStore = session["evidence_store"]
+    snapshot = session["snapshot"]
+    ast_extractor = ASTContextExtractor(root)
+
+    file_rel = vuln.location.file_path
+    scope_info = ast_extractor.find_enclosing_scope(file_rel, vuln.location.start_line)
+
+    start_line = max(1, vuln.location.start_line - 5)
+    end_line = vuln.location.end_line + 5
+    safe_reader = SafeReader(root)
+    read_data = safe_reader.read_lines(file_rel, start_line, end_line)
+
+    ev_rec = evidence_store.record_evidence(
+        snapshot_id=snapshot.snapshot_id,
+        path=file_rel,
+        start_line=start_line,
+        end_line=end_line,
+        content=read_data["content"],
+    )
+
+    return {
+        "finding_id": finding_id,
+        "file": file_rel,
+        "line": vuln.location.start_line,
+        "cwe": vuln.cwe_id,
+        "type": vuln.type.value,
+        "enclosing_scope": scope_info,
+        "snippet": vuln.location.context or "",
+        "initial_evidence_id": ev_rec.evidence_id,
+        "context_slice": read_data["content"],
+        "instructions": (
+            "Review whether mitigating controls sanitize the inputs. "
+            "If safe, call submit_assessment with verdict='refuted' citing mitigating_control and evidence_id. "
+            "If vulnerable, call submit_assessment with verdict='supported'."
+        ),
+    }
+
+
+@mcp.tool(
+    description=(
+        "Safely read a slice of a source file within scan scope and issue an authenticated evidence ID."
+    )
+)
+async def read_evidence(
+    scan_id: str,
+    path: str,
+    start_line: int = 1,
+    end_line: int = 0
+) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}."}
+
+    root = session["root"]
+    evidence_store: EvidenceStore = session["evidence_store"]
+    snapshot = session["snapshot"]
+    safe_reader = SafeReader(root)
+
+    try:
+        data = safe_reader.read_lines(path, start_line, end_line)
+        rec = evidence_store.record_evidence(
+            snapshot_id=snapshot.snapshot_id,
+            path=data["path"],
+            start_line=data["start_line"],
+            end_line=data["end_line"],
+            content=data["content"],
+        )
+        return {
+            "evidence_id": rec.evidence_id,
+            "path": rec.path,
+            "start_line": rec.start_line,
+            "end_line": rec.end_line,
+            "content": rec.content,
+            "read_succeeded": True,
+        }
+    except Exception as e:
+        return {"error": f"Failed to read evidence: {e}", "read_succeeded": False}
+
+
+@mcp.tool(
+    description=(
+        "Submit a security assessment for a finding with cited evidence IDs. "
+        "Verdicts: 'supported', 'refuted', or 'uncertain'. "
+        "'refuted' requires valid evidence_id from the scan and non-empty mitigating_control."
+    )
+)
+async def submit_assessment(
+    scan_id: str,
+    finding_id: str,
+    verdict: str,
+    evidence_ids: List[str] = [],
+    reason: str = "",
+    mitigating_control: Optional[str] = None,
+    taint_path: List[Dict[str, Any]] = []
+) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}."}
+
+    vuln = session["findings"].get(finding_id)
+    if not vuln:
+        return {"error": f"Unknown finding_id: {finding_id}."}
+
+    snapshot = session["snapshot"]
+    evidence_store: EvidenceStore = session["evidence_store"]
+
+    norm_verdict = verdict.strip().lower()
+    if norm_verdict not in ("supported", "refuted", "uncertain"):
+        norm_verdict = "uncertain"
+
+    final_status = norm_verdict
+    policy_notes = []
+
+    if norm_verdict == "refuted":
+        if not mitigating_control or not mitigating_control.strip():
+            final_status = "uncertain"
+            policy_notes.append("Refutation rejected: missing non-empty mitigating_control.")
+
+        if not evidence_ids:
+            final_status = "uncertain"
+            policy_notes.append("Refutation rejected: no evidence_ids cited.")
+        else:
+            valid_evidence_found = False
+            for eid in evidence_ids:
+                is_valid, ev_status, msg = evidence_store.validate_evidence(eid, snapshot.snapshot_id)
+                if is_valid:
+                    valid_evidence_found = True
+                    break
+                else:
+                    policy_notes.append(f"Evidence '{eid}' invalid: {msg}")
+            if not valid_evidence_found:
+                final_status = "uncertain"
+                policy_notes.append("Refutation rejected: all cited evidence_ids are invalid or stale.")
+
+    assessment = FindingAssessment(
+        finding_id=finding_id,
+        snapshot_id=snapshot.snapshot_id,
+        status=AssessmentStatus(final_status),
+        reason=reason + (" " + "; ".join(policy_notes) if policy_notes else ""),
+        evidence_ids=evidence_ids,
+        mitigating_control=mitigating_control,
+        taint_path=taint_path,
+        assessor="host_editor",
+    )
+    session["assessments"][finding_id] = assessment
+    vuln.assessment_status = final_status
+    vuln.assessment = assessment.model_dump()
+
+    return {
+        "finding_id": finding_id,
+        "submitted_verdict": verdict,
+        "accepted_status": final_status,
+        "reason": assessment.reason,
+        "policy_verified": final_status == norm_verdict,
+    }
+
+
+@mcp.tool(
+    description=(
+        "Check whether target findings have been resolved after editing. "
+        "Rescans the current working tree, validates syntax, and reports if findings are resolved or if regressions were introduced."
+    )
+)
+async def check_fix(
+    scan_id: str,
+    finding_ids: List[str] = []
+) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}."}
+
+    root = session["root"]
+    changed_files = session.get("changed_files", [])
+
+    syntax_errors = {}
+    for f in changed_files:
+        try:
+            p = (root / f).resolve()
+            if p.is_file():
+                ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError as se:
+            syntax_errors[f] = f"Syntax error at line {se.lineno}: {se.msg}"
+
+    if syntax_errors:
+        return {
+            "syntax_valid": False,
+            "errors": syntax_errors,
+            "resolved": [],
+            "persistent": finding_ids,
+            "new_findings": [],
+            "summary": "Fix broke syntax. Check errors and repair.",
+        }
+
+    options = ScanOptions(target=str(root), use_llm=False, use_semgrep=True)
+    new_result = await Scanner(options).scan()
+    current_vuln_ids = {v.id for v in new_result.vulnerabilities}
+
+    target_ids = set(finding_ids) if finding_ids else set(session["findings"].keys())
+    resolved = [fid for fid in target_ids if fid not in current_vuln_ids]
+    persistent = [fid for fid in target_ids if fid in current_vuln_ids]
+
+    old_ids = set(session["findings"].keys())
+    new_regressions = [
+        _to_dict(v) for v in new_result.vulnerabilities
+        if v.id not in old_ids and v.location.file_path in set(changed_files)
+    ]
+
+    return {
+        "syntax_valid": True,
+        "resolved_findings": resolved,
+        "persistent_findings": persistent,
+        "new_regressions": new_regressions,
+        "clean": len(persistent) == 0 and len(new_regressions) == 0,
+        "summary": (
+            f"Fix verification: {len(resolved)} resolved, {len(persistent)} persistent, "
+            f"{len(new_regressions)} regression(s)."
+        ),
+    }
+
+
+@mcp.tool(
+    description=(
+        "Report system capabilities, schema version, engine availability, and supported CWEs."
     )
 )
 async def capabilities() -> Dict[str, Any]:
@@ -445,19 +795,29 @@ async def capabilities() -> Dict[str, Any]:
 
     runner = SemgrepRunner()
     return {
+        "schema_version": "2.0.0",
+        "editor_mode": True,
+        "backend_llm_calls": False,
         "rule_engine": {
             "name": "semgrep",
             "available": runner.available,
             "rule_packs": list(runner.configs),
         },
-        "llm_engine": {
-            "model": os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12"),
-            "configured": bool(os.getenv("OPENAI_API_KEY")),
+        "supported_cwes": [
+            {"cwe": "CWE-89", "name": "SQL Injection"},
+            {"cwe": "CWE-22", "name": "Path Traversal"},
+            {"cwe": "CWE-78", "name": "OS Command Injection"},
+            {"cwe": "CWE-79", "name": "Cross-Site Scripting"},
+            {"cwe": "CWE-798", "name": "Hardcoded Credentials"},
+        ],
+        "limits": {
+            "max_file_bytes": 512_000,
+            "max_read_lines": 200,
         },
         "languages": ["python"],
         "note": (
-            "Cross-file taint analysis is not available; findings are "
-            "established within a single file."
+            "Editor mode runs local rule analysis with zero outbound model requests. "
+            "Host editor drives investigations and submits evidence-backed assessments."
         ),
     }
 

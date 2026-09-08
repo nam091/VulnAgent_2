@@ -18,31 +18,45 @@ class AIAnalysisError(RuntimeError):
 
 
 class AIClient:
-    def __init__(self) -> None:
+    def __init__(self, disabled: bool = False) -> None:
         """
-        Initialize AI clients with API keys from environment variables.
-        Supports OpenAI-compatible providers via OPENAI_BASE_URL / OPENAI_MODEL.
+        Initialize AI client wrapper with lazy provider instantiation.
         """
-
-        # Initialize Ollama, OpenAI-compatible, and Anthropic clients
-        # self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        openai_base_url = os.getenv("OPENAI_BASE_URL")  # e.g. https://api.xiaomimimo.com/v1
-        client_kwargs: Dict[str, Any] = {"api_key": openai_api_key}
-        if openai_base_url:
-            client_kwargs["base_url"] = openai_base_url
-        self.openai_client = openai.Client(**client_kwargs)
-
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.anthropic_client = (
-            anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
-        )
-
-        # Default model (override with OPENAI_MODEL for compatible APIs)
+        self.disabled = disabled
+        self._openai_client = None
+        self._anthropic_client = None
         self.openai_default_model = os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12")
 
-        # Default to local model for security analysis (Local Model)
-        # self.local_default_model = "deepseek-r1:32b"  # or any other model you have pulled in Ollama
+    @property
+    def openai_client(self) -> Any:
+        if self.disabled:
+            raise RuntimeError(
+                "AI backend calls are disabled in editor or rule-only mode. "
+                "No outbound model requests are permitted."
+            )
+        if self._openai_client is None:
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if not openai_api_key:
+                raise RuntimeError(
+                    "OPENAI_API_KEY is not set. Standalone API mode requires an API key, "
+                    "or run in editor mode without keys."
+                )
+            openai_base_url = os.getenv("OPENAI_BASE_URL")
+            client_kwargs: Dict[str, Any] = {"api_key": openai_api_key}
+            if openai_base_url:
+                client_kwargs["base_url"] = openai_base_url
+            self._openai_client = openai.Client(**client_kwargs)
+        return self._openai_client
+
+    @property
+    def anthropic_client(self) -> Any:
+        if self.disabled:
+            return None
+        if self._anthropic_client is None:
+            anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+            if anthropic_api_key:
+                self._anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
+        return self._anthropic_client
 
     async def analyze_security(self, prompt: str, model: Optional[str] = None) -> Dict[str, Any]:
         """

@@ -79,9 +79,9 @@
     {
       "file": "insecure_api.py",
       "line": 44,
-      "cwe": "611",
-      "type": "XML_EXTERNAL_ENTITY",
-      "note": "ElementTree.fromstring on untrusted XML"
+      "cwe": "776",
+      "type": "XML_ENTITY_EXPANSION",
+      "note": "ElementTree.fromstring on untrusted XML without entity expansion protection (CWE-776)"
     }
   ]
 }

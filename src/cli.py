@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
@@ -15,6 +16,9 @@ from typing import List, Optional, Sequence, Tuple
 from analyzer.baseline import BASELINE_FILENAME, Baseline, SuppressionIndex, gate
 from analyzer.fixer import apply_plan, build_plan
 from analyzer.scanner import ScanOptions, Scanner, ScanResult
+from analyzer.semgrep_runner import SemgrepRunner
+from context.diff_scope import DiffScopeAnalyzer
+from integrations.host_adapter import HostAdapter
 from models.vulnerability import FindingSource, Vulnerability, VulnerabilitySeverity
 from reporters import console, sarif
 
@@ -157,6 +161,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("serve", help="Run the HTTP API and web UI")
     subparsers.add_parser("mcp", help="Run the MCP server on stdio")
+
+    init_cmd = subparsers.add_parser("init", help="Initialize VulnAgent in current workspace")
+    init_cmd.add_argument("--host", choices=("cursor", "claude", "auto"), default="auto", help="Target editor host (default: auto)")
+
+    subparsers.add_parser("doctor", help="Check local environment, dependencies and tools")
+
+    check_cmd = subparsers.add_parser("check", help="Run quick check on changes or security gate")
+    check_cmd.add_argument("target", nargs="?", default=".", help="Target directory (default: .)")
+    check_cmd.add_argument("--changes", action="store_true", help="Scan only git-modified files")
+    check_cmd.add_argument("--before-release", action="store_true", help="Comprehensive pre-release scan")
+    check_cmd.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     return parser
 
@@ -322,6 +337,11 @@ async def _run_scan(args: argparse.Namespace) -> int:
             file=stream
         )
         return EXIT_FINDINGS
+
+    if result.degraded:
+        print("  gate: failed because one or more analysis tiers degraded/failed", file=stream)
+        return EXIT_ERROR
+
     return EXIT_CLEAN
 
 
@@ -487,8 +507,21 @@ async def _verify_fix(
         revert(backups)
         return EXIT_ERROR
 
+    if after.degraded:
+        print("  verification scan was degraded or incomplete. Reverting to be safe.")
+        revert(backups)
+        return EXIT_ERROR
+
     was = len(before.vulnerabilities)
     now = len(after.vulnerabilities)
+
+    before_fps = {v.fingerprint for v in before.vulnerabilities}
+    new_findings = [v for v in after.vulnerabilities if v.fingerprint not in before_fps]
+    if new_findings:
+        print(f"  patch introduced {len(new_findings)} new finding(s). Reverting.")
+        restored = revert(backups)
+        print(f"  restored {restored} file(s).")
+        return EXIT_ERROR
 
     if now > was:
         print(f"  findings went from {was} to {now}. Reverting.")
@@ -535,6 +568,146 @@ async def _run_baseline(args: argparse.Namespace) -> int:
     return EXIT_CLEAN
 
 
+async def _run_init(args: argparse.Namespace) -> int:
+    """
+    Initialize VulnAgent configuration for host editor.
+    """
+    adapter = HostAdapter(Path.cwd())
+    host = args.host if args.host != "auto" else adapter.detect_host()
+    if host == "cursor":
+        res = adapter.configure_cursor()
+        print(f"VulnAgent initialized for Cursor.")
+        print(f"  MCP configuration: {res['mcp_config']}")
+        print(f"  Security rules:    {res['rules_file']}")
+    elif host == "claude":
+        res = adapter.configure_claude_code()
+        print(f"VulnAgent initialized for Claude Code.")
+        print(f"  MCP configuration: {res['mcp_config']}")
+        print(f"  Instructions:      {res['instructions']}")
+    else:
+        print(f"error: Unknown host '{host}'", file=sys.stderr)
+        return EXIT_ERROR
+    return EXIT_CLEAN
+
+
+async def _run_doctor(args: argparse.Namespace) -> int:
+    """
+    Inspect local environment, tools and MCP configurations.
+    """
+    import shutil
+    import subprocess
+
+    print("VulnAgent Environment Doctor:")
+    all_ok = True
+
+    # 1. Python runtime
+    py_ver = sys.version.split()[0]
+    print(f"  [OK] Python {py_ver} ({sys.executable})")
+
+    # 2. Semgrep tool
+    semgrep_path = shutil.which("semgrep")
+    if semgrep_path:
+        print(f"  [OK] Semgrep executable detected: {semgrep_path}")
+    else:
+        print("  [WARN] Semgrep not found on PATH. Fast rule scans will fail unless installed.")
+
+    # 3. Git
+    git_path = shutil.which("git")
+    if git_path:
+        print(f"  [OK] Git available ({git_path})")
+    else:
+        print("  [WARN] Git not found. Change detection and diff analysis will be limited.")
+
+    # 4. Host MCP configurations
+    cursor_mcp = Path.cwd() / ".cursor" / "mcp.json"
+    claude_mcp = Path.cwd() / ".claude" / "mcp.json"
+    if cursor_mcp.exists():
+        print(f"  [OK] Cursor MCP config detected: {cursor_mcp}")
+    elif claude_mcp.exists():
+        print(f"  [OK] Claude Code MCP config detected: {claude_mcp}")
+    else:
+        print("  [INFO] No editor MCP config found in current directory. Run 'vulnagent init' to configure.")
+
+    # 5. Core analysis components
+    try:
+        from evidence.store import EvidenceStore
+        from context.ast_context import ASTContextExtractor
+        print("  [OK] EvidenceStore & AST analyzer loaded successfully")
+    except Exception as e:
+        print(f"  [ERROR] Core components failed to load: {e}")
+        all_ok = False
+
+    return EXIT_CLEAN if all_ok else EXIT_ERROR
+
+
+async def _run_check(args: argparse.Namespace) -> int:
+    """
+    Run fast security gate check on git changes or before release.
+    """
+    target_path = Path(args.target).resolve()
+    if not target_path.exists():
+        print(f"error: no such file or directory: {args.target}", file=sys.stderr)
+        return EXIT_ERROR
+
+    if args.changes:
+        diff_analyzer = DiffScopeAnalyzer(target_path)
+        modified_files = diff_analyzer.get_modified_files()
+        if not modified_files:
+            print("No modified files detected via git.")
+            return EXIT_CLEAN
+
+        print(f"Scanning {len(modified_files)} modified file(s)...")
+        reports = []
+        for mf in modified_files:
+            if not mf.exists():
+                continue
+            opts = ScanOptions(
+                target=str(mf),
+                use_llm=False,
+                use_semgrep=True,
+            )
+            res = await Scanner(opts).scan()
+            reports.extend(res.reports)
+        result = ScanResult(reports=reports, root=target_path, stats={"modified_files": len(modified_files)})
+    else:
+        opts = ScanOptions(
+            target=str(target_path),
+            use_llm=bool(args.before_release),
+            use_semgrep=True,
+            verify=bool(args.before_release),
+        )
+        result = await Scanner(opts).scan()
+
+    _apply_suppressions(result)
+
+    if args.before_release:
+        print("\n--- Pre-Release Security Check Summary ---")
+        print(f"Files scanned: {len(result.reports)}")
+        print(f"Status: {result.status}")
+        print(f"Findings: {len(result.vulnerabilities)}")
+        if result.refuted_vulnerabilities:
+            print(f"Refuted findings (retained): {len(result.refuted_vulnerabilities)}")
+
+        if result.degraded:
+            print("[WARN] Scan completed with degraded coverage or failed engine.")
+
+        if result.vulnerabilities:
+            for v in result.vulnerabilities:
+                print(f"  - [{v.severity.value}] {v.vulnerability_type} at {v.file_path}:{v.line_number}")
+            print("\nPre-release check completed: Findings must be reviewed/resolved prior to release.")
+            return EXIT_FINDINGS
+
+        print("Pre-release check completed: No unresolved findings in scanned scope.")
+        return EXIT_CLEAN
+    else:
+        if result.vulnerabilities:
+            for v in result.vulnerabilities:
+                print(f"[{v.severity.value}] {v.vulnerability_type} in {v.file_path}:{v.line_number}")
+            return EXIT_FINDINGS
+        print("Check completed: No findings detected.")
+        return EXIT_CLEAN
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """
     CLI entry point.
@@ -567,6 +740,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         "scan": _run_scan,
         "fix": _run_fix,
         "baseline": _run_baseline,
+        "init": _run_init,
+        "doctor": _run_doctor,
+        "check": _run_check,
     }
     return asyncio.run(runners[args.command](args))
 

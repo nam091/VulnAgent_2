@@ -42,7 +42,7 @@ LINE_TOLERANCE = 3
 # *and* a false negative at once, which quietly flatters whichever engine the
 # labels were written against. Equivalence classes remove that bias.
 CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
-    {"798", "259", "260", "321", "798"},           # hard-coded credentials
+    {"798", "259", "260", "321"},                   # hard-coded credentials
     {"326", "327", "328", "916"},                   # weak crypto / hashing
     {"330", "335", "338"},                          # insecure randomness
     {"16", "605", "668", "489", "1188"},            # misconfiguration / exposure
@@ -50,7 +50,8 @@ CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
     {"79", "80", "116"},                            # cross-site scripting
     {"77", "78", "88"},                             # command injection
     {"94", "95", "96"},                             # code injection
-    {"611", "776", "827"},                          # XML external entity
+    {"611", "827"},                                 # XML external entity (XXE)
+    {"776", "400"},                                 # XML entity expansion / DoS
     {"502", "915"},                                 # deserialization
     {"89", "564", "943"},                           # SQL injection
     {"918", "441"},                                 # SSRF
@@ -58,24 +59,30 @@ CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
 )
 
 
-def cwe_matches(detected: str, labelled: str) -> bool:
+def cwe_matches(detected: str, labelled: str, exact: bool = False) -> bool:
     """
     Decide whether two CWE identifiers denote the same defect.
 
     Args:
         detected: CWE number reported by an engine
         labelled: CWE number recorded in the dataset
+        exact: Require exact numerical match without equivalence class
 
     Returns:
-        bool: True on an exact match, a known equivalence, or missing data
+        bool: True on match, False on mismatch or missing CWE
     """
 
-    if not detected or not labelled:
-        return True  # nothing to contradict; position and file still had to agree
-    if detected == labelled:
+    det = (detected or "").strip().upper().replace("CWE-", "")
+    lab = (labelled or "").strip().upper().replace("CWE-", "")
+
+    if not det or not lab:
+        return False  # missing CWE cannot claim a match
+    if det == lab:
         return True
+    if exact:
+        return False
     return any(
-        detected in group and labelled in group
+        det in group and lab in group
         for group in CWE_EQUIVALENCE
     )
 
@@ -219,7 +226,8 @@ def match(
     labels: Sequence[Label],
     name: str,
     match_mode: str = "line",
-    partial_labels: bool = False
+    partial_labels: bool = False,
+    exact_cwe: bool = False
 ) -> Metrics:
     """
     Score detections against ground truth.
@@ -232,6 +240,9 @@ def match(
         detections: Findings from one engine
         labels: Ground-truth labels
         name: Configuration name for the report
+        match_mode: "line" or "file"
+        partial_labels: Whether ground truth is incomplete
+        exact_cwe: Require exact CWE number without equivalence mapping
 
     Returns:
         Metrics: Scored result
@@ -251,7 +262,7 @@ def match(
             if match_mode == "line" and abs(detection.line - label.line) > LINE_TOLERANCE:
                 continue
             # CWE is the interoperable key; type names differ per engine.
-            if not cwe_matches(detection.cwe, label.cwe):
+            if not cwe_matches(detection.cwe, label.cwe, exact=exact_cwe):
                 continue
             claimed_labels.add(l_index)
             matched_detections.add(d_index)
@@ -449,6 +460,7 @@ async def main() -> int:
     )
     parser.add_argument("--json", help="Write full results to a JSON file")
     parser.add_argument("--no-bandit", action="store_true", help="Skip the Bandit baseline")
+    parser.add_argument("--exact-cwe", action="store_true", help="Require exact CWE number match (no equivalence classes)")
     parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
     args = parser.parse_args()
 
@@ -490,7 +502,7 @@ async def main() -> int:
         detections, seconds = await run_vulnagent(
             samples_dir, concurrency=args.concurrency, **kwargs
         )
-        metrics = match(detections, labels, name, meta["match_mode"], meta["partial_labels"])
+        metrics = match(detections, labels, name, meta["match_mode"], meta["partial_labels"], exact_cwe=args.exact_cwe)
         metrics.seconds = seconds
         results.append(metrics)
 
@@ -498,7 +510,7 @@ async def main() -> int:
         print("running Bandit...")
         detections, seconds = run_bandit(samples_dir)
         if detections:
-            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"], meta["partial_labels"])
+            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"], meta["partial_labels"], exact_cwe=args.exact_cwe)
             metrics.seconds = seconds
             results.append(metrics)
 

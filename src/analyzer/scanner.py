@@ -118,6 +118,29 @@ class ScanResult:
 
         return any(report.degraded for report in self.reports)
 
+    @property
+    def refuted_vulnerabilities(self) -> List[Vulnerability]:
+        """
+        All findings refuted by verification across files.
+        """
+        refuted: List[Vulnerability] = []
+        for report in self.reports:
+            refuted.extend(report.refuted_vulnerabilities)
+        return refuted
+
+    @property
+    def status(self) -> str:
+        """
+        Overall run status: completed, partial, or failed.
+        """
+        if not self.reports:
+            return "completed"
+        if all(r.degraded for r in self.reports):
+            return "failed"
+        if any(r.degraded for r in self.reports):
+            return "partial"
+        return "completed"
+
 
 class Scanner:
     """
@@ -126,7 +149,7 @@ class Scanner:
 
     def __init__(self, options: ScanOptions) -> None:
         self.options = options
-        self.analyzer = CodeAnalyzer(use_semgrep=False)  # rule tier is run here
+        self.analyzer = CodeAnalyzer(use_semgrep=False, use_llm=options.use_llm)  # rule tier is run here
         self.semgrep = SemgrepRunner() if options.use_semgrep else None
         self._cache_dir: Optional[Path] = None
         # Set when the rule tier fails, so a hung or missing engine is
@@ -476,22 +499,27 @@ class Scanner:
 
                 if verdict.confirmed:
                     vuln.taint_path = verdict.taint_path
+                    vuln.assessment_status = "supported"
                     # Corroboration by independent investigation, not by a
                     # second engine - kept below CONFIRMED-by-fusion.
                     vuln.confidence = max(vuln.confidence, 0.85)
                 elif verdict.refuted:
+                    vuln.assessment_status = "refuted"
                     refuted_ids.add(vuln.id)
+                else:
+                    vuln.assessment_status = "uncertain"
 
         await asyncio.gather(*(check(r, v) for r, v in candidates))
 
         dropped = 0
         for report in reports:
-            before = len(report.vulnerabilities)
-            report.vulnerabilities = [
-                v for v in report.vulnerabilities if v.id not in refuted_ids
-            ]
-            dropped += before - len(report.vulnerabilities)
-            if before != len(report.vulnerabilities):
+            refuted_in_report = [v for v in report.vulnerabilities if v.id in refuted_ids]
+            if refuted_in_report:
+                report.refuted_vulnerabilities.extend(refuted_in_report)
+                report.vulnerabilities = [
+                    v for v in report.vulnerabilities if v.id not in refuted_ids
+                ]
+                dropped += len(refuted_in_report)
                 report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
                     report.vulnerabilities
                 )
@@ -628,9 +656,6 @@ class Scanner:
             rule_findings = rule_by_file.get(relative, [])
             llm_findings = llm_by_file.get(relative, [])
 
-            if not rule_findings and not llm_findings and not self._rule_error:
-                continue
-
             fused = fusion.fuse(rule_findings, llm_findings)
             chains = self.analyzer._chain_vulnerabilities(fused.vulnerabilities)
 
@@ -640,12 +665,27 @@ class Scanner:
             else:
                 tiers["llm"] = tier_status.get(relative, "not routed")
 
+            is_failed = (
+                semgrep_status.startswith("failed")
+                or tiers["llm"].startswith("failed")
+            )
+            is_partial = (
+                semgrep_status == "unavailable"
+                or (self.options.use_llm and tiers["llm"] == "not routed")
+            )
+            report_status = "failed" if is_failed else ("partial" if is_partial else "completed")
+
             report = VulnerabilityReport(
                 file_name=relative,
                 vulnerabilities=fused.vulnerabilities,
                 chained_vulnerabilities=chains,
                 timestamp=datetime.now(),
-                tiers=tiers
+                tiers=tiers,
+                status=report_status,
+                engine_status={
+                    "semgrep": {"status": semgrep_status, "findings": len(rule_findings)},
+                    "llm": {"status": tiers["llm"], "findings": len(llm_findings)},
+                }
             )
             report.calculate_summary()
             report.calculate_risk_score()

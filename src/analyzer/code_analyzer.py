@@ -29,16 +29,16 @@ class CodeAnalyzer:
     CodeAnalyzer class for analyzing code for security vulnerabilities
     """
 
-    def __init__(self, use_semgrep: bool = True) -> None:
+    def __init__(self, use_semgrep: bool = True, use_llm: bool = True) -> None:
         """
         Initialize the code analyzer.
 
         Args:
-            use_semgrep: Run the rule tier alongside the LLM tier. Disable to
-                measure either tier in isolation during evaluation.
+            use_semgrep: Run the rule tier alongside the LLM tier.
+            use_llm: Enable the LLM tier. When False, AIClient makes zero outbound calls.
         """
 
-        self.ai_client = AIClient()
+        self.ai_client = AIClient(disabled=not use_llm)
         self.code_parser = CodeParser()
         self._repo_cache: Dict[str, str] = {}
         self.semgrep = SemgrepRunner() if use_semgrep else None

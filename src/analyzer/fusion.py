@@ -109,6 +109,7 @@ def fuse(
         match = _find_match(rule_finding, llm_findings, claimed_llm)
         if match is None:
             rule_finding.source = FindingSource.SEMGREP
+            rule_finding.engine_sources = ["SEMGREP"]
             rule_finding.confidence = CONFIDENCE[FindingSource.SEMGREP]
             merged.append(rule_finding)
             continue
@@ -120,6 +121,7 @@ def fuse(
         if id(llm_finding) in claimed_llm:
             continue
         llm_finding.source = FindingSource.LLM
+        llm_finding.engine_sources = ["LLM"]
         llm_finding.confidence = CONFIDENCE[FindingSource.LLM]
         merged.append(llm_finding)
 
@@ -216,20 +218,13 @@ def _find_match(
 def _same_file(a: Vulnerability, b: Vulnerability) -> bool:
     """
     Compare file paths, tolerating absolute vs relative forms.
-
-    Args:
-        a: First finding
-        b: Second finding
-
-    Returns:
-        bool: True when both refer to the same file
     """
 
-    path_a = str(a.location.file_path).replace("\\", "/").lower()
-    path_b = str(b.location.file_path).replace("\\", "/").lower()
-    if not path_a or not path_b:
+    raw_a = str(a.location.file_path).replace("\\", "/").strip().lower()
+    raw_b = str(b.location.file_path).replace("\\", "/").strip().lower()
+    if not raw_a or not raw_b:
         return True  # single-file scans often omit the path on one side
-    return path_a.endswith(path_b) or path_b.endswith(path_a)
+    return raw_a == raw_b or raw_a.endswith("/" + raw_b) or raw_b.endswith("/" + raw_a) or raw_a.endswith(raw_b) or raw_b.endswith(raw_a)
 
 
 def _types_agree(a: Vulnerability, b: Vulnerability) -> bool:
@@ -321,6 +316,7 @@ def _combine(rule_finding: Vulnerability, llm_finding: Vulnerability) -> Vulnera
     combined.location = rule_finding.location.model_copy(deep=True)
     combined.severity = severity
     combined.source = FindingSource.CONFIRMED
+    combined.engine_sources = ["SEMGREP", "LLM"]
     combined.confidence = CONFIDENCE[FindingSource.CONFIRMED]
     combined.rule_id = rule_finding.rule_id
     combined.merged_rule_ids = list(rule_finding.merged_rule_ids)

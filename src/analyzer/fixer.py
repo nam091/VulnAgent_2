@@ -73,6 +73,15 @@ def classify_patch(original: str, replacement: str) -> List[str]:
     if "return" in replacement and "return" not in original:
         reasons.append("introduces a return statement")
 
+    # Constant return or trivial bypass (e.g. replacing auth check with return True)
+    if re.search(r"^\s*return\s+(True|False|None|\d+|['\"].*['\"])\s*$", replacement, re.MULTILINE):
+        if not re.search(r"^\s*return\s+(True|False|None|\d+|['\"].*['\"])\s*$", original, re.MULTILINE):
+            reasons.append("replaces dynamic logic with a constant return")
+
+    if re.search(r"^\s*(pass|\.\.\.)\s*$", replacement, re.MULTILINE):
+        if not re.search(r"^\s*(pass|\.\.\.)\s*$", original, re.MULTILINE):
+            reasons.append("replaces logic with a no-op statement")
+
     return reasons
 
 
@@ -406,8 +415,16 @@ def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
             files_changed += 1
             continue
 
+        full_text = "\n".join(lines)
+        if file_path.suffix.lower() == ".py":
+            try:
+                ast.parse(full_text)
+            except SyntaxError as e:
+                logging.error(f"Cannot apply coordinated patches to {file_path}: syntax error: {e}")
+                continue
+
         try:
-            file_path.write_text("\n".join(lines), encoding="utf-8")
+            file_path.write_text(full_text, encoding="utf-8")
             files_changed += 1
         except OSError as e:
             logging.error(f"Cannot write {file_path}: {e}")

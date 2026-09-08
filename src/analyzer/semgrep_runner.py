@@ -164,6 +164,14 @@ class SemgrepTimeout(SemgrepUnavailable):
     """
 
 
+class SemgrepExecutionError(SemgrepUnavailable):
+    """Raised when semgrep exits with an abnormal return code."""
+
+
+class SemgrepOutputError(SemgrepUnavailable):
+    """Raised when semgrep returns malformed JSON or unexpected schema."""
+
+
 class SemgrepRunner:
     """
     Wrapper around the semgrep CLI that returns Vulnerability objects.
@@ -187,6 +195,8 @@ class SemgrepRunner:
         self.configs = configs
         self.timeout = timeout
         self.executable = executable or shutil.which("semgrep")
+        self.last_errors: List[Dict[str, Any]] = []
+        self.last_stats: Dict[str, Any] = {}
 
     @property
     def available(self) -> bool:
@@ -318,16 +328,25 @@ class SemgrepRunner:
 
         # Exit code 1 means findings were reported, which is not an error.
         if proc.returncode not in (0, 1):
-            logging.error(f"Semgrep exited {proc.returncode}: {proc.stderr[:500]}")
-            return []
+            msg = f"Semgrep exited with unexpected code {proc.returncode}: {proc.stderr[:500]}"
+            logging.error(msg)
+            raise SemgrepExecutionError(msg)
 
         try:
             payload = json.loads(proc.stdout or "{}")
         except json.JSONDecodeError as e:
-            logging.error(f"Could not parse semgrep JSON output: {e}")
-            return []
+            msg = f"Could not parse semgrep JSON output: {e}"
+            logging.error(msg)
+            raise SemgrepOutputError(msg)
 
-        for err in payload.get("errors", []):
+        if not isinstance(payload, dict) or "results" not in payload:
+            msg = "Semgrep output does not contain expected 'results' dictionary"
+            logging.error(msg)
+            raise SemgrepOutputError(msg)
+
+        self.last_errors = payload.get("errors", [])
+        self.last_stats = payload.get("stats", {})
+        for err in self.last_errors:
             logging.warning(f"Semgrep error: {err.get('message', err)}")
 
         return payload.get("results", [])

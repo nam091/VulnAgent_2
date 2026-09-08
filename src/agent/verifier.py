@@ -19,13 +19,14 @@ dataflow evidence for vulnerability chaining comes from.
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agent.loop import ToolCallingAgent
 from agent.tools import TOOL_SCHEMAS, CodeTools
-from models.vulnerability import FindingSource, Vulnerability
+from models.vulnerability import FindingSource, Vulnerability, VulnerabilityType
 
 SYSTEM_PROMPT = """You are a security engineer reviewing a vulnerability report written
 by someone else. Your job is to find the reason the report is WRONG.
@@ -100,6 +101,9 @@ class Verdict:
     mitigating_control: str = ""
     tool_calls: int = 0
     investigated: bool = False
+    hit_turn_cap: bool = False
+    tools_unsupported: bool = False
+    duration_seconds: float = 0.0
     error: str = ""
 
     @property
@@ -120,6 +124,10 @@ class Verdict:
             "mitigating_control": self.mitigating_control,
             "tool_calls": self.tool_calls,
             "investigated": self.investigated,
+            "hit_turn_cap": self.hit_turn_cap,
+            "tools_unsupported": self.tools_unsupported,
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
         }
 
 
@@ -185,25 +193,65 @@ class VerificationAgent:
             context=(vuln.location.context or "(not captured)")[:1500],
         )
 
+        start_time = time.perf_counter()
         try:
             run = await agent.run(SYSTEM_PROMPT, prompt)
         except Exception as e:
             logging.error(f"Verification failed for {vuln.type.value}: {e}")
-            return Verdict(verdict="uncertain", error=str(e))
+            return Verdict(
+                verdict="uncertain",
+                error=str(e),
+                duration_seconds=round(time.perf_counter() - start_time, 2)
+            )
 
         verdict = self._parse(run.text)
         verdict.tool_calls = run.tool_calls
         verdict.investigated = run.investigated
+        verdict.duration_seconds = round(time.perf_counter() - start_time, 2)
+        if hasattr(run, "hit_turn_cap"):
+            verdict.hit_turn_cap = getattr(run, "hit_turn_cap", False)
 
-        # A refutation that cites no evidence is an opinion, and letting it
-        # delete a real finding is worse than keeping a false positive.
-        if verdict.refuted and not verdict.mitigating_control.strip():
-            logging.info(
-                f"Refutation without a named control for {vuln.type.value} "
-                f"at {vuln.location.file_path}:{vuln.location.start_line}; "
-                "downgraded to uncertain"
-            )
-            verdict.verdict = "uncertain"
+        # Refutation decision policy
+        if verdict.refuted:
+            if not verdict.mitigating_control.strip():
+                logging.info(
+                    f"Refutation without a named control for {vuln.type.value} "
+                    f"at {vuln.location.file_path}:{vuln.location.start_line}; "
+                    "downgraded to uncertain"
+                )
+                verdict.verdict = "uncertain"
+                verdict.reason = "Bác bỏ không có tên hoặc mô tả biện pháp kiểm soát cụ thể."
+            elif verdict.tool_calls == 0:
+                logging.info(
+                    f"Zero-tool refutation for {vuln.type.value} "
+                    f"at {vuln.location.file_path}:{vuln.location.start_line}; "
+                    "downgraded to uncertain"
+                )
+                verdict.verdict = "uncertain"
+                verdict.reason = "Agent không gọi công cụ kiểm tra mã nguồn để xác thực kiểm soát."
+            elif verdict.evidence_file:
+                try:
+                    resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
+                    if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
+                        logging.info(
+                            f"Refutation cites invalid/escaping file {verdict.evidence_file}; "
+                            "downgraded to uncertain"
+                        )
+                        verdict.verdict = "uncertain"
+                        verdict.reason = f"File bằng chứng '{verdict.evidence_file}' không tồn tại trong phạm vi quét."
+                except Exception:
+                    verdict.verdict = "uncertain"
+
+        # Confirmation decision policy
+        if verdict.confirmed:
+            if vuln.type in (
+                VulnerabilityType.SQL_INJECTION,
+                VulnerabilityType.OS_COMMAND_INJECTION,
+                VulnerabilityType.PATH_TRAVERSAL
+            ):
+                if not verdict.taint_path and not verdict.reason:
+                    verdict.verdict = "uncertain"
+                    verdict.reason = "Xác nhận thiếu chuỗi dữ liệu (taint path) hoặc lý do cụ thể."
 
         return verdict
 
@@ -234,9 +282,12 @@ class VerificationAgent:
 
         try:
             payload = json.loads(body)
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, Exception) as e:
             logging.debug(f"Unparseable verdict: {text[:200]}")
             return Verdict(error=f"unparseable verdict: {e}")
+
+        if not isinstance(payload, dict):
+            return Verdict(error="verdict payload must be a JSON object")
 
         verdict = str(payload.get("verdict", "uncertain")).lower().strip()
         if verdict not in ("confirmed", "refuted", "uncertain"):
@@ -246,11 +297,21 @@ class VerificationAgent:
         if not isinstance(path, list):
             path = []
 
+        line_val = payload.get("evidence_line")
+        try:
+            if isinstance(line_val, str):
+                digits = re.findall(r"\d+", line_val)
+                evidence_line = int(digits[0]) if digits else 0
+            else:
+                evidence_line = int(line_val or 0)
+        except (ValueError, TypeError):
+            evidence_line = 0
+
         return Verdict(
             verdict=verdict,
-            reason=str(payload.get("reason", ""))[:600],
-            evidence_file=str(payload.get("evidence_file", ""))[:300],
-            evidence_line=int(payload.get("evidence_line") or 0),
+            reason=str(payload.get("reason", "") or "")[:600],
+            evidence_file=str(payload.get("evidence_file", "") or "")[:300],
+            evidence_line=evidence_line,
             taint_path=[p for p in path if isinstance(p, dict)][:12],
-            mitigating_control=str(payload.get("mitigating_control", ""))[:400],
+            mitigating_control=str(payload.get("mitigating_control", "") or "")[:400],
         )

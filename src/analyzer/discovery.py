@@ -195,6 +195,16 @@ def discover(
     for path in candidates:
         if path.suffix.lower() not in suffixes:
             continue
+        # Reject symlinks or files that escape the scan root
+        try:
+            resolved = path.resolve()
+            if resolved != root and root not in resolved.parents:
+                logging.warning(f"Skipping path escaping scan root: {path} -> {resolved}")
+                skipped += 1
+                continue
+        except (OSError, ValueError):
+            continue
+
         if _is_excluded(path, root, patterns):
             skipped += 1
             continue

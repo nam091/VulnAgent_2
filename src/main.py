@@ -217,14 +217,19 @@ def _package(result: Any) -> Dict[str, Any]:
         {
             "file": report.file_name,
             "findings": len(report.vulnerabilities),
+            "refuted": len(report.refuted_vulnerabilities),
             "risk_score": report.risk_score or 0,
             "tiers": report.tiers,
+            "status": getattr(report, "status", "completed"),
+            "engine_status": getattr(report, "engine_status", {}),
         }
         for report in result.reports
     ]
 
     return {
         "findings": [_serialise(v) for v in vulns],
+        "refuted_findings": [_serialise(v) for v in getattr(result, "refuted_vulnerabilities", [])],
+        "status": getattr(result, "status", "completed"),
         "counts": counts,
         "sources": sources,
         "chains": chains,

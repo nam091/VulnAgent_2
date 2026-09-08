@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 MAX_TOOL_RESULT_CHARS = 6_000
 
@@ -118,15 +118,38 @@ class ToolCallingAgent:
 
             messages.append(self._assistant_message(message, tool_calls))
 
+            call_signatures: Set[str] = set()
             for call in tool_calls:
                 name, arguments = self._parse_call(call)
-                result = self.dispatch(name, arguments)
+                arg_key = f"{name}:{json.dumps(arguments, sort_keys=True)}"
+
+                if arg_key in call_signatures:
+                    result = {
+                        "error": "Duplicate tool call with identical arguments in the same turn. Proceed with analysis."
+                    }
+                else:
+                    call_signatures.add(arg_key)
+                    try:
+                        result = self.dispatch(name, arguments)
+                    except Exception as e:
+                        logging.debug(f"Tool {name} dispatch raised: {e}")
+                        result = {"error": f"Tool '{name}' failed: {e}"}
+
                 run.tool_calls += 1
                 run.transcript.append({"tool": name, "args": arguments})
 
+                # Ensure result is safely truncated without breaking JSON structure
+                if isinstance(result, dict) and "content" in result and isinstance(result["content"], str):
+                    if len(result["content"]) > MAX_TOOL_RESULT_CHARS:
+                        result["content"] = result["content"][:MAX_TOOL_RESULT_CHARS] + "\n... [truncated]"
+                        result["truncated"] = True
+
                 payload = json.dumps(result, ensure_ascii=False, default=str)
-                if len(payload) > MAX_TOOL_RESULT_CHARS:
-                    payload = payload[:MAX_TOOL_RESULT_CHARS] + '... (truncated)"}'
+                if len(payload) > MAX_TOOL_RESULT_CHARS + 500:
+                    payload = json.dumps({
+                        "note": "Tool output too large; truncated",
+                        "summary": str(result)[:MAX_TOOL_RESULT_CHARS] + "..."
+                    })
 
                 messages.append({
                     "role": "tool",
