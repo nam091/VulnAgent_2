@@ -5,42 +5,41 @@
 
 > **VulnAgent** finds security vulnerabilities in source code by running a rule
 > engine and a large language model as **two independent tiers**, then merging
-> their results. Findings both tiers agree on are marked `confirmed`; findings
-> only one tier reports are labelled as such and scored lower.
+> their results. Findings both tiers agree on are labelled `corroborated` (`both-engines`);
+> findings only one tier reports are marked as single-source (`rule-only` or `llm-only`).
+> Concrete verification is separated from detection and requires grounded code evidence.
 
 ## Why two tiers
 
-Measured by `eval/run_eval.py` on 11 labelled vulnerabilities across three
-files, one of which is deliberately clean:
+Evaluated on a development smoke test (11 labelled vulnerabilities across three files, with documented clean controls):
 
 | Configuration | TP | FP | FN | Precision | Recall | F1 |
 |---|---|---|---|---|---|---|
 | VulnAgent, everything | 11 | 9 | 0 | 0.550 | **1.000** | 0.710 |
-| **VulnAgent, confirmed only** | 8 | **0** | 3 | **1.000** | 0.727 | **0.842** |
+| **VulnAgent, corroborated only** | 8 | **0** | 3 | **1.000** | 0.727 | **0.842** |
 | Semgrep only | 8 | 2 | 3 | 0.800 | 0.727 | 0.762 |
 | LLM only | 11 | 7 | 0 | 0.611 | **1.000** | 0.759 |
 | Bandit (baseline) | 7 | 6 | 4 | 0.538 | 0.636 | 0.583 |
 
 Read the first row carefully: **simply merging both tiers is worse than
-either tier alone.** It inherits every false positive from both and scores
+either tier alone.** It inherits false positives from both and scores
 F1 0.710, below Semgrep's 0.762 and the LLM's 0.759. Running two engines and
 reporting the union buys nothing.
 
 What earns its keep is the second row. Because the tiers run **independently**,
-agreement between them is evidence — and filtering to findings both engines
-reached separately gives perfect precision on this set and the best F1 of any
-configuration.
+heuristic agreement between them acts as a filter on candidate findings.
+Filtering to findings corroborated by both engines significantly reduces noise on this sample.
 
 So the value is not "two engines find more". It is that **independent
-agreement is a reliable confidence signal**, which is why the rule tier is
+corroboration provides a heuristic ranking signal**, which is why the rule tier is
 not used as a pre-filter on the LLM tier: gating one on the other would
 destroy the independence the whole design rests on, and would have discarded
 the hardcoded credentials the rule engine never had a pattern for.
 
 The two rows also bracket a real trade-off you choose per context: report
-everything for a human reviewing a pull request (recall 1.000), gate CI on
-confirmed findings only (precision 1.000). `--confirmed-only` switches
-between them.
+everything for a human reviewing a pull request, or gate on
+corroborated findings for lower noise. `--confirmed-only` (alias for corroborated)
+switches between them.
 
 > **On dataset size.** Eleven labels across three files is a smoke test, not
 > an evaluation. The numbers move meaningfully per sample at this size. Treat

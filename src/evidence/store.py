@@ -1,5 +1,6 @@
 import hashlib
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -75,22 +76,53 @@ class EvidenceStore:
     ) -> EvidenceRecord:
         """
         Issue an opaque evidence ID for a verified safe file read.
+        Strictly verifies line bounds and checks that content matches the actual file on disk.
         """
-        if content is None:
-            try:
-                line_info = self.reader.read_lines(path, start_line, end_line)
-                content = "\n".join(line_info.get("raw_lines", []))
-            except Exception:
-                content = ""
         manifest = self._snapshots.get(snapshot_id)
-        file_hash = manifest.files.get(path, "") if manifest else ""
+        manifest_file_hash = manifest.files.get(path, "") if manifest else ""
 
-        if not file_hash:
-            try:
-                real_file = self.reader.resolve(path)
-                file_hash = hashlib.sha256(real_file.read_bytes()).hexdigest()
-            except Exception:
-                file_hash = "unknown"
+        # Safely resolve target file
+        try:
+            real_file = self.reader.resolve(path)
+            if not real_file.is_file():
+                return self._create_invalid_record(
+                    snapshot_id, path, start_line, end_line, "File not found", origin
+                )
+            file_bytes = real_file.read_bytes()
+            current_file_hash = hashlib.sha256(file_bytes).hexdigest()
+            file_text = file_bytes.decode("utf-8", errors="replace")
+            lines = file_text.splitlines()
+            total_lines = len(lines)
+        except Exception as e:
+            return self._create_invalid_record(
+                snapshot_id, path, start_line, end_line, f"Read error: {e}", origin
+            )
+
+        file_hash = manifest_file_hash or current_file_hash
+
+        # Strict line bounds check (B03)
+        if start_line < 1 or end_line < start_line or start_line > total_lines or end_line > total_lines:
+            return self._create_invalid_record(
+                snapshot_id, path, start_line, end_line,
+                f"Line range {start_line}-{end_line} is out of bounds (file has {total_lines} lines)",
+                origin, file_hash=file_hash
+            )
+
+        actual_excerpt_lines = lines[start_line - 1:end_line]
+        actual_content = "\n".join(actual_excerpt_lines)
+
+        # Content verification: if caller supplied content, it must strictly match disk content (B03)
+        if content is not None:
+            norm_supplied = "\n".join(content.splitlines())
+            norm_actual = "\n".join(actual_content.splitlines())
+            if norm_supplied != norm_actual:
+                return self._create_invalid_record(
+                    snapshot_id, path, start_line, end_line,
+                    "Fabricated content: provided content does not match code on disk",
+                    origin, file_hash=file_hash
+                )
+        else:
+            content = actual_content
 
         excerpt_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         key = f"{snapshot_id}:{path}:{start_line}:{end_line}:{excerpt_hash[:8]}"
@@ -112,6 +144,34 @@ class EvidenceStore:
         self._evidence[evidence_id] = record
         return record
 
+    def _create_invalid_record(
+        self,
+        snapshot_id: str,
+        path: str,
+        start_line: int,
+        end_line: int,
+        reason: str,
+        origin: str,
+        file_hash: str = "invalid"
+    ) -> EvidenceRecord:
+        key = f"{snapshot_id}:{path}:{start_line}:{end_line}:invalid:{uuid.uuid4().hex[:6]}"
+        evidence_id = f"ev_invalid_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:12]}"
+        record = EvidenceRecord(
+            evidence_id=evidence_id,
+            snapshot_id=snapshot_id,
+            path=path,
+            content_hash=file_hash,
+            start_line=start_line,
+            end_line=end_line,
+            excerpt_hash="invalid",
+            origin=origin,
+            read_succeeded=False,
+            content="",
+            status=EvidenceStatus.INVALID,
+        )
+        self._evidence[evidence_id] = record
+        return record
+
     def validate_evidence(
         self,
         evidence_id: str,
@@ -119,10 +179,14 @@ class EvidenceStore:
     ) -> Tuple[bool, EvidenceStatus, str]:
         """
         Validate evidence authenticity against the current snapshot and working tree state.
+        Verifies line bounds, file hash, and excerpt hash against current disk content.
         """
         record = self._evidence.get(evidence_id)
         if not record:
             return False, EvidenceStatus.MISSING, f"Evidence '{evidence_id}' does not exist"
+
+        if record.status != EvidenceStatus.VALID or not record.read_succeeded:
+            return False, EvidenceStatus.INVALID, f"Evidence '{evidence_id}' is invalid"
 
         if record.snapshot_id != current_snapshot_id:
             return False, EvidenceStatus.STALE, (
@@ -130,12 +194,28 @@ class EvidenceStore:
                 f"not current '{current_snapshot_id}'"
             )
 
-        # Check if file has changed on disk
+        # Check if file has changed on disk or lines are out of bounds
         try:
             target = self.reader.resolve(record.path)
-            current_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+            if not target.is_file():
+                return False, EvidenceStatus.STALE, f"File '{record.path}' no longer exists on disk"
+
+            file_bytes = target.read_bytes()
+            current_hash = hashlib.sha256(file_bytes).hexdigest()
             if record.content_hash and record.content_hash != "unknown" and current_hash != record.content_hash:
                 return False, EvidenceStatus.STALE, f"File '{record.path}' was modified on disk after snapshot"
+
+            file_text = file_bytes.decode("utf-8", errors="replace")
+            lines = file_text.splitlines()
+            total_lines = len(lines)
+            if record.start_line < 1 or record.end_line < record.start_line or record.start_line > total_lines or record.end_line > total_lines:
+                return False, EvidenceStatus.INVALID, f"Line range {record.start_line}-{record.end_line} out of bounds"
+
+            actual_excerpt = "\n".join(lines[record.start_line - 1:record.end_line])
+            actual_excerpt_hash = hashlib.sha256(actual_excerpt.encode("utf-8")).hexdigest()
+            if actual_excerpt_hash != record.excerpt_hash:
+                return False, EvidenceStatus.STALE, "Excerpt content has changed on disk"
+
         except Exception as e:
             return False, EvidenceStatus.INVALID, f"Failed to verify file '{record.path}': {e}"
 

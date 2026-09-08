@@ -299,7 +299,11 @@ class SemgrepRunner:
         ]
         for config in self.configs:
             cmd.extend(["--config", config])
-        cmd.append(str(target))
+        if isinstance(target, (list, tuple, set)):
+            for t in target:
+                cmd.append(str(t))
+        else:
+            cmd.append(str(target))
 
         try:
             proc = subprocess.run(

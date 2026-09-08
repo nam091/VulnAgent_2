@@ -211,7 +211,7 @@ class VerificationAgent:
         if hasattr(run, "hit_turn_cap"):
             verdict.hit_turn_cap = getattr(run, "hit_turn_cap", False)
 
-        # Refutation decision policy
+        # Refutation decision policy (B02 / G2)
         if verdict.refuted:
             if not verdict.mitigating_control.strip():
                 logging.info(
@@ -221,15 +221,23 @@ class VerificationAgent:
                 )
                 verdict.verdict = "uncertain"
                 verdict.reason = "Bác bỏ không có tên hoặc mô tả biện pháp kiểm soát cụ thể."
-            elif verdict.tool_calls == 0:
+            elif not verdict.investigated or verdict.tool_calls == 0:
                 logging.info(
-                    f"Zero-tool refutation for {vuln.type.value} "
+                    f"Refutation without successful tool investigation for {vuln.type.value} "
                     f"at {vuln.location.file_path}:{vuln.location.start_line}; "
                     "downgraded to uncertain"
                 )
                 verdict.verdict = "uncertain"
-                verdict.reason = "Agent không gọi công cụ kiểm tra mã nguồn để xác thực kiểm soát."
-            elif verdict.evidence_file:
+                verdict.reason = "Agent không thực hiện đọc mã nguồn thành công để kiểm chứng."
+            elif not verdict.evidence_file or not verdict.evidence_file.strip():
+                logging.info(
+                    f"Refutation without evidence file for {vuln.type.value} "
+                    f"at {vuln.location.file_path}:{vuln.location.start_line}; "
+                    "downgraded to uncertain"
+                )
+                verdict.verdict = "uncertain"
+                verdict.reason = "Bác bỏ thiếu đường dẫn file bằng chứng chứng minh kiểm soát an toàn."
+            else:
                 try:
                     resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
                     if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
@@ -239,8 +247,14 @@ class VerificationAgent:
                         )
                         verdict.verdict = "uncertain"
                         verdict.reason = f"File bằng chứng '{verdict.evidence_file}' không tồn tại trong phạm vi quét."
-                except Exception:
+                    elif verdict.evidence_line is not None:
+                        total_lines = len(resolved.read_text(encoding="utf-8", errors="replace").splitlines())
+                        if verdict.evidence_line < 1 or verdict.evidence_line > total_lines:
+                            verdict.verdict = "uncertain"
+                            verdict.reason = f"Dòng bằng chứng {verdict.evidence_line} ngoài phạm vi file '{verdict.evidence_file}' ({total_lines} dòng)."
+                except Exception as e:
                     verdict.verdict = "uncertain"
+                    verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"
 
         # Confirmation decision policy
         if verdict.confirmed:

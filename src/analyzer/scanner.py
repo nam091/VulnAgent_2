@@ -50,7 +50,8 @@ class ScanOptions:
         verify_all: bool = False,
         verify_turns: int = 6,
         progress: Optional[Callable[[Dict[str, Any]], None]] = None,
-        on_partial: Optional[Callable[[List[VulnerabilityReport]], None]] = None
+        on_partial: Optional[Callable[[List[VulnerabilityReport]], None]] = None,
+        files: Optional[List[str]] = None,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -61,6 +62,7 @@ class ScanOptions:
         self.excludes = excludes or []
         self.use_cache = use_cache
         self.cache_dir = cache_dir
+        self.files = files
         # Adversarial verification. By default it runs only on LLM-only
         # findings, which is where the measured false positives are; findings
         # two independent engines already agreed on do not need a third
@@ -178,6 +180,12 @@ class Scanner:
         files = await asyncio.to_thread(
             discover, self.options.target, self.options.excludes
         )
+        if self.options.files:
+            file_set = {str(Path(f).as_posix()) for f in self.options.files} | {Path(f).name for f in self.options.files}
+            files = [
+                f for f in files
+                if f.relative in file_set or f.path.name in file_set or f.path.as_posix() in file_set
+            ]
         if not files:
             logging.warning(f"No source files found under {self.options.target}")
             self._emit("done", "No source files found", 100)
@@ -327,11 +335,10 @@ class Scanner:
             return {}
 
         try:
-            # semgrep is a blocking subprocess run. Called directly from the
-            # event loop it froze the whole server for the length of the scan:
-            # no progress frames, no other requests answered, and a progress
-            # bar that could not move because nothing could be delivered.
-            findings = await asyncio.to_thread(self.semgrep.scan, self.options.target)
+            semgrep_target: Any = self.options.target
+            if self.options.files and in_scope:
+                semgrep_target = [str((root / rel).resolve()) for rel in in_scope]
+            findings = await asyncio.to_thread(self.semgrep.scan, semgrep_target)
         except SemgrepUnavailable as e:
             logging.error(f"Rule tier failed: {e}")
             self._rule_error = str(e)

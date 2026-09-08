@@ -503,6 +503,7 @@ async def scan_changes(
         target=str(root),
         use_llm=False,
         use_semgrep=True,
+        files=expanded_files,
     )
     scanner = Scanner(options)
     result = await scanner.scan()
@@ -753,26 +754,52 @@ async def check_fix(
             "summary": "Fix broke syntax. Check errors and repair.",
         }
 
-    options = ScanOptions(target=str(root), use_llm=False, use_semgrep=True)
+    options = ScanOptions(
+        target=str(root),
+        use_llm=False,
+        use_semgrep=True,
+        files=session.get("expanded_files") or changed_files,
+    )
     new_result = await Scanner(options).scan()
-    current_vuln_ids = {v.id for v in new_result.vulnerabilities}
 
-    target_ids = set(finding_ids) if finding_ids else set(session["findings"].keys())
+    target_ids = list(finding_ids) if finding_ids else list(session["findings"].keys())
+
+    # Gate: Failed or degraded scan cannot confirm fixes (B01/B16)
+    scan_status = getattr(new_result, "status", "completed")
+    if new_result.degraded or scan_status != "completed":
+        return {
+            "syntax_valid": True,
+            "clean": False,
+            "status": "incomplete",
+            "degraded": True,
+            "scan_status": scan_status,
+            "resolved_findings": [],
+            "persistent_findings": target_ids,
+            "new_regressions": [],
+            "summary": (
+                f"Verification scan failed or was degraded (status={scan_status}, degraded={new_result.degraded}). "
+                "Findings cannot be marked as resolved."
+            ),
+        }
+
+    current_vuln_ids = {v.id for v in new_result.vulnerabilities}
     resolved = [fid for fid in target_ids if fid not in current_vuln_ids]
     persistent = [fid for fid in target_ids if fid in current_vuln_ids]
 
     old_ids = set(session["findings"].keys())
     new_regressions = [
         _to_dict(v) for v in new_result.vulnerabilities
-        if v.id not in old_ids and v.location.file_path in set(changed_files)
+        if v.id not in old_ids and (v.location.file_path in set(changed_files) or Path(v.location.file_path).name in set(changed_files))
     ]
 
     return {
         "syntax_valid": True,
+        "clean": len(persistent) == 0 and len(new_regressions) == 0,
+        "status": "completed",
+        "degraded": False,
         "resolved_findings": resolved,
         "persistent_findings": persistent,
         "new_regressions": new_regressions,
-        "clean": len(persistent) == 0 and len(new_regressions) == 0,
         "summary": (
             f"Fix verification: {len(resolved)} resolved, {len(persistent)} persistent, "
             f"{len(new_regressions)} regression(s)."
