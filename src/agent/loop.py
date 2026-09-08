@@ -219,6 +219,7 @@ class ToolCallingAgent:
 
             raw_lines = result.get("raw_lines") or []
             # Truncate line-by-line so recorded range strictly reflects what model sees (P1 bug 3)
+            is_partial_line = False
             if len(content) > MAX_TOOL_RESULT_CHARS:
                 body_lines = content.split("\n")
                 kept_body = []
@@ -237,11 +238,18 @@ class ToolCallingAgent:
                     kept_body.append(body_lines[0][:MAX_TOOL_RESULT_CHARS])
                     if raw_lines:
                         kept_raw.append(raw_lines[0][:MAX_TOOL_RESULT_CHARS])
+                    is_partial_line = True
 
                 result["content"] = "\n".join(kept_body) + "\n... [truncated]"
                 result["truncated"] = True
                 content = result["content"]
                 raw_lines = kept_raw
+
+            # A line cut midway cannot count as whole-line evidence (P1 requirement)
+            if is_partial_line:
+                result["start_line"] = None
+                result["end_line"] = None
+                return []
 
             # Extract line numbers strictly present in the delivered output
             visible_line_nums = [
@@ -267,13 +275,14 @@ class ToolCallingAgent:
                     )
                     evidence_id = rec.evidence_id if rec.read_succeeded else ""
 
-                reads.append({
-                    "tool": name,
-                    "path": target_path,
-                    "start_line": actual_start,
-                    "end_line": actual_end,
-                    "evidence_id": evidence_id,
-                })
+                if evidence_id:
+                    reads.append({
+                        "tool": name,
+                        "path": target_path,
+                        "start_line": actual_start,
+                        "end_line": actual_end,
+                        "evidence_id": evidence_id,
+                    })
 
         elif name == "find_definition":
             if result.get("found") is True and result.get("definitions"):
@@ -303,13 +312,14 @@ class ToolCallingAgent:
                             )
                             evidence_id = rec.evidence_id if rec.read_succeeded else ""
 
-                        reads.append({
-                            "tool": name,
-                            "path": dfile,
-                            "start_line": start_line,
-                            "end_line": end_line,
-                            "evidence_id": evidence_id,
-                        })
+                        if evidence_id:
+                            reads.append({
+                                "tool": name,
+                                "path": dfile,
+                                "start_line": start_line,
+                                "end_line": end_line,
+                                "evidence_id": evidence_id,
+                            })
 
         elif name == "search":
             matches = result.get("matches")
@@ -331,13 +341,14 @@ class ToolCallingAgent:
                             )
                             evidence_id = rec.evidence_id if rec.read_succeeded else ""
 
-                        reads.append({
-                            "tool": name,
-                            "path": mfile,
-                            "start_line": mline,
-                            "end_line": mline,
-                            "evidence_id": evidence_id,
-                        })
+                        if evidence_id:
+                            reads.append({
+                                "tool": name,
+                                "path": mfile,
+                                "start_line": mline,
+                                "end_line": mline,
+                                "evidence_id": evidence_id,
+                            })
 
         return reads
 

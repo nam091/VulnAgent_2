@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import pytest
 
-from agent.loop import AgentRun
+from agent.loop import AgentRun, ToolCallingAgent
 from agent.verifier import Verdict, VerificationAgent
 from evidence.store import EvidenceStore
 from mcp_server import _scan_sessions, check_fix, get_finding_context, read_evidence
@@ -111,16 +111,35 @@ async def test_verifier_requires_successful_read_and_matching_citation(tmp_path:
         assert verdict.verdict == "uncertain"
 
     # Case D: Legitimate refutation where cited file and line were actually read
+    rec = verifier.evidence_store.record_evidence(
+        snapshot_id=verifier.snapshot_id,
+        path="app.py",
+        start_line=1,
+        end_line=2,
+        origin="read_lines",
+    )
     run_valid = AgentRun(
         text='{"verdict": "refuted", "mitigating_control": "uses int() cast", "evidence_file": "app.py", "evidence_line": 2}',
         tool_calls=1,
-        successful_reads=[{"tool": "read_lines", "path": "app.py", "start_line": 1, "end_line": 2}]
+        successful_reads=[{"tool": "read_lines", "path": "app.py", "start_line": 1, "end_line": 2, "evidence_id": rec.evidence_id}]
     )
     with patch("agent.loop.ToolCallingAgent.run", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = run_valid
         verdict = await verifier.verify(vuln)
         assert verdict.verdict == "refuted"
         assert verdict.investigated is True
+
+    # Case E: Missing evidence_id in successful_reads -> must downgrade to uncertain
+    run_no_eid = AgentRun(
+        text='{"verdict": "refuted", "mitigating_control": "uses int() cast", "evidence_file": "app.py", "evidence_line": 2}',
+        tool_calls=1,
+        successful_reads=[{"tool": "read_lines", "path": "app.py", "start_line": 1, "end_line": 2, "evidence_id": ""}]
+    )
+    with patch("agent.loop.ToolCallingAgent.run", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = run_no_eid
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert "thiếu mã bằng chứng" in verdict.reason
 
 
 def test_evidence_store_snapshot_membership(tmp_path: Path):
@@ -377,3 +396,69 @@ async def test_e2e_verifier_rejects_file_modified_after_read(tmp_path: Path):
         verdict = await verifier.verify(vuln)
         assert verdict.verdict == "uncertain"
         assert "không còn hợp lệ" in verdict.reason or "thay đổi" in verdict.reason
+
+
+def test_midway_cut_line_not_recorded_as_read(tmp_path: Path):
+    """
+    Unit test: read_lines with a line exceeding MAX_TOOL_RESULT_CHARS is cut midway.
+    It must not be recorded as a valid whole-line read.
+    """
+    long_content = "  1 | x = '" + ("A" * 7000) + "' # HIDDEN_CONTROL"
+    raw_lines = ["x = '" + ("A" * 7000) + "' # HIDDEN_CONTROL"]
+    store = EvidenceStore(tmp_path)
+    snap_id = store.create_snapshot().snapshot_id
+
+    agent = ToolCallingAgent(
+        client=None,
+        model="test",
+        dispatch=lambda *a: {},
+        tool_schemas=[],
+        evidence_store=store,
+        snapshot_id=snap_id,
+    )
+
+    tool_result = {
+        "path": "app.py",
+        "content": long_content,
+        "raw_lines": raw_lines,
+        "start_line": 1,
+        "end_line": 1,
+    }
+    reads = agent._process_tool_result_and_reads("read_lines", {"path": "app.py"}, tool_result)
+    assert reads == []
+    assert tool_result.get("start_line") is None
+    assert tool_result.get("end_line") is None
+
+
+@pytest.mark.asyncio
+async def test_e2e_verifier_rejects_citation_from_midway_cut_line(tmp_path: Path):
+    """
+    Test P1 Bug: Single line longer than MAX_TOOL_RESULT_CHARS (6000).
+    Tail of line contains HIDDEN_CONTROL, which is truncated and never delivered to model.
+    Model cites the line claiming HIDDEN_CONTROL -> must be downgraded to uncertain.
+    """
+    long_line = "x = '" + ("A" * 7100) + "' # safe: HIDDEN_CONTROL\n"
+    app_file = tmp_path / "app.py"
+    app_file.write_text(long_line, encoding="utf-8")
+
+    verifier = VerificationAgent(client=None, model="test-model", root=tmp_path)
+    vuln = make_vuln(file_path="app.py", start_line=1)
+
+    # Turn 1: model reads line 1
+    msg1 = MockMessage(tool_calls=[MockToolCall("read_lines", {"path": "app.py", "start_line": 1, "end_line": 1})])
+    # Turn 2: model claims refuted citing line 1 with HIDDEN_CONTROL
+    msg2 = MockMessage(content=json.dumps({
+        "verdict": "refuted",
+        "mitigating_control": "HIDDEN_CONTROL",
+        "evidence_file": "app.py",
+        "evidence_line": 1
+    }))
+
+    with patch("agent.loop.ToolCallingAgent._complete", new_callable=AsyncMock, side_effect=[msg1, msg2]):
+        verdict = await verifier.verify(vuln)
+        assert verdict.verdict == "uncertain"
+        assert (
+            verdict.investigated is False
+            or "chưa từng được đọc" in verdict.reason
+            or "thiếu mã bằng chứng" in verdict.reason
+        )

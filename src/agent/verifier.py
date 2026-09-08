@@ -306,9 +306,22 @@ class VerificationAgent:
                                 verdict.verdict = "uncertain"
                                 verdict.reason = f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' chưa từng được đọc thành công trong phiên điều tra."
                             else:
-                                # Validate evidence integrity with EvidenceStore (P1 bug 4)
+                                # Validate evidence integrity with EvidenceStore (refuted requires valid evidence ID)
                                 eid = matched_read.get("evidence_id")
-                                if eid:
+                                if not eid:
+                                    logging.info(
+                                        f"Refutation citation '{verdict.evidence_file}:{verdict.evidence_line}' "
+                                        "lacks a valid evidence ID; downgraded to uncertain"
+                                    )
+                                    verdict.verdict = "uncertain"
+                                    verdict.reason = (
+                                        f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' "
+                                        "thiếu mã bằng chứng (evidence ID) hợp lệ được validator chấp nhận."
+                                    )
+                                elif not self.evidence_store or not self.snapshot_id:
+                                    verdict.verdict = "uncertain"
+                                    verdict.reason = "Không có evidence store hoặc snapshot để xác thực bằng chứng."
+                                else:
                                     is_valid, ev_status, msg = self.evidence_store.validate_evidence(
                                         eid, self.snapshot_id
                                     )
@@ -318,15 +331,6 @@ class VerificationAgent:
                                         )
                                         verdict.verdict = "uncertain"
                                         verdict.reason = f"Bằng chứng '{verdict.evidence_file}' không còn hợp lệ trên đĩa: {msg}"
-                                else:
-                                    snap = self.evidence_store.get_snapshot(self.snapshot_id)
-                                    if snap:
-                                        rel_path = self.evidence_store.reader.to_relative(resolved)
-                                        manifest_hash = snap.files.get(rel_path)
-                                        current_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
-                                        if not manifest_hash or manifest_hash != current_hash:
-                                            verdict.verdict = "uncertain"
-                                            verdict.reason = f"File bằng chứng '{verdict.evidence_file}' đã bị thay đổi trên đĩa kể từ snapshot."
                 except Exception as e:
                     verdict.verdict = "uncertain"
                     verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"
