@@ -141,6 +141,13 @@ def _to_dict(vuln: Vulnerability) -> Dict[str, Any]:
     if vuln.location.context:
         payload["snippet"] = vuln.location.context
 
+    if hasattr(vuln, "corroborated"):
+        payload["corroborated"] = bool(vuln.corroborated)
+    if hasattr(vuln, "assessment_status") and vuln.assessment_status:
+        payload["assessment_status"] = vuln.assessment_status
+    if hasattr(vuln, "assessment") and vuln.assessment:
+        payload["assessment"] = vuln.assessment
+
     fix = _fix_for(vuln)
     if fix:
         payload["fix"] = fix
@@ -749,6 +756,9 @@ async def check_stale_assessments(scan_id: str) -> Dict[str, Any]:
     for fid in stale_ids:
         if fid in session["findings"]:
             session["findings"][fid].assessment_status = AssessmentStatus.STALE.value
+            ass = assessment_store.get(fid)
+            if ass:
+                session["findings"][fid].assessment = ass.model_dump()
 
     return {
         "stale_count": len(stale_ids),
@@ -844,9 +854,18 @@ async def check_fix(
             ),
         }
 
+    failed_files = {r.file_name for r in new_result.reports if r.status == "failed" or r.degraded}
     current_vuln_ids = {v.id for v in new_result.vulnerabilities}
-    resolved = [fid for fid in target_ids if fid not in current_vuln_ids]
-    persistent = [fid for fid in target_ids if fid in current_vuln_ids]
+    resolved = []
+    persistent = []
+    for fid in target_ids:
+        orig_vuln = session["findings"].get(fid)
+        file_path = orig_vuln.location.file_path if orig_vuln and orig_vuln.location else ""
+        rel_vf = Path(file_path).as_posix().lstrip("./") if file_path else ""
+        if fid in current_vuln_ids or (rel_vf and rel_vf in failed_files):
+            persistent.append(fid)
+        else:
+            resolved.append(fid)
 
     old_ids = set(session["findings"].keys())
     scan_scope = list(session.get("expanded_files") or changed_files)

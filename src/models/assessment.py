@@ -5,12 +5,31 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+from pathlib import Path
+
+
 class AssessmentStatus(str, Enum):
     UNREVIEWED = "unreviewed"
     SUPPORTED = "supported"
     REFUTED = "refuted"
     UNCERTAIN = "uncertain"
     STALE = "stale"
+
+
+class TaintStepKind(str, Enum):
+    SOURCE = "source"
+    PROPAGATION = "propagation"
+    SANITIZER = "sanitizer"
+    SINK = "sink"
+    STEP = "step"
+
+
+class TaintStep(BaseModel):
+    evidence_id: str
+    kind: TaintStepKind = TaintStepKind.STEP
+    file: Optional[str] = None
+    line: Optional[int] = None
+    description: Optional[str] = None
 
 
 class FindingAssessment(BaseModel):
@@ -119,11 +138,70 @@ def evaluate_assessment_policy(
             policy_notes.append("Supported verdict requires concrete taint_path steps for taint-based vulnerability")
 
         if taint_path:
+            has_source = False
+            has_sink = False
+            has_empty_or_invalid_step = False
+
             for step in taint_path:
-                step_eid = step.get("evidence_id")
-                if step_eid and step_eid in invalid_eids:
+                if not isinstance(step, dict) or not step:
                     final_status = "uncertain"
-                    policy_notes.append(f"Taint step references invalid evidence '{step_eid}'")
+                    has_empty_or_invalid_step = True
+                    policy_notes.append("Taint step is empty or malformed ({})")
+                    continue
+
+                step_eid = step.get("evidence_id")
+                if not step_eid or not str(step_eid).strip():
+                    final_status = "uncertain"
+                    has_empty_or_invalid_step = True
+                    policy_notes.append("Taint step is missing required evidence_id")
+                    continue
+
+                step_eid = str(step_eid).strip()
+                if step_eid not in valid_eids:
+                    final_status = "uncertain"
+                    has_empty_or_invalid_step = True
+                    policy_notes.append(f"Taint step references invalid, stale, or undeclared evidence '{step_eid}'")
+                    continue
+
+                rec = evidence_store.get_evidence(step_eid)
+                if not rec:
+                    final_status = "uncertain"
+                    has_empty_or_invalid_step = True
+                    policy_notes.append(f"Taint step evidence record '{step_eid}' not found")
+                    continue
+
+                step_file = step.get("file")
+                if step_file:
+                    norm_rec_path = Path(rec.path).as_posix().lstrip("./")
+                    norm_step_path = Path(step_file).as_posix().lstrip("./")
+                    if norm_rec_path != norm_step_path and not norm_step_path.endswith("/" + norm_rec_path) and not norm_rec_path.endswith("/" + norm_step_path):
+                        final_status = "uncertain"
+                        has_empty_or_invalid_step = True
+                        policy_notes.append(f"Taint step file '{step_file}' does not match evidence file '{rec.path}'")
+
+                step_line = step.get("line")
+                if step_line is not None:
+                    try:
+                        s_line = int(step_line)
+                        if s_line < rec.start_line or s_line > rec.end_line:
+                            final_status = "uncertain"
+                            has_empty_or_invalid_step = True
+                            policy_notes.append(f"Taint step line {s_line} out of evidence range {rec.start_line}-{rec.end_line}")
+                    except (ValueError, TypeError):
+                        final_status = "uncertain"
+                        has_empty_or_invalid_step = True
+                        policy_notes.append(f"Taint step line '{step_line}' is not a valid integer")
+
+                k = (step.get("kind") or step.get("step") or "").strip().lower()
+                if "source" in k:
+                    has_source = True
+                if "sink" in k:
+                    has_sink = True
+
+            if is_taint_cwe and not has_empty_or_invalid_step:
+                if not has_source or not has_sink:
+                    final_status = "uncertain"
+                    policy_notes.append("Taint path for injection/traversal flaw must identify both 'source' and 'sink' steps")
 
     # Final reason assembly
     combined_reason = reason.strip()
@@ -196,4 +274,5 @@ class AssessmentStore:
             if a.status in (AssessmentStatus.SUPPORTED, AssessmentStatus.REFUTED):
                 if check_assessment_stale(a, evidence_store):
                     stale_ids.append(fid)
+                    self._history[fid].append(a.model_copy(deep=True))
         return stale_ids

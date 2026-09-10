@@ -6,12 +6,13 @@ thin wrapper over the same scan pipeline this exposes.
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from analyzer.baseline import BASELINE_FILENAME, Baseline, SuppressionIndex, gate
 from analyzer.fixer import apply_plan, build_plan
@@ -205,13 +206,13 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
 
     return ScanOptions(
         target=str(Path(args.target)),
-        use_llm=not args.no_llm,
-        use_semgrep=not args.no_semgrep,
-        concurrency=args.concurrency,
-        min_risk=args.min_risk,
-        max_llm_files=args.max_llm_files,
-        excludes=args.exclude,
-        use_cache=not args.no_cache,
+        use_llm=not getattr(args, "no_llm", False),
+        use_semgrep=not getattr(args, "no_semgrep", False),
+        concurrency=getattr(args, "concurrency", 5),
+        min_risk=getattr(args, "min_risk", 0),
+        max_llm_files=getattr(args, "max_llm_files", None),
+        excludes=getattr(args, "exclude", None),
+        use_cache=not getattr(args, "no_cache", False),
         verify=getattr(args, "verify_findings", False),
         verify_all=getattr(args, "verify_all", False),
         verify_turns=getattr(args, "verify_turns", 6),
@@ -409,6 +410,17 @@ async def _run_fix(args: argparse.Namespace) -> int:
     _apply_suppressions(result)
     plan = build_plan(result.vulnerabilities, result.root, confirmed_only=args.confirmed_only)
 
+    expected_snapshot_hashes: Dict[Path, str] = {}
+    for p in plan.patches:
+        if p.file_path not in expected_snapshot_hashes:
+            try:
+                if p.file_path.is_file():
+                    expected_snapshot_hashes[p.file_path] = hashlib.sha256(
+                        p.file_path.read_text(encoding="utf-8").encode("utf-8")
+                    ).hexdigest()
+            except Exception:
+                pass
+
     if not plan.patches:
         print("\nNo applicable patches.")
         for vuln, why in plan.rejected[:10]:
@@ -463,7 +475,10 @@ async def _run_fix(args: argparse.Namespace) -> int:
         return EXIT_CLEAN
 
     plan.patches = selected
-    stats = apply_plan(plan, dry_run=args.dry_run)
+    stats = apply_plan(plan, dry_run=args.dry_run, expected_snapshot_hashes=expected_snapshot_hashes)
+    if stats.get("patches_applied", 0) == 0 and selected and not args.dry_run:
+        print("error: files modified on disk since plan creation; patches skipped to avoid corruption.", file=sys.stderr)
+        return EXIT_ERROR
 
     verb = "would change" if args.dry_run else "changed"
     print(f"\n{stats['patches_applied']} patch(es) applied, "
@@ -520,8 +535,8 @@ async def _verify_fix(
     was = len(before.vulnerabilities)
     now = len(after.vulnerabilities)
 
-    before_fps = {v.fingerprint for v in before.vulnerabilities}
-    new_findings = [v for v in after.vulnerabilities if v.fingerprint not in before_fps]
+    before_fps = {v.id or v.fingerprint() for v in before.vulnerabilities}
+    new_findings = [v for v in after.vulnerabilities if (v.id or v.fingerprint()) not in before_fps]
     if new_findings:
         print(f"  patch introduced {len(new_findings)} new finding(s). Reverting.")
         restored = revert(backups, expected_current_hashes=expected_current_hashes)
@@ -614,7 +629,8 @@ async def _run_doctor(args: argparse.Namespace) -> int:
     if semgrep_path:
         print(f"  [OK] Semgrep executable detected: {semgrep_path}")
     else:
-        print("  [WARN] Semgrep not found on PATH. Fast rule scans will fail unless installed.")
+        print("  [ERROR] Semgrep not found on PATH. Fast rule scans will fail unless installed.")
+        all_ok = False
 
     # 3. Git
     git_path = shutil.which("git")
@@ -656,24 +672,21 @@ async def _run_check(args: argparse.Namespace) -> int:
 
     if args.changes:
         diff_analyzer = DiffScopeAnalyzer(target_path)
-        modified_files = diff_analyzer.get_modified_files()
-        if not modified_files:
+        changed_files = diff_analyzer.get_changed_files()
+        if not changed_files:
             print("No modified files detected via git.")
             return EXIT_CLEAN
 
-        print(f"Scanning {len(modified_files)} modified file(s)...")
-        reports = []
-        for mf in modified_files:
-            if not mf.exists():
-                continue
-            opts = ScanOptions(
-                target=str(mf),
-                use_llm=False,
-                use_semgrep=True,
-            )
-            res = await Scanner(opts).scan()
-            reports.extend(res.reports)
-        result = ScanResult(reports=reports, root=target_path, stats={"modified_files": len(modified_files)})
+        expanded_files = diff_analyzer.expand_scope(changed_files)
+        print(f"Scanning {len(expanded_files)} file(s) in scope (changed: {len(changed_files)})...")
+        opts = ScanOptions(
+            target=str(target_path),
+            files=expanded_files,
+            use_llm=bool(args.before_release),
+            use_semgrep=True,
+            verify=bool(args.before_release),
+        )
+        result = await Scanner(opts).scan()
     else:
         opts = ScanOptions(
             target=str(target_path),
@@ -693,8 +706,9 @@ async def _run_check(args: argparse.Namespace) -> int:
         if result.refuted_vulnerabilities:
             print(f"Refuted findings (retained): {len(result.refuted_vulnerabilities)}")
 
-        if result.degraded:
-            print("[WARN] Scan completed with degraded coverage or failed engine.")
+        if result.status != "completed" or result.degraded:
+            print("[ERROR] Scan completed with degraded coverage or failed engine.", file=sys.stderr)
+            return EXIT_ERROR
 
         if result.vulnerabilities:
             for v in result.vulnerabilities:
@@ -707,6 +721,9 @@ async def _run_check(args: argparse.Namespace) -> int:
         print("Pre-release check completed: No unresolved findings in scanned scope.")
         return EXIT_CLEAN
     else:
+        if result.status != "completed" or result.degraded:
+            print(f"[ERROR] Scan completed with degraded coverage or failed engine (status: {result.status}).", file=sys.stderr)
+            return EXIT_ERROR
         if result.vulnerabilities:
             for v in result.vulnerabilities:
                 v_type = v.type.value if hasattr(v.type, "value") else str(v.type)

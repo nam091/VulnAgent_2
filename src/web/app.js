@@ -45,7 +45,7 @@ function severityStack(counts) {
   const total = entries.reduce((sum, [, n]) => sum + n, 0);
   if (!total) {
     return `<div class="empty" style="padding:26px"><div class="empty-icon">∅</div>
-      <div>No findings</div><div>Both engines came back clean</div></div>`;
+      <div>No findings</div><div>No vulnerabilities detected in scanned scope</div></div>`;
   }
   return `
     <div class="stack">
@@ -539,7 +539,7 @@ function paintJob(job) {
     <div class="card">
       <div class="card-title">Findings</div>
       ${findings.length ? findings.map(findingCard).join('')
-        : emptyState('No vulnerabilities found', 'Both engines came back clean.')}
+        : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
     </div>`;
 
   body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>

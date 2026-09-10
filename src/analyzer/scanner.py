@@ -117,7 +117,9 @@ class ScanResult:
         Returns:
             bool: True when at least one report is degraded or engine failed
         """
-        if self.stats.get("engine_failure") or self.stats.get("rule_error"):
+        if self.stats.get("engine_failure") or self.stats.get("rule_error") or self.stats.get("global_errors"):
+            return True
+        if not self.reports and self.stats.get("files_requested"):
             return True
         return any(report.degraded for report in self.reports)
 
@@ -137,9 +139,11 @@ class ScanResult:
         Overall run status: completed, partial, or failed.
         Consistent contract across CLI, MCP, SARIF, and UI (B01).
         """
-        if self.stats.get("engine_failure") or self.stats.get("rule_error"):
+        if self.stats.get("engine_failure") or self.stats.get("rule_error") or self.stats.get("global_errors"):
             return "failed"
         if not self.reports:
+            if self.stats.get("files_requested"):
+                return "failed"
             return "completed"
         if all(r.status == "failed" or r.degraded for r in self.reports):
             return "failed"
@@ -233,7 +237,7 @@ class Scanner:
         files = await asyncio.to_thread(
             discover, self.options.target, self.options.excludes
         )
-        requested_files: List[str] = []
+        missing_requested: Set[str] = set()
         if self.options.files:
             requested_relatives = set()
             for f in self.options.files:
@@ -251,14 +255,44 @@ class Scanner:
                 requested_relatives.add(rel)
             requested_files = sorted(list(requested_relatives))
             files = [f for f in files if f.relative in requested_relatives]
+            discovered_relatives = {f.relative for f in files}
+            missing_requested = requested_relatives - discovered_relatives
 
         if not files:
             logging.warning(f"No source files found under {self.options.target}")
             self._emit("done", "No source files found", 100)
-            return ScanResult([], root, {
+            failed_reports: List[VulnerabilityReport] = []
+            if missing_requested:
+                for mf in sorted(missing_requested):
+                    failed_reports.append(
+                        VulnerabilityReport(
+                            file_name=mf,
+                            vulnerabilities=[],
+                            chained_vulnerabilities=[],
+                            timestamp=datetime.now(),
+                            tiers={"semgrep": "failed: file not found or inaccessible"},
+                            status="failed",
+                            engine_status={
+                                "semgrep": {
+                                    "requested": self.options.use_semgrep,
+                                    "status": "failed",
+                                    "reason": "Target file missing on disk or inaccessible",
+                                    "findings": 0,
+                                },
+                                "llm": {
+                                    "requested": self.options.use_llm,
+                                    "status": "not_routed",
+                                    "reason": "Target file missing",
+                                    "findings": 0,
+                                },
+                            },
+                        )
+                    )
+            return ScanResult(failed_reports, root, {
                 "files_discovered": 0,
                 "files_requested": requested_files,
-                "files_scanned": 0,
+                "files_scanned": len(failed_reports),
+                "engine_failure": bool(missing_requested),
             })
         self._emit(
             "discovery", f"Found {len(files)} source file(s)", 6,
@@ -304,7 +338,7 @@ class Scanner:
         llm_elapsed = time.perf_counter() - llm_started
 
         self._emit("fusion", "Merging results from both tiers", 72)
-        reports = self._assemble(files, rule_by_file, llm_by_file, tier_status)
+        reports = self._assemble(files, rule_by_file, llm_by_file, tier_status, missing_files=missing_requested)
 
         found = sum(len(r.vulnerabilities) for r in reports)
         confirmed = sum(
@@ -418,6 +452,11 @@ class Scanner:
             return {}
 
         self._file_rule_errors = self.semgrep.get_file_errors(root) if hasattr(self.semgrep, "get_file_errors") else {}
+        if "" in self._file_rule_errors and not self._rule_error:
+            self._rule_error = "; ".join(
+                e.get("message", str(e)) if isinstance(e, dict) else str(e)
+                for e in self._file_rule_errors[""]
+            )
 
         grouped: Dict[str, List[Vulnerability]] = defaultdict(list)
         out_of_scope = 0
@@ -708,7 +747,8 @@ class Scanner:
         files: List[DiscoveredFile],
         rule_by_file: Dict[str, List[Vulnerability]],
         llm_by_file: Dict[str, List[Vulnerability]],
-        tier_status: Dict[str, str]
+        tier_status: Dict[str, str],
+        missing_files: Optional[Set[str]] = None,
     ) -> List[VulnerabilityReport]:
         """
         Fuse both tiers per file and build one report per file with findings.
@@ -718,14 +758,21 @@ class Scanner:
             rule_by_file: Rule-tier findings by relative path
             llm_by_file: LLM-tier findings by relative path
             tier_status: LLM tier outcome by relative path
+            missing_files: Files requested but not found on disk
 
         Returns:
-            List[VulnerabilityReport]: One report per file that had findings
+            List[VulnerabilityReport]: Reports per file
         """
 
         reports = []
-        global_rule_err = getattr(self, "_rule_error", "")
         file_rule_errors = getattr(self, "_file_rule_errors", {})
+        global_rule_err = getattr(self, "_rule_error", "")
+        if not global_rule_err and file_rule_errors.get(""):
+            global_rule_err = "; ".join(
+                e.get("message", str(e)) if isinstance(e, dict) else str(e)
+                for e in file_rule_errors[""]
+            )
+            self._rule_error = global_rule_err
 
         for item in files:
             relative = item.relative
@@ -815,6 +862,31 @@ class Scanner:
             report.calculate_summary()
             report.calculate_risk_score()
             reports.append(report)
+
+        for mf in sorted(missing_files or []):
+            missing_report = VulnerabilityReport(
+                file_name=mf,
+                vulnerabilities=[],
+                chained_vulnerabilities=[],
+                timestamp=datetime.now(),
+                tiers={"semgrep": "failed: file not found or inaccessible on disk"},
+                status="failed",
+                engine_status={
+                    "semgrep": {
+                        "requested": self.options.use_semgrep,
+                        "status": "failed",
+                        "reason": "Target file missing on disk or inaccessible",
+                        "findings": 0,
+                    },
+                    "llm": {
+                        "requested": self.options.use_llm,
+                        "status": "not_routed",
+                        "reason": "Target file missing",
+                        "findings": 0,
+                    },
+                },
+            )
+            reports.append(missing_report)
 
         return reports
 

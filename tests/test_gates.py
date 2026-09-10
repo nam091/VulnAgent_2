@@ -574,7 +574,10 @@ def test_evaluate_assessment_policy_supported_and_refuted(tmp_path: Path):
         verdict="supported",
         reason="Flow verified",
         evidence_ids=[ev.evidence_id],
-        taint_path=[{"step": "source", "evidence_id": ev.evidence_id}],
+        taint_path=[
+            {"step": "source", "evidence_id": ev.evidence_id, "file": "test.py", "line": 1},
+            {"step": "sink", "evidence_id": ev.evidence_id, "file": "test.py", "line": 1},
+        ],
     )
     assert a3.status == AssessmentStatus.SUPPORTED
 
@@ -745,6 +748,295 @@ def test_scanner_cache_atomic_and_skip_error(tmp_path: Path):
     cached = scanner._cache_get("good_content")
     assert cached is not None
     assert cached["vulnerabilities"][0]["type"] == "SQL_INJECTION"
+
+
+@pytest.mark.asyncio
+async def test_r01_cli_check_changes(tmp_path: Path):
+    """
+    R01: CLI check --changes must not raise AttributeError (get_modified_files)
+    and should expand scope and scan without error.
+    """
+    from cli import _run_check
+    import argparse
+
+    f = tmp_path / "main.py"
+    f.write_text("print('hello')\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        target=str(tmp_path),
+        changes=True,
+        before_release=False,
+    )
+    with patch("context.diff_scope.DiffScopeAnalyzer.get_changed_files", return_value=["main.py"]):
+        code = await _run_check(args)
+        assert code in (0, 1)
+
+
+@pytest.mark.asyncio
+async def test_r02_cli_check_fails_on_degraded_or_failed_status(tmp_path: Path):
+    """
+    R02: CLI check must return exit 2 (EXIT_ERROR) when scan fails or is degraded,
+    even if findings list is empty.
+    """
+    from cli import _run_check, EXIT_ERROR
+    from analyzer.scanner import ScanResult
+    import argparse
+
+    args_norm = argparse.Namespace(
+        target=str(tmp_path),
+        changes=False,
+        before_release=False,
+    )
+    args_rel = argparse.Namespace(
+        target=str(tmp_path),
+        changes=False,
+        before_release=True,
+    )
+
+    mock_res = ScanResult([], tmp_path, {"rule_error": "synthetic engine failure"})
+    assert mock_res.status == "failed"
+    assert mock_res.degraded is True
+
+    with patch("analyzer.scanner.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = mock_res
+        code_norm = await _run_check(args_norm)
+        assert code_norm == EXIT_ERROR
+
+        code_rel = await _run_check(args_rel)
+        assert code_rel == EXIT_ERROR
+
+
+def test_r03_policy_taint_path_validation(tmp_path: Path):
+    """
+    R03: evaluate_assessment_policy rejects [{}], invented evidence IDs,
+    out of range lines, mismatched files, and missing source/sink for taint CWEs.
+    """
+    from models.assessment import AssessmentStatus, evaluate_assessment_policy
+    from evidence.store import EvidenceStore
+
+    f = tmp_path / "app.py"
+    f.write_text("x = input()\nos.system(x)\n", encoding="utf-8")
+
+    store = EvidenceStore(tmp_path)
+    snap = store.create_snapshot()
+    ev = store.record_evidence(snap.snapshot_id, "app.py", 1, 2, origin="read_lines")
+
+    # 1. Empty step [{}]
+    a_empty = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[{}],
+    )
+    assert a_empty.status == AssessmentStatus.UNCERTAIN
+    assert "empty" in a_empty.reason.lower() or "malformed" in a_empty.reason.lower()
+
+    # 2. Invented evidence ID
+    a_invented = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[{"kind": "sink", "file": "missing.py", "line": 999, "evidence_id": "invented"}],
+    )
+    assert a_invented.status == AssessmentStatus.UNCERTAIN
+
+    # 3. Out of range line
+    a_bad_line = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "source", "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+            {"kind": "sink", "file": "app.py", "line": 999, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_bad_line.status == AssessmentStatus.UNCERTAIN
+    assert "range" in a_bad_line.reason.lower()
+
+    # 4. Mismatched file
+    a_bad_file = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "source", "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+            {"kind": "sink", "file": "other.py", "line": 2, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_bad_file.status == AssessmentStatus.UNCERTAIN
+    assert "match" in a_bad_file.reason.lower()
+
+    # 5. Missing sink
+    a_no_sink = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "source", "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_no_sink.status == AssessmentStatus.UNCERTAIN
+    assert "sink" in a_no_sink.reason.lower()
+
+    # 6. Valid source and sink
+    a_valid = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "source", "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+            {"kind": "sink", "file": "app.py", "line": 2, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_valid.status == AssessmentStatus.SUPPORTED
+
+
+@pytest.mark.asyncio
+async def test_r04_check_fix_missing_file_cannot_be_resolved(tmp_path: Path):
+    """
+    R04: check_fix must not mark a finding in a missing or unscanned file as resolved or clean.
+    """
+    from mcp_server import check_fix, _scan_sessions
+    from evidence.store import EvidenceStore
+    from conftest import make_vuln
+
+    store = EvidenceStore(tmp_path)
+    snap = store.create_snapshot()
+    vuln = make_vuln(file_path="missing.py", start_line=1)
+
+    scan_id = "test_r04_missing_file"
+    _scan_sessions[scan_id] = {
+        "root": tmp_path,
+        "findings": {vuln.id: vuln},
+        "changed_files": ["missing.py"],
+        "expanded_files": ["missing.py"],
+        "evidence_store": store,
+        "snapshot": snap,
+    }
+
+    res = await check_fix(scan_id=scan_id, finding_ids=[vuln.id])
+    assert res["clean"] is False
+    assert vuln.id in res.get("persistent_findings", [])
+    assert vuln.id not in res.get("resolved_findings", [])
+
+
+@pytest.mark.asyncio
+async def test_r05_verify_fix_fingerprint_instances(tmp_path: Path):
+    """
+    R05: Different Vulnerability instances with identical attributes must not
+    be misidentified as regressions due to bound method comparison.
+    """
+    from cli import _verify_fix, EXIT_CLEAN
+    from analyzer.scanner import ScanResult
+    from conftest import make_vuln
+    import argparse
+
+    v_before = make_vuln(file_path="app.py", start_line=10)
+    v_after = make_vuln(file_path="app.py", start_line=10)
+
+    assert v_before is not v_after
+    assert v_before.fingerprint() == v_after.fingerprint()
+
+    r_before = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[v_before],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    before_result = ScanResult([r_before], tmp_path, {})
+
+    r_after = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[v_after],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    after_result = ScanResult([r_after], tmp_path, {})
+
+    args = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=True,
+    )
+
+    with patch("analyzer.scanner.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = after_result
+        code = await _verify_fix(args, before_result, backups={}, expected_current_hashes={})
+        assert code == EXIT_CLEAN
+
+
+def test_r06_semgrep_global_errors_assembler(tmp_path: Path):
+    """
+    R06: Assembler marks run degraded and failed when Semgrep outputs global errors under "".
+    """
+    from analyzer.scanner import Scanner, ScanOptions, ScanResult
+    from analyzer.discovery import DiscoveredFile
+
+    opts = ScanOptions(target=str(tmp_path), use_semgrep=True, use_llm=False)
+    scanner = Scanner(opts)
+    scanner._file_rule_errors = {"": [{"message": "global rule failure"}]}
+
+    df = DiscoveredFile(path=tmp_path / "app.py", root=tmp_path, risk_score=0, reasons=[])
+    reports = scanner._assemble([df], {}, {}, {})
+
+    assert len(reports) == 1
+    assert reports[0].status == "failed"
+    assert reports[0].degraded is True
+    assert "global rule failure" in reports[0].engine_status["semgrep"]["reason"]
+
+    result = ScanResult(reports, tmp_path, {})
+    assert result.status == "failed"
+    assert result.degraded is True
+
+
+def test_r07_apply_plan_with_snapshot_hashes(tmp_path: Path):
+    """
+    R07: apply_plan refuses to patch files that were modified after plan snapshot.
+    """
+    import hashlib
+    from analyzer.fixer import apply_plan, PatchPlan, Patch
+    from conftest import make_vuln
+
+    f = tmp_path / "main.py"
+    f.write_text("a = 1\n", encoding="utf-8")
+    initial_hash = hashlib.sha256(f.read_bytes()).hexdigest()
+
+    vuln = make_vuln(file_path=str(f), start_line=1)
+    patch = Patch(
+        file_path=f,
+        start_line=1,
+        end_line=1,
+        original="a = 1\n",
+        replacement="a = 2\n",
+        vulnerability=vuln,
+    )
+    plan = PatchPlan(patches=[patch], rejected=[])
+
+    f.write_text("a = 999\n", encoding="utf-8")
+
+    stats = apply_plan(plan, expected_snapshot_hashes={f: initial_hash})
+    assert stats["patches_applied"] == 0
+    assert f.read_text(encoding="utf-8") == "a = 999\n"
+
 
 
 
