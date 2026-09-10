@@ -41,9 +41,11 @@ SEVERITY_RANK = {
 # label a finding at different levels of specificity.
 TYPE_ALIASES: Tuple[frozenset, ...] = (
     frozenset({"SQL_INJECTION", "INJECTION", "INJECTION_FLAW"}),
-    frozenset({"OS_COMMAND_INJECTION", "CODE_INJECTION", "REMOTE_CODE_EXECUTION_(RCE)"}),
+    frozenset({"OS_COMMAND_INJECTION", "REMOTE_CODE_EXECUTION_(RCE)"}),
+    frozenset({"CODE_INJECTION"}),
     frozenset({"PATH_TRAVERSAL", "FILE_INCLUSION", "INSECURE_FILE_READ"}),
-    frozenset({"HARDCODED_CREDENTIALS", "EXPOSED_SECRET", "BROKEN_AUTHENTICATION"}),
+    frozenset({"HARDCODED_CREDENTIALS", "EXPOSED_SECRET"}),
+    frozenset({"BROKEN_AUTHENTICATION"}),
     frozenset({"SECURITY_MISCONFIGURATION", "INSECURE_CONFIGURATION_SETTING", "EXPOSED_FLASK_DEBUG"}),
     frozenset({"SENSITIVE_DATA_EXPOSURE", "EXPOSED_SENSITIVE_INFORMATION", "EXCESSIVE_DATA_EXPOSURE"}),
     frozenset({"WEAK_CRYPTOGRAPHY", "USE_OF_WEAK_HASHING_ALGORITHM"}),
@@ -217,14 +219,19 @@ def _find_match(
 
 def _same_file(a: Vulnerability, b: Vulnerability) -> bool:
     """
-    Compare file paths, tolerating absolute vs relative forms.
+    Compare file paths, tolerating absolute vs relative forms while preventing
+    cross-directory collisions like 'a/app.py' vs 'b/app.py'.
     """
 
-    raw_a = str(a.location.file_path).replace("\\", "/").strip().lower()
-    raw_b = str(b.location.file_path).replace("\\", "/").strip().lower()
+    raw_a = str(a.location.file_path).replace("\\", "/").strip().lstrip("./")
+    raw_b = str(b.location.file_path).replace("\\", "/").strip().lstrip("./")
     if not raw_a or not raw_b:
         return True  # single-file scans often omit the path on one side
-    return raw_a == raw_b or raw_a.endswith("/" + raw_b) or raw_b.endswith("/" + raw_a) or raw_a.endswith(raw_b) or raw_b.endswith(raw_a)
+    if raw_a == raw_b or raw_a.lower() == raw_b.lower():
+        return True
+    if (raw_a.endswith("/" + raw_b) and "/" in raw_b) or (raw_b.endswith("/" + raw_a) and "/" in raw_a):
+        return True
+    return False
 
 
 def _types_agree(a: Vulnerability, b: Vulnerability) -> bool:
@@ -316,6 +323,7 @@ def _combine(rule_finding: Vulnerability, llm_finding: Vulnerability) -> Vulnera
     combined.location = rule_finding.location.model_copy(deep=True)
     combined.severity = severity
     combined.source = FindingSource.CONFIRMED
+    combined.corroborated = True
     combined.engine_sources = ["SEMGREP", "LLM"]
     combined.confidence = CONFIDENCE[FindingSource.CONFIRMED]
     combined.rule_id = rule_finding.rule_id

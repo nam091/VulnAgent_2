@@ -462,3 +462,289 @@ async def test_e2e_verifier_rejects_citation_from_midway_cut_line(tmp_path: Path
             or "chưa từng được đọc" in verdict.reason
             or "thiếu mã bằng chứng" in verdict.reason
         )
+
+
+@pytest.mark.asyncio
+async def test_scanner_semgrep_parse_error_marks_partial_degraded(tmp_path: Path):
+    """
+    Test B01: Semgrep parse errors on individual files mark file failed and ScanResult partial.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+    from analyzer.semgrep_runner import SemgrepRunner
+
+    bad_file = tmp_path / "bad.py"
+    bad_file.write_text("def broken_syntax(:\n", encoding="utf-8")
+    good_file = tmp_path / "good.py"
+    good_file.write_text("x = 1\n", encoding="utf-8")
+
+    opts = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=True, files=["bad.py", "good.py"])
+    scanner = Scanner(options=opts)
+
+    with patch.object(SemgrepRunner, "scan", return_value=[]), \
+         patch.object(SemgrepRunner, "get_file_errors", return_value={"bad.py": "Syntax error at line 1"}):
+        result = await scanner.scan()
+
+    assert result.status == "partial"
+    assert result.degraded is True
+    assert "bad.py" in result.coverage["semgrep"]["failed_files"]
+    assert "good.py" in result.coverage["semgrep"]["analyzed_files"]
+
+    report_map = {r.file_name: r for r in result.reports}
+    assert report_map["bad.py"].status == "failed"
+    assert report_map["bad.py"].engine_status["semgrep"]["status"] == "parse_error"
+    assert report_map["good.py"].status == "completed"
+    assert report_map["good.py"].engine_status["semgrep"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_scanner_disambiguates_same_basename(tmp_path: Path):
+    """
+    Test B01/B09: Scanner filters requested files by exact relative path, not basename.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+    from analyzer.semgrep_runner import SemgrepRunner
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "b" / "app.py").write_text("y = 2\n", encoding="utf-8")
+
+    opts = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=True, files=["a/app.py"])
+    scanner = Scanner(options=opts)
+
+    with patch.object(SemgrepRunner, "scan", return_value=[]), \
+         patch.object(SemgrepRunner, "get_file_errors", return_value={}):
+        result = await scanner.scan()
+
+    analyzed = result.coverage["semgrep"]["analyzed_files"]
+    assert "a/app.py" in analyzed
+    assert "b/app.py" not in analyzed
+
+
+def test_evaluate_assessment_policy_supported_and_refuted(tmp_path: Path):
+    """
+    Test B02/B12: Unified policy evaluation for supported, refuted, and uncertain.
+    """
+    from models.assessment import AssessmentStatus, evaluate_assessment_policy
+    from evidence.store import EvidenceStore
+
+    f = tmp_path / "test.py"
+    f.write_text("x = 1\ny = 2\n", encoding="utf-8")
+
+    store = EvidenceStore(tmp_path)
+    snap = store.create_snapshot()
+    ev = store.record_evidence(snap.snapshot_id, "test.py", 1, 1, origin="read_lines")
+
+    vuln = make_vuln(file_path="test.py", start_line=1)
+    vuln_type = vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type)
+
+    # 1. Supported without evidence -> uncertain
+    a1 = evaluate_assessment_policy(
+        vuln_id=vuln.id,
+        vuln_type=vuln_type,
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        reason="Looks vulnerable",
+        evidence_ids=[],
+    )
+    assert a1.status == AssessmentStatus.UNCERTAIN
+    assert "thiếu mã bằng chứng" in a1.reason or "no evidence_ids" in a1.reason
+
+    # 2. Supported with valid evidence but no taint/explanation -> uncertain
+    a2 = evaluate_assessment_policy(
+        vuln_id=vuln.id,
+        vuln_type=vuln_type,
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        reason="Has evidence",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[],
+    )
+    assert a2.status == AssessmentStatus.UNCERTAIN
+    assert "taint" in a2.reason or "bằng chứng" in a2.reason
+
+    # 3. Supported with valid evidence and taint steps -> accepted
+    a3 = evaluate_assessment_policy(
+        vuln_id=vuln.id,
+        vuln_type=vuln_type,
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        reason="Flow verified",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[{"step": "source", "evidence_id": ev.evidence_id}],
+    )
+    assert a3.status == AssessmentStatus.SUPPORTED
+
+    # 4. Refuted without mitigating_control -> uncertain
+    a4 = evaluate_assessment_policy(
+        vuln_id=vuln.id,
+        vuln_type=vuln_type,
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="refuted",
+        reason="Safe",
+        evidence_ids=[ev.evidence_id],
+        mitigating_control=None,
+    )
+    assert a4.status == AssessmentStatus.UNCERTAIN
+
+
+@pytest.mark.asyncio
+async def test_mcp_check_stale_assessments_on_file_change(tmp_path: Path):
+    """
+    Test B02/B03/B12: check_stale_assessments marks assessment STALE if source changed.
+    """
+    from mcp_server import submit_assessment, check_stale_assessments, _scan_sessions
+    from evidence.store import EvidenceStore
+
+    f = tmp_path / "app.py"
+    f.write_text("original_content = True\n", encoding="utf-8")
+
+    store = EvidenceStore(tmp_path)
+    snap = store.create_snapshot()
+    ev = store.record_evidence(snap.snapshot_id, "app.py", 1, 1, origin="read_lines")
+
+    vuln = make_vuln(file_path="app.py", start_line=1)
+    scan_id = "test_stale_session"
+    _scan_sessions[scan_id] = {
+        "root": tmp_path,
+        "findings": {vuln.id: vuln},
+        "evidence_store": store,
+        "snapshot": snap,
+        "assessments": {},
+    }
+
+    # Submit valid refuted assessment
+    sub_res = await submit_assessment(
+        scan_id=scan_id,
+        finding_id=vuln.id,
+        verdict="refuted",
+        reason="Controlled by boolean",
+        evidence_ids=[ev.evidence_id],
+        mitigating_control="original_content",
+    )
+    assert sub_res["accepted_status"] == "refuted"
+    assert sub_res["policy_verified"] is True
+
+    # Modify file on disk
+    f.write_text("modified_content = False\n", encoding="utf-8")
+
+    # Run check_stale_assessments
+    stale_res = await check_stale_assessments(scan_id=scan_id)
+    assert stale_res["stale_count"] == 1
+    assert vuln.id in stale_res["stale_finding_ids"]
+
+
+def test_patch_risk_and_stale_snapshot_protection(tmp_path: Path):
+    """
+    Test B16: Patch risk semantics, stale snapshot protection on apply, and safe rollback.
+    """
+    from analyzer.fixer import Patch, PatchPlan, apply_plan, revert, PatchRisk
+    import hashlib
+
+    target = tmp_path / "service.py"
+    target.write_text("def run():\n    return check_auth()\n", encoding="utf-8")
+
+    vuln = make_vuln(file_path="service.py", start_line=2, end_line=2)
+
+    # 1. Clean patch
+    p_clean = Patch(
+        vulnerability=vuln,
+        file_path=target,
+        start_line=2,
+        end_line=2,
+        original="    return check_auth()",
+        replacement="    return bool(check_auth())",
+    )
+    assert p_clean.risk == "safe"
+    assert p_clean.risk == "passed_structural_check"
+    assert p_clean.formal_check_status == "passed_structural_check"
+
+    # 2. Risky patch (bypass auth)
+    p_risky = Patch(
+        vulnerability=vuln,
+        file_path=target,
+        start_line=2,
+        end_line=2,
+        original="    return check_auth()",
+        replacement="    return True",
+    )
+    assert p_risky.risk == "review"
+    assert p_risky.risk == "review_required"
+    assert "constant return" in p_risky.risk_reasons[0]
+
+    # 3. Apply plan with stale hash protection
+    plan = PatchPlan(patches=[p_clean])
+    wrong_hash = hashlib.sha256(b"different content").hexdigest()
+    res = apply_plan(plan, expected_snapshot_hashes={target: wrong_hash})
+    assert res["patches_applied"] == 0
+    assert target.read_text(encoding="utf-8") == "def run():\n    return check_auth()\n"
+
+    # 4. Apply plan with valid hash
+    correct_hash = hashlib.sha256(target.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    res_ok = apply_plan(plan, expected_snapshot_hashes={target: correct_hash})
+    assert res_ok["patches_applied"] == 1
+    assert "bool(check_auth())" in target.read_text(encoding="utf-8")
+
+    # 5. Revert with concurrent modification protection
+    # User modifies file concurrently after patch was applied
+    target.write_text("def run():\n    # User added comment\n    return bool(check_auth())\n", encoding="utf-8")
+    revert_count = revert(res_ok["backups"], expected_current_hashes=res_ok["written_hashes"])
+    assert revert_count == 0  # skipped rollback to preserve user changes
+    assert "# User added comment" in target.read_text(encoding="utf-8")
+
+
+def test_fusion_disambiguates_different_dir_same_basename():
+    """
+    Test B06: Fusion does not merge findings from a/app.py and b/app.py.
+    """
+    from analyzer.fusion import fuse
+    from models.vulnerability import FindingSource, VulnerabilityType
+
+    v_rule = make_vuln(file_path="a/app.py", start_line=10, end_line=10, vuln_type=VulnerabilityType.SQL_INJECTION)
+    v_rule.source = FindingSource.SEMGREP
+    v_rule.engine_sources = ["SEMGREP"]
+
+    v_llm = make_vuln(file_path="b/app.py", start_line=10, end_line=10, vuln_type=VulnerabilityType.SQL_INJECTION)
+    v_llm.source = FindingSource.LLM
+    v_llm.engine_sources = ["LLM"]
+
+    result = fuse([v_rule], [v_llm])
+    assert len(result.vulnerabilities) == 2
+    paths = {v.location.file_path for v in result.vulnerabilities}
+    assert "a/app.py" in paths
+    assert "b/app.py" in paths
+    assert all(not getattr(v, "corroborated", False) for v in result.vulnerabilities)
+
+
+def test_scanner_cache_atomic_and_skip_error(tmp_path: Path):
+    """
+    Test B17: Cache writes atomically, does not cache error or truncated responses, and incorporates model identity.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+
+    opts = ScanOptions(target=str(tmp_path), use_llm=True, cache_dir=str(tmp_path / "cache"))
+    scanner = Scanner(options=opts)
+
+    # 1. Cache key check
+    key = scanner._cache_key("content_v1")
+    assert isinstance(key, str) and len(key) == 64
+
+    # 2. Skip caching error / truncated responses
+    scanner._cache_put("err_content", {"error": "rate limit exceeded"})
+    assert scanner._cache_get("err_content") is None
+
+    scanner._cache_put("trunc_content", {"truncated": True, "vulnerabilities": []})
+    assert scanner._cache_get("trunc_content") is None
+
+    # 3. Successful cache write and retrieval
+    scanner._cache_put("good_content", {"vulnerabilities": [{"type": "SQL_INJECTION"}]})
+    cached = scanner._cache_get("good_content")
+    assert cached is not None
+    assert cached["vulnerabilities"][0]["type"] == "SQL_INJECTION"
+
+
+

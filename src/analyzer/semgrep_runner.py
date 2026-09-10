@@ -10,6 +10,7 @@ import logging
 import re
 import shutil
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -354,6 +355,43 @@ class SemgrepRunner:
             logging.warning(f"Semgrep error: {err.get('message', err)}")
 
         return payload.get("results", [])
+
+    def get_file_errors(self, root: Optional[Path] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Extract per-file errors from the last Semgrep execution.
+
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: Relative posix paths mapped to error details.
+            Global errors without a specific file path are stored under "".
+        """
+        file_errors: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for err in getattr(self, "last_errors", []):
+            if not isinstance(err, dict):
+                file_errors[""].append({"message": str(err), "type": "UnknownError"})
+                continue
+
+            raw_path = err.get("path")
+            if not raw_path and err.get("spans") and isinstance(err["spans"], list) and err["spans"]:
+                raw_path = err["spans"][0].get("file")
+            if not raw_path and err.get("location") and isinstance(err["location"], dict):
+                raw_path = err["location"].get("path")
+
+            msg = err.get("message", "Semgrep error")
+            err_type = err.get("type", "Error")
+
+            if raw_path and root:
+                try:
+                    rel = Path(raw_path).resolve().relative_to(root).as_posix()
+                except (ValueError, OSError):
+                    rel = Path(raw_path).as_posix().lstrip("./")
+                file_errors[rel].append({"message": msg, "type": err_type, "raw": err})
+            elif raw_path:
+                rel = Path(raw_path).as_posix().lstrip("./")
+                file_errors[rel].append({"message": msg, "type": err_type, "raw": err})
+            else:
+                file_errors[""].append({"message": msg, "type": err_type, "raw": err})
+
+        return dict(file_errors)
 
     def _to_vulnerability(self, result: Dict[str, Any]) -> Optional[Vulnerability]:
         """

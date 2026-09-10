@@ -9,6 +9,7 @@ corrupt a source file with it.
 
 import ast
 import difflib
+import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -16,6 +17,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from models.vulnerability import FindingSource, Vulnerability
+
+
+class PatchRisk(str):
+    """Describes whether a patch passed structural syntax checks or requires human review."""
+
+    def __eq__(self, other: Any) -> bool:
+        if str(self) == "passed_structural_check" and other in ("safe", "passed_structural_check"):
+            return True
+        if str(self) == "review_required" and other in ("review", "review_required"):
+            return True
+        return super().__eq__(other)
+
+    def __hash__(self) -> int:
+        return super().__hash__()
 
 
 # Text that betrays a suggestion the model never grounded in the real code.
@@ -122,15 +137,15 @@ class Patch:
     reason: str = ""
 
     @property
-    def risk(self) -> str:
+    def risk(self) -> PatchRisk:
         """
-        Whether this patch is safe to apply without a human reading it.
-
-        Returns:
-            str: "safe" or "review"
+        Whether this patch passed structural verification or requires human review.
         """
+        return PatchRisk("passed_structural_check" if not self.risk_reasons else "review_required")
 
-        return "safe" if not self.risk_reasons else "review"
+    @property
+    def formal_check_status(self) -> str:
+        return "passed_structural_check" if not self.risk_reasons else "review_required"
 
     @property
     def risk_reasons(self) -> List[str]:
@@ -377,7 +392,11 @@ def _validate(
     return True, ""
 
 
-def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
+def apply_plan(
+    plan: PatchPlan,
+    dry_run: bool = False,
+    expected_snapshot_hashes: Optional[Dict[Path, str]] = None,
+) -> Dict[str, Any]:
     """
     Write the planned patches to disk.
 
@@ -387,14 +406,16 @@ def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
     Args:
         plan: The validated plan
         dry_run: Report what would change without writing
+        expected_snapshot_hashes: Optional file hashes to prevent applying on stale/modified files
 
     Returns:
-        Dict[str, Any]: Counts, plus a backup of each file's prior content
+        Dict[str, Any]: Counts, plus a backup of each file's prior content and written hashes
     """
 
     applied = 0
     files_changed = 0
     backups: Dict[Path, str] = {}
+    written_hashes: Dict[Path, str] = {}
 
     for file_path, patches in plan.by_file.items():
         try:
@@ -402,6 +423,14 @@ def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
         except OSError as e:
             logging.error(f"Cannot read {file_path}: {e}")
             continue
+
+        if expected_snapshot_hashes and file_path in expected_snapshot_hashes:
+            current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if current_hash != expected_snapshot_hashes[file_path]:
+                logging.warning(
+                    f"File {file_path} modified on disk since snapshot; skipping patch to avoid corrupting stale lines."
+                )
+                continue
 
         backups[file_path] = content
         lines = content.split("\n")
@@ -425,6 +454,7 @@ def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
 
         try:
             file_path.write_text(full_text, encoding="utf-8")
+            written_hashes[file_path] = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
             files_changed += 1
         except OSError as e:
             logging.error(f"Cannot write {file_path}: {e}")
@@ -434,15 +464,22 @@ def apply_plan(plan: PatchPlan, dry_run: bool = False) -> Dict[str, Any]:
         "files_changed": files_changed,
         "rejected": len(plan.rejected),
         "backups": backups,
+        "written_hashes": written_hashes,
     }
 
 
-def revert(backups: Dict[Path, str]) -> int:
+def revert(
+    backups: Dict[Path, str],
+    expected_current_hashes: Optional[Dict[Path, str]] = None,
+) -> int:
     """
     Restore files to their pre-patch content.
+    Only restores when current file matches expected written content,
+    preventing accidental overwriting of concurrent user edits.
 
     Args:
         backups: Mapping of path to original content
+        expected_current_hashes: Hashes written by fixer to verify before rollback
 
     Returns:
         int: How many files were restored
@@ -451,6 +488,14 @@ def revert(backups: Dict[Path, str]) -> int:
     restored = 0
     for file_path, content in backups.items():
         try:
+            if expected_current_hashes and file_path in expected_current_hashes:
+                current_on_disk = file_path.read_text(encoding="utf-8")
+                actual_hash = hashlib.sha256(current_on_disk.encode("utf-8")).hexdigest()
+                if actual_hash != expected_current_hashes[file_path]:
+                    logging.warning(
+                        f"File {file_path} was modified concurrently after patch; skipping rollback to preserve edits."
+                    )
+                    continue
             file_path.write_text(content, encoding="utf-8")
             restored += 1
         except OSError as e:

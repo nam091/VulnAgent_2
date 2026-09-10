@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 from agent.loop import ToolCallingAgent
 from agent.tools import TOOL_SCHEMAS, CodeTools
 from evidence.store import EvidenceStore
+from models.assessment import AssessmentStatus, evaluate_assessment_policy
 from models.vulnerability import FindingSource, Vulnerability, VulnerabilityType
 
 SYSTEM_PROMPT = """You are a security engineer reviewing a vulnerability report written
@@ -306,45 +307,44 @@ class VerificationAgent:
                                 verdict.verdict = "uncertain"
                                 verdict.reason = f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' chưa từng được đọc thành công trong phiên điều tra."
                             else:
-                                # Validate evidence integrity with EvidenceStore (refuted requires valid evidence ID)
+                                # Validate evidence integrity with shared policy (B02/B03/B12)
                                 eid = matched_read.get("evidence_id")
-                                if not eid:
-                                    logging.info(
-                                        f"Refutation citation '{verdict.evidence_file}:{verdict.evidence_line}' "
-                                        "lacks a valid evidence ID; downgraded to uncertain"
-                                    )
+                                assessment = evaluate_assessment_policy(
+                                    vuln_id=vuln.id,
+                                    vuln_type=vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type),
+                                    snapshot_id=self.snapshot_id,
+                                    evidence_store=self.evidence_store,
+                                    verdict="refuted",
+                                    evidence_ids=[eid] if eid else [],
+                                    reason=verdict.reason,
+                                    mitigating_control=verdict.mitigating_control,
+                                    control_evidence_id=eid,
+                                    assessor="agent",
+                                )
+                                if assessment.status != AssessmentStatus.REFUTED:
                                     verdict.verdict = "uncertain"
-                                    verdict.reason = (
-                                        f"Bằng chứng '{verdict.evidence_file}:{verdict.evidence_line}' "
-                                        "thiếu mã bằng chứng (evidence ID) hợp lệ được validator chấp nhận."
-                                    )
-                                elif not self.evidence_store or not self.snapshot_id:
-                                    verdict.verdict = "uncertain"
-                                    verdict.reason = "Không có evidence store hoặc snapshot để xác thực bằng chứng."
-                                else:
-                                    is_valid, ev_status, msg = self.evidence_store.validate_evidence(
-                                        eid, self.snapshot_id
-                                    )
-                                    if not is_valid:
-                                        logging.info(
-                                            f"Evidence '{eid}' is invalid or stale ({msg}); downgraded to uncertain"
-                                        )
-                                        verdict.verdict = "uncertain"
-                                        verdict.reason = f"Bằng chứng '{verdict.evidence_file}' không còn hợp lệ trên đĩa: {msg}"
+                                    verdict.reason = assessment.reason
                 except Exception as e:
                     verdict.verdict = "uncertain"
                     verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"
 
-        # Confirmation decision policy
+        # Confirmation decision policy (evaluate via shared policy)
         if verdict.confirmed:
-            if vuln.type in (
-                VulnerabilityType.SQL_INJECTION,
-                VulnerabilityType.OS_COMMAND_INJECTION,
-                VulnerabilityType.PATH_TRAVERSAL
-            ):
-                if not verdict.taint_path and not verdict.reason:
-                    verdict.verdict = "uncertain"
-                    verdict.reason = "Xác nhận thiếu chuỗi dữ liệu (taint path) hoặc lý do cụ thể."
+            c_eids = [r.get("evidence_id") for r in verdict.successful_reads if r.get("evidence_id")]
+            assessment = evaluate_assessment_policy(
+                vuln_id=vuln.id,
+                vuln_type=vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type),
+                snapshot_id=self.snapshot_id,
+                evidence_store=self.evidence_store,
+                verdict="supported",
+                evidence_ids=c_eids,
+                reason=verdict.reason,
+                taint_path=verdict.taint_path,
+                assessor="agent",
+            )
+            if assessment.status != AssessmentStatus.SUPPORTED:
+                verdict.verdict = "uncertain"
+                verdict.reason = assessment.reason
 
         return verdict
 

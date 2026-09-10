@@ -112,12 +112,13 @@ class ScanResult:
     @property
     def degraded(self) -> bool:
         """
-        Whether any file's scan ran with a failed tier.
+        Whether any file's scan ran with a failed tier or global error.
 
         Returns:
-            bool: True when at least one report is degraded
+            bool: True when at least one report is degraded or engine failed
         """
-
+        if self.stats.get("engine_failure") or self.stats.get("rule_error"):
+            return True
         return any(report.degraded for report in self.reports)
 
     @property
@@ -134,14 +135,66 @@ class ScanResult:
     def status(self) -> str:
         """
         Overall run status: completed, partial, or failed.
+        Consistent contract across CLI, MCP, SARIF, and UI (B01).
         """
+        if self.stats.get("engine_failure") or self.stats.get("rule_error"):
+            return "failed"
         if not self.reports:
             return "completed"
-        if all(r.degraded for r in self.reports):
+        if all(r.status == "failed" or r.degraded for r in self.reports):
             return "failed"
-        if any(r.degraded for r in self.reports):
+        if any(r.status in ("failed", "partial") or r.degraded for r in self.reports):
             return "partial"
         return "completed"
+
+    @property
+    def coverage(self) -> Dict[str, Any]:
+        """
+        Detailed coverage metrics reflecting requested vs actual analyzed files.
+        """
+        files_requested = self.stats.get("files_requested", [r.file_name for r in self.reports if r.file_name])
+        files_scanned = [r.file_name for r in self.reports if r.file_name]
+        files_completed = [r.file_name for r in self.reports if r.status == "completed" and not r.degraded]
+        files_failed = [r.file_name for r in self.reports if r.status == "failed" or r.degraded]
+        files_partial = [r.file_name for r in self.reports if r.status == "partial"]
+
+        return {
+            "requested_count": len(files_requested),
+            "scanned_count": len(files_scanned),
+            "completed_count": len(files_completed),
+            "failed_count": len(files_failed),
+            "partial_count": len(files_partial),
+            "status": self.status,
+            "degraded": self.degraded,
+            "file_statuses": {
+                r.file_name: {
+                    "status": r.status,
+                    "degraded": r.degraded,
+                    "engine_status": r.engine_status,
+                }
+                for r in self.reports if r.file_name
+            },
+            "semgrep": {
+                "analyzed_files": [
+                    r.file_name for r in self.reports
+                    if r.file_name and r.engine_status.get("semgrep", {}).get("status") in ("ok", "completed")
+                ],
+                "failed_files": [
+                    r.file_name for r in self.reports
+                    if r.file_name and r.engine_status.get("semgrep", {}).get("status") in ("failed", "parse_error")
+                ],
+            },
+            "llm": {
+                "analyzed_files": [
+                    r.file_name for r in self.reports
+                    if r.file_name and r.engine_status.get("llm", {}).get("status") == "completed"
+                ],
+                "failed_files": [
+                    r.file_name for r in self.reports
+                    if r.file_name and r.engine_status.get("llm", {}).get("status") == "failed"
+                ],
+            },
+        }
 
 
 class Scanner:
@@ -180,16 +233,33 @@ class Scanner:
         files = await asyncio.to_thread(
             discover, self.options.target, self.options.excludes
         )
+        requested_files: List[str] = []
         if self.options.files:
-            file_set = {str(Path(f).as_posix()) for f in self.options.files} | {Path(f).name for f in self.options.files}
-            files = [
-                f for f in files
-                if f.relative in file_set or f.path.name in file_set or f.path.as_posix() in file_set
-            ]
+            requested_relatives = set()
+            for f in self.options.files:
+                p = Path(f)
+                if p.is_absolute():
+                    try:
+                        rel = p.resolve().relative_to(root).as_posix()
+                    except (ValueError, OSError):
+                        rel = p.as_posix()
+                else:
+                    try:
+                        rel = (root / p).resolve().relative_to(root).as_posix()
+                    except (ValueError, OSError):
+                        rel = p.as_posix().lstrip("./")
+                requested_relatives.add(rel)
+            requested_files = sorted(list(requested_relatives))
+            files = [f for f in files if f.relative in requested_relatives]
+
         if not files:
             logging.warning(f"No source files found under {self.options.target}")
             self._emit("done", "No source files found", 100)
-            return ScanResult([], root, {"files_discovered": 0})
+            return ScanResult([], root, {
+                "files_discovered": 0,
+                "files_requested": requested_files,
+                "files_scanned": 0,
+            })
         self._emit(
             "discovery", f"Found {len(files)} source file(s)", 6,
             files_discovered=len(files)
@@ -260,12 +330,15 @@ class Scanner:
 
         stats = {
             "files_discovered": len(files),
+            "files_requested": requested_files or [f.relative for f in files],
+            "files_scanned": len(reports),
             "files_sent_to_llm": len(routed),
             "rule_tier_seconds": round(rule_elapsed, 2),
             "llm_tier_seconds": round(llm_elapsed, 2),
             "total_seconds": round(time.perf_counter() - started, 2),
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
+            "rule_error": self._rule_error,
             **verify_stats,
         }
         logging.info(f"Scan complete: {stats}")
@@ -339,10 +412,12 @@ class Scanner:
             if self.options.files and in_scope:
                 semgrep_target = [str((root / rel).resolve()) for rel in in_scope]
             findings = await asyncio.to_thread(self.semgrep.scan, semgrep_target)
-        except SemgrepUnavailable as e:
+        except Exception as e:
             logging.error(f"Rule tier failed: {e}")
             self._rule_error = str(e)
             return {}
+
+        self._file_rule_errors = self.semgrep.get_file_errors(root) if hasattr(self.semgrep, "get_file_errors") else {}
 
         grouped: Dict[str, List[Vulnerability]] = defaultdict(list)
         out_of_scope = 0
@@ -649,38 +724,84 @@ class Scanner:
         """
 
         reports = []
-        if self.semgrep is None:
-            semgrep_status = "disabled"
-        elif self._rule_error:
-            semgrep_status = f"failed: {self._rule_error}"
-        elif not self.semgrep.available:
-            semgrep_status = "unavailable"
-        else:
-            semgrep_status = "ok"
+        global_rule_err = getattr(self, "_rule_error", "")
+        file_rule_errors = getattr(self, "_file_rule_errors", {})
 
         for item in files:
             relative = item.relative
             rule_findings = rule_by_file.get(relative, [])
             llm_findings = llm_by_file.get(relative, [])
 
-            fused = fusion.fuse(rule_findings, llm_findings)
-            chains = self.analyzer._chain_vulnerabilities(fused.vulnerabilities)
-
-            tiers = {"semgrep": semgrep_status}
-            if not self.options.use_llm:
-                tiers["llm"] = "disabled"
+            # Semgrep status for this specific file
+            semgrep_reason = ""
+            if self.semgrep is None:
+                semgrep_status = "disabled"
+                semgrep_reason = "Engine disabled"
+            elif global_rule_err:
+                semgrep_status = "failed"
+                semgrep_reason = global_rule_err
+            elif not self.semgrep.available:
+                semgrep_status = "unavailable"
+                semgrep_reason = "Semgrep binary unavailable"
+            elif relative in file_rule_errors:
+                semgrep_status = "parse_error"
+                err_val = file_rule_errors[relative]
+                if isinstance(err_val, list) and err_val:
+                    err_entry = err_val[0]
+                else:
+                    err_entry = err_val
+                semgrep_reason = err_entry.get("message", "Syntax or parse error") if isinstance(err_entry, dict) else str(err_entry)
             else:
-                tiers["llm"] = tier_status.get(relative, "not routed")
+                semgrep_status = "ok"
+
+            # LLM status for this specific file
+            llm_reason = ""
+            if not self.options.use_llm:
+                llm_status = "disabled"
+                llm_reason = "LLM tier disabled"
+            else:
+                raw_llm = tier_status.get(relative, "not routed")
+                if raw_llm.startswith("failed"):
+                    llm_status = "failed"
+                    llm_reason = raw_llm
+                elif raw_llm == "not routed":
+                    llm_status = "not_routed"
+                    llm_reason = "File did not clear risk threshold"
+                else:
+                    llm_status = "completed"
 
             is_failed = (
-                semgrep_status.startswith("failed")
-                or tiers["llm"].startswith("failed")
+                semgrep_status in ("failed", "parse_error")
+                or llm_status == "failed"
             )
             is_partial = (
                 semgrep_status == "unavailable"
-                or (self.options.use_llm and tiers["llm"] == "not routed")
+                or (self.options.use_llm and llm_status == "not_routed")
             )
             report_status = "failed" if is_failed else ("partial" if is_partial else "completed")
+
+            fused = fusion.fuse(rule_findings, llm_findings)
+            chains = self.analyzer._chain_vulnerabilities(fused.vulnerabilities)
+
+            tiers = {
+                "semgrep": semgrep_status if not semgrep_reason else f"{semgrep_status}: {semgrep_reason}",
+                "llm": llm_status if not llm_reason else f"{llm_status}: {llm_reason}",
+            }
+
+            engine_status = {
+                "semgrep": {
+                    "requested": self.options.use_semgrep,
+                    "status": semgrep_status,
+                    "reason": semgrep_reason,
+                    "findings": len(rule_findings),
+                },
+                "llm": {
+                    "requested": self.options.use_llm,
+                    "status": llm_status,
+                    "reason": llm_reason,
+                    "findings": len(llm_findings),
+                },
+            }
 
             report = VulnerabilityReport(
                 file_name=relative,
@@ -689,10 +810,7 @@ class Scanner:
                 timestamp=datetime.now(),
                 tiers=tiers,
                 status=report_status,
-                engine_status={
-                    "semgrep": {"status": semgrep_status, "findings": len(rule_findings)},
-                    "llm": {"status": tiers["llm"], "findings": len(llm_findings)},
-                }
+                engine_status=engine_status,
             )
             report.calculate_summary()
             report.calculate_risk_score()
@@ -723,20 +841,11 @@ class Scanner:
     def _cache_key(self, content: str) -> str:
         """
         Derive the cache key for a file's LLM analysis.
-
-        The model name is part of the key because switching models must not
-        silently reuse another model's findings - that would quietly corrupt
-        any model comparison.
-
-        Args:
-            content: File contents
-
-        Returns:
-            str: Hex digest
+        Includes pipeline version, provider, model, and content hash.
         """
-
         model = os.getenv("OPENAI_MODEL", "default")
-        payload = f"{CACHE_VERSION}|{model}|{content}"
+        provider = os.getenv("AI_PROVIDER", "openai")
+        payload = f"{CACHE_VERSION}|{provider}|{model}|prompt_v1|{content}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _resolve_cache_dir(self) -> Optional[Path]:
@@ -784,22 +893,33 @@ class Scanner:
 
     def _cache_put(self, content: str, analysis: Dict[str, Any]) -> None:
         """
-        Store an LLM analysis for reuse.
+        Store an LLM analysis for reuse using atomic write.
+        Never caches failed, truncated, or invalid analysis.
 
         Args:
             content: File contents
             analysis: Raw analysis dictionary
         """
 
+        if not analysis or analysis.get("error") or analysis.get("truncated"):
+            return
+
         cache_dir = self._resolve_cache_dir()
         if cache_dir is None:
             return
 
         path = cache_dir / f"{self._cache_key(content)}.json"
+        tmp_path = path.with_suffix(f".tmp_{os.getpid()}")
         try:
-            path.write_text(json.dumps(analysis, ensure_ascii=False), encoding="utf-8")
+            tmp_path.write_text(json.dumps(analysis, ensure_ascii=False), encoding="utf-8")
+            tmp_path.replace(path)
         except OSError as e:
-            logging.debug(f"Could not write cache entry {path}: {e}")
+            logging.debug(f"Could not atomically write cache entry {path}: {e}")
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
 
 
 async def scan(options: ScanOptions) -> ScanResult:

@@ -43,7 +43,13 @@ from context.ast_context import ASTContextExtractor
 from context.diff_scope import DiffScopeAnalyzer
 from evidence.safe_reader import SafeReader
 from evidence.store import EvidenceStore
-from models.assessment import AssessmentStatus, FindingAssessment
+from models.assessment import (
+    AssessmentStatus,
+    AssessmentStore,
+    FindingAssessment,
+    check_assessment_stale,
+    evaluate_assessment_policy,
+)
 from models.evidence import EvidenceStatus
 from models.vulnerability import FindingSource, Vulnerability
 import ast
@@ -508,17 +514,19 @@ async def scan_changes(
     scanner = Scanner(options)
     result = await scanner.scan()
 
-    target_scope = set(expanded_files)
+    target_scope = {Path(f).as_posix().lstrip("./") for f in expanded_files}
     candidates = [
         v for v in result.vulnerabilities
-        if v.location.file_path in target_scope or Path(v.location.file_path).name in target_scope
+        if Path(v.location.file_path).as_posix().lstrip("./") in target_scope
     ]
 
+    assessment_store = AssessmentStore()
     scan_id = f"scan_{uuid.uuid4().hex[:12]}"
     _scan_sessions[scan_id] = {
         "root": root,
         "snapshot": snapshot,
         "evidence_store": evidence_store,
+        "assessment_store": assessment_store,
         "scanner": scanner,
         "findings": {v.id: v for v in candidates},
         "assessments": {},
@@ -527,19 +535,28 @@ async def scan_changes(
         "created_at": time.time(),
     }
 
+    scanned_count = len([r for r in result.reports if r.status in ("completed", "partial")])
+    coverage_info = {
+        "files_requested": list(expanded_files),
+        "files_scanned": [r.file_name for r in result.reports if r.file_name],
+        "scanned_count": scanned_count,
+        "total_files": len(result.reports),
+        "status": result.status,
+        "degraded": result.degraded,
+        "file_statuses": {
+            r.file_name: {"status": r.status, "engine_status": r.engine_status}
+            for r in result.reports if r.file_name
+        },
+    }
+
     return {
         "scan_id": scan_id,
         "snapshot_id": snapshot.snapshot_id,
         "changed_files": changed_files,
         "expanded_files": expanded_files,
         "candidates": [_to_dict(v) for v in candidates],
-        "coverage": {
-            "files_scanned": len(expanded_files),
-            "total_files": len(result.reports),
-            "status": result.status,
-            "degraded": result.degraded,
-        },
-        "summary": f"Scanned {len(changed_files)} changed file(s); found {len(candidates)} security candidate(s).",
+        "coverage": coverage_info,
+        "summary": f"Scanned {scanned_count} of {len(expanded_files)} file(s); found {len(candidates)} security candidate(s).",
     }
 
 
@@ -651,7 +668,8 @@ async def read_evidence(
     description=(
         "Submit a security assessment for a finding with cited evidence IDs. "
         "Verdicts: 'supported', 'refuted', or 'uncertain'. "
-        "'refuted' requires valid evidence_id from the scan and non-empty mitigating_control."
+        "'refuted' requires valid evidence_id from the scan and non-empty mitigating_control. "
+        "'supported' requires valid evidence_id and taint_path binding for injection flaws."
     )
 )
 async def submit_assessment(
@@ -661,7 +679,10 @@ async def submit_assessment(
     evidence_ids: List[str] = [],
     reason: str = "",
     mitigating_control: Optional[str] = None,
-    taint_path: List[Dict[str, Any]] = []
+    control_evidence_id: Optional[str] = None,
+    taint_path: List[Dict[str, Any]] = [],
+    missing_context: List[str] = [],
+    limitations: List[str] = [],
 ) -> Dict[str, Any]:
     session = _scan_sessions.get(scan_id)
     if not session:
@@ -673,56 +694,90 @@ async def submit_assessment(
 
     snapshot = session["snapshot"]
     evidence_store: EvidenceStore = session["evidence_store"]
+    assessment_store: AssessmentStore = session.get("assessment_store")
+    if assessment_store is None:
+        assessment_store = AssessmentStore()
+        session["assessment_store"] = assessment_store
 
-    norm_verdict = verdict.strip().lower()
-    if norm_verdict not in ("supported", "refuted", "uncertain"):
-        norm_verdict = "uncertain"
+    vuln_type = vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type)
 
-    final_status = norm_verdict
-    policy_notes = []
-
-    if norm_verdict == "refuted":
-        if not mitigating_control or not mitigating_control.strip():
-            final_status = "uncertain"
-            policy_notes.append("Refutation rejected: missing non-empty mitigating_control.")
-
-        if not evidence_ids:
-            final_status = "uncertain"
-            policy_notes.append("Refutation rejected: no evidence_ids cited.")
-        else:
-            valid_evidence_found = False
-            for eid in evidence_ids:
-                is_valid, ev_status, msg = evidence_store.validate_evidence(eid, snapshot.snapshot_id)
-                if is_valid:
-                    valid_evidence_found = True
-                    break
-                else:
-                    policy_notes.append(f"Evidence '{eid}' invalid: {msg}")
-            if not valid_evidence_found:
-                final_status = "uncertain"
-                policy_notes.append("Refutation rejected: all cited evidence_ids are invalid or stale.")
-
-    assessment = FindingAssessment(
-        finding_id=finding_id,
+    assessment = evaluate_assessment_policy(
+        vuln_id=finding_id,
+        vuln_type=vuln_type,
         snapshot_id=snapshot.snapshot_id,
-        status=AssessmentStatus(final_status),
-        reason=reason + (" " + "; ".join(policy_notes) if policy_notes else ""),
+        evidence_store=evidence_store,
+        verdict=verdict,
         evidence_ids=evidence_ids,
+        reason=reason,
         mitigating_control=mitigating_control,
+        control_evidence_id=control_evidence_id or (evidence_ids[0] if evidence_ids else None),
         taint_path=taint_path,
+        missing_context=missing_context,
+        limitations=limitations,
         assessor="host_editor",
     )
-    session["assessments"][finding_id] = assessment
-    vuln.assessment_status = final_status
+
+    assessment_store.save(assessment)
+    session.setdefault("assessments", {})[finding_id] = assessment
+    vuln.assessment_status = assessment.status.value
     vuln.assessment = assessment.model_dump()
 
     return {
         "finding_id": finding_id,
         "submitted_verdict": verdict,
-        "accepted_status": final_status,
+        "accepted_status": assessment.status.value,
         "reason": assessment.reason,
-        "policy_verified": final_status == norm_verdict,
+        "policy_verified": assessment.status.value == verdict.strip().lower(),
+        "created_at": assessment.created_at,
     }
+
+
+@mcp.tool(
+    description="Check for stale assessments in a scan session whose underlying source files have changed."
+)
+async def check_stale_assessments(scan_id: str) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}."}
+
+    evidence_store: EvidenceStore = session["evidence_store"]
+    assessment_store: AssessmentStore = session.get("assessment_store")
+    if not assessment_store:
+        return {"stale_finding_ids": [], "summary": "No assessments recorded yet."}
+
+    stale_ids = assessment_store.check_all_stale(evidence_store)
+    for fid in stale_ids:
+        if fid in session["findings"]:
+            session["findings"][fid].assessment_status = AssessmentStatus.STALE.value
+
+    return {
+        "stale_count": len(stale_ids),
+        "stale_finding_ids": stale_ids,
+        "summary": f"Identified {len(stale_ids)} stale assessment(s) due to disk modifications.",
+    }
+
+
+@mcp.tool(
+    description="Retrieve assessment history and audit trail for a finding or all findings in a scan."
+)
+async def get_assessment_history(scan_id: str, finding_id: Optional[str] = None) -> Dict[str, Any]:
+    session = _scan_sessions.get(scan_id)
+    if not session:
+        return {"error": f"Unknown scan_id: {scan_id}."}
+
+    assessment_store: AssessmentStore = session.get("assessment_store")
+    if not assessment_store:
+        return {"history": []}
+
+    if finding_id:
+        entries = assessment_store.get_history(finding_id)
+        return {"finding_id": finding_id, "history": [e.model_dump() for e in entries]}
+    else:
+        all_hist = {
+            fid: [e.model_dump() for e in assessment_store.get_history(fid)]
+            for fid in session["findings"]
+        }
+        return {"history": all_hist}
 
 
 @mcp.tool(
@@ -795,13 +850,13 @@ async def check_fix(
 
     old_ids = set(session["findings"].keys())
     scan_scope = list(session.get("expanded_files") or changed_files)
-    scope_lookup = {Path(f).as_posix().lstrip("./") for f in scan_scope} | {Path(f).name for f in scan_scope}
+    scope_lookup = {Path(f).as_posix().lstrip("./") for f in scan_scope}
 
     def is_in_scope(file_path: str) -> bool:
         if not scan_scope:
             return True
         norm = Path(file_path).as_posix().lstrip("./")
-        return norm in scope_lookup or Path(file_path).name in scope_lookup
+        return norm in scope_lookup
 
     new_regressions = [
         _to_dict(v) for v in new_result.vulnerabilities

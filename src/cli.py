@@ -362,6 +362,9 @@ def _render(args: argparse.Namespace, result: ScanResult) -> str:
     if args.format == "json":
         return json.dumps(
             {
+                "status": result.status,
+                "degraded": result.degraded,
+                "coverage": result.coverage,
                 "stats": result.stats,
                 "reports": [r.model_dump(mode="json") for r in result.reports],
             },
@@ -470,7 +473,7 @@ async def _run_fix(args: argparse.Namespace) -> int:
         return EXIT_CLEAN
 
     if args.verify:
-        return await _verify_fix(args, result, stats["backups"])
+        return await _verify_fix(args, result, stats["backups"], expected_current_hashes=stats.get("written_hashes"))
 
     print("Re-run `vulnagent scan` to confirm the findings are resolved.")
     return EXIT_CLEAN
@@ -479,7 +482,8 @@ async def _run_fix(args: argparse.Namespace) -> int:
 async def _verify_fix(
     args: argparse.Namespace,
     before: ScanResult,
-    backups: dict
+    backups: dict,
+    expected_current_hashes: Optional[dict] = None,
 ) -> int:
     """
     Re-scan after patching and undo the changes if they did not help.
@@ -488,6 +492,7 @@ async def _verify_fix(
         args: Parsed arguments
         before: The scan taken before patching
         backups: Original file contents, for reverting
+        expected_current_hashes: Hashes written by fixer to protect concurrent edits
 
     Returns:
         int: Process exit code
@@ -504,12 +509,12 @@ async def _verify_fix(
     except Exception as e:
         print(f"  verification scan failed: {e}", file=sys.stderr)
         print("  reverting to be safe.")
-        revert(backups)
+        revert(backups, expected_current_hashes=expected_current_hashes)
         return EXIT_ERROR
 
-    if after.degraded:
-        print("  verification scan was degraded or incomplete. Reverting to be safe.")
-        revert(backups)
+    if after.degraded or after.status != "completed":
+        print(f"  verification scan was degraded or incomplete (status={after.status}). Reverting to be safe.")
+        revert(backups, expected_current_hashes=expected_current_hashes)
         return EXIT_ERROR
 
     was = len(before.vulnerabilities)
@@ -519,13 +524,13 @@ async def _verify_fix(
     new_findings = [v for v in after.vulnerabilities if v.fingerprint not in before_fps]
     if new_findings:
         print(f"  patch introduced {len(new_findings)} new finding(s). Reverting.")
-        restored = revert(backups)
+        restored = revert(backups, expected_current_hashes=expected_current_hashes)
         print(f"  restored {restored} file(s).")
         return EXIT_ERROR
 
     if now > was:
         print(f"  findings went from {was} to {now}. Reverting.")
-        restored = revert(backups)
+        restored = revert(backups, expected_current_hashes=expected_current_hashes)
         print(f"  restored {restored} file(s).")
         return EXIT_ERROR
 
@@ -693,7 +698,9 @@ async def _run_check(args: argparse.Namespace) -> int:
 
         if result.vulnerabilities:
             for v in result.vulnerabilities:
-                print(f"  - [{v.severity.value}] {v.vulnerability_type} at {v.file_path}:{v.line_number}")
+                v_type = v.type.value if hasattr(v.type, "value") else str(v.type)
+                file_loc = f"{v.location.file_path}:{v.location.start_line}" if v.location else "unknown"
+                print(f"  - [{v.severity.value}] {v_type} at {file_loc}")
             print("\nPre-release check completed: Findings must be reviewed/resolved prior to release.")
             return EXIT_FINDINGS
 
@@ -702,7 +709,9 @@ async def _run_check(args: argparse.Namespace) -> int:
     else:
         if result.vulnerabilities:
             for v in result.vulnerabilities:
-                print(f"[{v.severity.value}] {v.vulnerability_type} in {v.file_path}:{v.line_number}")
+                v_type = v.type.value if hasattr(v.type, "value") else str(v.type)
+                file_loc = f"{v.location.file_path}:{v.location.start_line}" if v.location else "unknown"
+                print(f"[{v.severity.value}] {v_type} in {file_loc}")
             return EXIT_FINDINGS
         print("Check completed: No findings detected.")
         return EXIT_CLEAN
