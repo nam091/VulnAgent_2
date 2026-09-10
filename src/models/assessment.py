@@ -143,13 +143,48 @@ def evaluate_assessment_policy(
             has_empty_or_invalid_step = False
 
             for step in taint_path:
-                if not isinstance(step, dict) or not step:
+                if not isinstance(step, (dict, TaintStep)) or not step:
                     final_status = "uncertain"
                     has_empty_or_invalid_step = True
                     policy_notes.append("Taint step is empty or malformed ({})")
                     continue
 
-                step_eid = step.get("evidence_id")
+                try:
+                    if isinstance(step, dict):
+                        raw_kind = step.get("kind")
+                        if raw_kind is None:
+                            raw_kind = step.get("step")
+                        if raw_kind is not None:
+                            if not isinstance(raw_kind, str):
+                                raise ValueError(f"Taint step kind must be a string, got {type(raw_kind).__name__}")
+                            raw_kind_str = raw_kind.strip().lower()
+                            if raw_kind_str == "propagator":
+                                raw_kind_str = "propagation"
+                            norm_step_data = dict(step)
+                            norm_step_data["kind"] = raw_kind_str
+                        else:
+                            norm_step_data = dict(step)
+                    elif isinstance(step, TaintStep):
+                        norm_step_data = step.model_dump()
+                    else:
+                        raise ValueError(f"Expected dict or TaintStep, got {type(step).__name__}")
+
+                    if "line" in norm_step_data and norm_step_data["line"] is not None:
+                        line_val = norm_step_data["line"]
+                        if isinstance(line_val, bool) or not isinstance(line_val, int):
+                            if isinstance(line_val, str) and line_val.isdigit():
+                                norm_step_data["line"] = int(line_val)
+                            else:
+                                raise ValueError(f"Taint step line must be an integer, got {line_val!r}")
+
+                    validated_step = TaintStep.model_validate(norm_step_data)
+                except Exception as e:
+                    final_status = "uncertain"
+                    has_empty_or_invalid_step = True
+                    policy_notes.append(f"Taint step schema validation failed: {e}")
+                    continue
+
+                step_eid = validated_step.evidence_id
                 if not step_eid or not str(step_eid).strip():
                     final_status = "uncertain"
                     has_empty_or_invalid_step = True
@@ -170,32 +205,35 @@ def evaluate_assessment_policy(
                     policy_notes.append(f"Taint step evidence record '{step_eid}' not found")
                     continue
 
-                step_file = step.get("file")
+                step_file = validated_step.file
                 if step_file:
-                    norm_rec_path = Path(rec.path).as_posix().lstrip("./")
-                    norm_step_path = Path(step_file).as_posix().lstrip("./")
-                    if norm_rec_path != norm_step_path and not norm_step_path.endswith("/" + norm_rec_path) and not norm_rec_path.endswith("/" + norm_step_path):
-                        final_status = "uncertain"
-                        has_empty_or_invalid_step = True
-                        policy_notes.append(f"Taint step file '{step_file}' does not match evidence file '{rec.path}'")
-
-                step_line = step.get("line")
-                if step_line is not None:
                     try:
-                        s_line = int(step_line)
-                        if s_line < rec.start_line or s_line > rec.end_line:
+                        if hasattr(evidence_store, "reader") and hasattr(evidence_store.reader, "resolve"):
+                            resolved_step = evidence_store.reader.resolve(step_file)
+                            resolved_rec = evidence_store.reader.resolve(rec.path)
+                        else:
+                            root_path = getattr(evidence_store, "root", Path.cwd())
+                            resolved_step = (root_path / step_file).resolve()
+                            resolved_rec = (root_path / rec.path).resolve()
+                        if resolved_step != resolved_rec:
                             final_status = "uncertain"
                             has_empty_or_invalid_step = True
-                            policy_notes.append(f"Taint step line {s_line} out of evidence range {rec.start_line}-{rec.end_line}")
-                    except (ValueError, TypeError):
+                            policy_notes.append(f"Taint step file '{step_file}' does not match evidence file '{rec.path}'")
+                    except Exception as e:
                         final_status = "uncertain"
                         has_empty_or_invalid_step = True
-                        policy_notes.append(f"Taint step line '{step_line}' is not a valid integer")
+                        policy_notes.append(f"Invalid taint step file path '{step_file}': {e}")
 
-                k = (step.get("kind") or step.get("step") or "").strip().lower()
-                if "source" in k:
+                step_line = validated_step.line
+                if step_line is not None:
+                    if step_line < rec.start_line or step_line > rec.end_line:
+                        final_status = "uncertain"
+                        has_empty_or_invalid_step = True
+                        policy_notes.append(f"Taint step line {step_line} out of evidence range {rec.start_line}-{rec.end_line}")
+
+                if validated_step.kind == TaintStepKind.SOURCE:
                     has_source = True
-                if "sink" in k:
+                elif validated_step.kind == TaintStepKind.SINK:
                     has_sink = True
 
             if is_taint_cwe and not has_empty_or_invalid_step:

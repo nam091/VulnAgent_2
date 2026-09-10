@@ -238,7 +238,8 @@ class Scanner:
             discover, self.options.target, self.options.excludes
         )
         missing_requested: Set[str] = set()
-        if self.options.files:
+        requested_files: List[str] = []
+        if self.options.files is not None:
             requested_relatives = set()
             for f in self.options.files:
                 p = Path(f)
@@ -257,6 +258,8 @@ class Scanner:
             files = [f for f in files if f.relative in requested_relatives]
             discovered_relatives = {f.relative for f in files}
             missing_requested = requested_relatives - discovered_relatives
+        else:
+            requested_files = [f.relative for f in files]
 
         if not files:
             logging.warning(f"No source files found under {self.options.target}")

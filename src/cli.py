@@ -410,17 +410,6 @@ async def _run_fix(args: argparse.Namespace) -> int:
     _apply_suppressions(result)
     plan = build_plan(result.vulnerabilities, result.root, confirmed_only=args.confirmed_only)
 
-    expected_snapshot_hashes: Dict[Path, str] = {}
-    for p in plan.patches:
-        if p.file_path not in expected_snapshot_hashes:
-            try:
-                if p.file_path.is_file():
-                    expected_snapshot_hashes[p.file_path] = hashlib.sha256(
-                        p.file_path.read_text(encoding="utf-8").encode("utf-8")
-                    ).hexdigest()
-            except Exception:
-                pass
-
     if not plan.patches:
         print("\nNo applicable patches.")
         for vuln, why in plan.rejected[:10]:
@@ -475,9 +464,9 @@ async def _run_fix(args: argparse.Namespace) -> int:
         return EXIT_CLEAN
 
     plan.patches = selected
-    stats = apply_plan(plan, dry_run=args.dry_run, expected_snapshot_hashes=expected_snapshot_hashes)
+    stats = apply_plan(plan, dry_run=args.dry_run, expected_snapshot_hashes=plan.snapshot_hashes)
     if stats.get("patches_applied", 0) == 0 and selected and not args.dry_run:
-        print("error: files modified on disk since plan creation; patches skipped to avoid corruption.", file=sys.stderr)
+        print("error: files modified on disk since plan creation or missing baseline guard; patches skipped to avoid corruption.", file=sys.stderr)
         return EXIT_ERROR
 
     verb = "would change" if args.dry_run else "changed"

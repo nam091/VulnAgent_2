@@ -184,6 +184,7 @@ class PatchPlan:
 
     patches: List[Patch] = field(default_factory=list)
     rejected: List[Tuple[Vulnerability, str]] = field(default_factory=list)
+    snapshot_hashes: Dict[Path, str] = field(default_factory=dict)
 
     @property
     def by_file(self) -> Dict[Path, List[Patch]]:
@@ -307,9 +308,9 @@ def build_plan(
 
         if file_path not in file_cache:
             try:
-                file_cache[file_path] = file_path.read_text(
-                    encoding="utf-8"
-                ).split("\n")
+                content = file_path.read_text(encoding="utf-8")
+                file_cache[file_path] = content.split("\n")
+                plan.snapshot_hashes[file_path] = hashlib.sha256(content.encode("utf-8")).hexdigest()
             except OSError as e:
                 plan.rejected.append((vuln, f"unreadable: {e}"))
                 continue
@@ -417,6 +418,8 @@ def apply_plan(
     backups: Dict[Path, str] = {}
     written_hashes: Dict[Path, str] = {}
 
+    expected_hashes = expected_snapshot_hashes if expected_snapshot_hashes is not None else getattr(plan, "snapshot_hashes", None)
+
     for file_path, patches in plan.by_file.items():
         try:
             content = file_path.read_text(encoding="utf-8")
@@ -424,11 +427,16 @@ def apply_plan(
             logging.error(f"Cannot read {file_path}: {e}")
             continue
 
-        if expected_snapshot_hashes and file_path in expected_snapshot_hashes:
-            current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            if current_hash != expected_snapshot_hashes[file_path]:
+        if expected_hashes is not None:
+            if file_path not in expected_hashes:
                 logging.warning(
-                    f"File {file_path} modified on disk since snapshot; skipping patch to avoid corrupting stale lines."
+                    f"No baseline snapshot hash recorded for {file_path}; skipping patch to protect unverified file."
+                )
+                continue
+            current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if current_hash != expected_hashes[file_path]:
+                logging.warning(
+                    f"File {file_path} modified on disk since plan creation (hash mismatch); skipping patch to avoid corrupting stale lines."
                 )
                 continue
 

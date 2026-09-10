@@ -1038,5 +1038,142 @@ def test_r07_apply_plan_with_snapshot_hashes(tmp_path: Path):
     assert f.read_text(encoding="utf-8") == "a = 999\n"
 
 
+@pytest.mark.asyncio
+async def test_n01_scanner_default_without_files(tmp_path: Path):
+    """
+    N01: Scanner.scan() without files option must not raise UnboundLocalError
+    on empty directory or populated directory.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+
+    # 1. Empty directory
+    scanner_empty = Scanner(ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False))
+    res_empty = await scanner_empty.scan()
+    assert res_empty.status == "completed"
+    assert res_empty.stats["files_requested"] == []
+
+    # 2. Populated directory
+    f = tmp_path / "hello.py"
+    f.write_text("print('test')\n", encoding="utf-8")
+    scanner_pop = Scanner(ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False))
+    res_pop = await scanner_pop.scan()
+    assert res_pop.status == "completed"
+    assert "hello.py" in res_pop.stats["files_requested"]
+
+
+def test_n02_n03_taint_policy_strict_schema_and_path(tmp_path: Path):
+    """
+    N02/N03: Strict path resolution against EvidenceStore (no suffix matching)
+    and strict TaintStep schema validation (no substring matching, error on invalid kind/types).
+    """
+    from models.assessment import AssessmentStatus, evaluate_assessment_policy
+    from evidence.store import EvidenceStore
+
+    f = tmp_path / "app.py"
+    f.write_text("x = input()\nos.system(x)\n", encoding="utf-8")
+
+    store = EvidenceStore(tmp_path)
+    snap = store.create_snapshot()
+    ev = store.record_evidence(snap.snapshot_id, "app.py", 1, 2, origin="read_lines")
+
+    # 1. N02: Subdirectory path mismatch (b/app.py vs app.py)
+    a_mismatch = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "source", "file": "b/app.py", "line": 1, "evidence_id": ev.evidence_id},
+            {"kind": "sink", "file": "b/app.py", "line": 2, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_mismatch.status == AssessmentStatus.UNCERTAIN
+    assert "not match" in a_mismatch.reason.lower()
+
+    # 2. N03: kind='not_source_not_sink' must fail schema validation and be uncertain
+    a_fake_kind = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": "not_source_not_sink", "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_fake_kind.status == AssessmentStatus.UNCERTAIN
+    assert "schema validation failed" in a_fake_kind.reason.lower()
+
+    # 3. N03: kind=123 (integer) must not crash with AttributeError
+    a_int_kind = evaluate_assessment_policy(
+        vuln_id="v1",
+        vuln_type="SQL_INJECTION",
+        snapshot_id=snap.snapshot_id,
+        evidence_store=store,
+        verdict="supported",
+        evidence_ids=[ev.evidence_id],
+        taint_path=[
+            {"kind": 123, "file": "app.py", "line": 1, "evidence_id": ev.evidence_id},
+        ],
+    )
+    assert a_int_kind.status == AssessmentStatus.UNCERTAIN
+    assert "schema validation failed" in a_int_kind.reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_r07_timing_detects_file_modification_between_plan_and_apply(tmp_path: Path):
+    """
+    R07 timing: build_plan snapshots file hash during plan creation.
+    If the file is modified on disk before apply_plan runs, _run_fix halts with error.
+    """
+    from cli import _run_fix, EXIT_ERROR
+    from analyzer.scanner import ScanResult
+    from conftest import make_vuln
+    import argparse
+
+    f = tmp_path / "code.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+
+    vuln = make_vuln(file_path="code.py", start_line=1, secure_code_example="x = 2\n")
+    report = VulnerabilityReport(
+        file_name="code.py",
+        vulnerabilities=[vuln],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    scan_res = ScanResult([report], tmp_path, {})
+
+    args = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=False,
+        confirmed_only=False,
+        dry_run=False,
+        verify=False,
+        yes=True,
+        include_risky=True,
+    )
+
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = scan_res
+
+        orig_build_plan = __import__("analyzer.fixer", fromlist=["build_plan"]).build_plan
+
+        def side_effect_build_plan(*b_args, **b_kwargs):
+            plan = orig_build_plan(*b_args, **b_kwargs)
+            # Simulate modification on disk AFTER build_plan has created plan
+            f.write_text("x = 999\n", encoding="utf-8")
+            return plan
+
+        with patch("cli.build_plan", side_effect=side_effect_build_plan):
+            code = await _run_fix(args)
+            assert code == EXIT_ERROR
+            assert f.read_text(encoding="utf-8") == "x = 999\n"
+
+
+
 
 

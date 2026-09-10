@@ -1,5 +1,73 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+> **Cập nhật review tại `9c30986` (11/09/2026):** 78/78 test pass, nhưng chưa đóng toàn bộ R01–R07. Có regression mới ở scanner không truyền `files`; R03 còn lỗi path/schema; R07 mới bảo vệ hash chụp sau build plan. Phần cập nhật dưới đây là kết luận mới nhất. Các mục từ “1. Kết luận” trở đi giữ lại làm lịch sử review tại `5929004`.
+
+## Cập nhật sau bản sửa R01–R07 — commit 9c30986
+
+### Kết quả kiểm tra
+
+- Đã đọc diff CLI, scanner, MCP và shared assessment policy; đối chiếu regression tests mới.
+- `python -m pytest tests -q`: **78 passed, 1 warning**, pytest báo **8.51 giây**.
+- Probe bổ sung chạy Scanner thật với hai engine disabled để kiểm tra điều phối, không cần Semgrep/API; dùng file giả trong thư mục tạm.
+- Probe policy dùng EvidenceStore thật, snapshot/file/record thật; không gọi model.
+- Không thay đổi mã nguồn trong lượt review này. Các phát hiện mới dưới đây đã tái hiện, trừ nhận xét thời điểm chụp hash R07 được xác minh bằng đọc luồng gọi.
+
+### Trạng thái R01–R07
+
+| ID | Kết luận cập nhật |
+|---|---|
+| R01 | Đã sửa lời gọi `get_changed_files()` và gom một Scanner với expanded scope; ca cũ có regression test pass. Chưa nghiệm thu toàn bộ Git/subdirectory/host workflow. |
+| R02 | Đã chặn exit 0 ở `check`/`before-release` khi nhận result failed/degraded; test pass. Tuy nhiên scan thường hiện bị regression N01 trước khi trả result. |
+| R03 | Đã chặn taint step rỗng, thiếu/ID bịa và kiểm tra range; **chưa đóng** vì path identity và enum validation vẫn lọt N02/N03. |
+| R04 | Đã thêm failed report cho file yêu cầu bị thiếu, chặn resolved cho ca cũ; test pass. Chưa có toàn bộ snapshot trước/sau, rename/new helper, behavioral verification. |
+| R05 | Đã dùng `id` hoặc `fingerprint()`; ca finding giống nhau qua instance mới không còn bị báo regression trong test. |
+| R06 | Đã đưa error khóa `""` vào lỗi toàn run; test assembler pass. Chưa chạy Semgrep thật để kiểm tra phân loại warning/error. |
+| R07 | Đã truyền expected hashes từ CLI xuống apply; **mới một phần**: hash vẫn được chụp sau scan/build_plan, chưa neo chắc vào nội dung dùng để tạo kế hoạch. Test mới chỉ gọi apply_plan trực tiếp. |
+
+### N01 — P1: scan thông thường bị UnboundLocalError
+
+- **Vị trí:** `src/analyzer/scanner.py:240`, `:256`, `:293`, `:367`.
+- `requested_files` chỉ được gán trong `if self.options.files`, nhưng cả nhánh không có file và nhánh tổng hợp stats đều sử dụng biến đó.
+- **Đã tái hiện:** `Scanner(ScanOptions(target=temp_root, use_llm=False, use_semgrep=False)).scan()` không truyền `files`. Cả thư mục rỗng và thư mục chứa `app.py` đều lỗi:
+
+```text
+UnboundLocalError: cannot access local variable 'requested_files' where it is not associated with a value
+```
+
+- **Ảnh hưởng:** scan toàn repo/file theo đường mặc định không trả ScanResult bình thường. Những CLI/MCP entrypoint không truyền `files` đều cần được kiểm tra lại; việc 78 test pass chưa bao phủ nhánh này.
+- **Sửa:** khởi tạo `requested_files` cho mọi đường đi; xác định riêng `files=None` (discover theo target) và `files=[]` (scope rỗng nếu contract quy định như vậy), không dựa hoàn toàn vào truthiness.
+- **Test cần có:** thư mục rỗng, một file, toàn repo và explicit files; test chạy xuyên Scanner.scan, chỉ mock engine boundary. Không mock toàn bộ Scanner.scan khi kiểm tra orchestration của nó.
+
+### N02 — P1: taint policy vẫn đối sánh nhầm file theo hậu tố
+
+- **Vị trí:** `src/models/assessment.py:175–177`.
+- **Đã tái hiện:** evidence hợp lệ cho `app.py:1`; taint steps source và sink đều viện dẫn `b/app.py:1` với cùng evidence ID. File `b/app.py` không tồn tại. Kết quả vẫn **supported**.
+- **Nguyên nhân:** điều kiện `endswith('/' + norm_rec_path)` chấp nhận `b/app.py` là cùng file với `app.py`.
+- **Sửa:** resolve cả đường dẫn citation và record bằng root/policy của EvidenceStore; yêu cầu cùng resolved path và trong scope. Không dùng suffix/basename để quyết định identity.
+- **Test cần có:** root `app.py` đối lập `b/app.py`; hai thư mục trùng basename; absolute/relative cùng file hợp lệ; traversal và symlink ngoài root bị từ chối.
+
+### N03 — P1: TaintStep schema đã khai báo nhưng chưa dùng để validate
+
+- **Vị trí:** `src/models/assessment.py:TaintStep`, `evaluate_assessment_policy`, đặc biệt dòng 195–199.
+- **Đã tái hiện:** một step có evidence ID hợp lệ và `kind='not_source_not_sink'` vẫn được nhận **supported** cho SQL_INJECTION. Code tìm chuỗi con `source`/`sink`, khiến một kind không hợp lệ được tính là cả hai.
+- **Đã tái hiện:** `kind=123` gây `AttributeError: 'int' object has no attribute 'strip'`, thay vì trả uncertain/schema error có cấu trúc.
+- **Sửa:** validate mỗi step bằng model thực sự trước khi sử dụng; enum phải so sánh chính xác, không tìm substring; lỗi schema được thu gom thành policy failure. Dùng integer validation rõ để tránh chấp nhận bool/fractional line ngoài ý muốn. Chuẩn hóa tên kind giữa prompt (`propagator`) và schema (`propagation`) bằng migration/mapping tường minh nếu cần.
+- **Test cần có:** kind số/list/object, enum lạ, chuỗi chứa cả source/sink, line sai kiểu; ca source và sink hợp lệ vẫn được chấp nhận. Thiếu bằng chứng ngữ nghĩa vẫn phải nêu limitations, không coi đúng enum là chứng minh taint.
+
+### R07 còn lại — thời điểm chụp hash chưa gắn với scan/plan
+
+- **Vị trí:** `src/cli.py:404`, `:411`, `:413–423`, `:478`.
+- CLI quét xong, gọi build_plan, rồi mới đọc lại file để tạo expected_snapshot_hashes. Nếu nội dung đổi giữa scan/build_plan và lượt đọc lại này, hash mới có thể hợp thức hóa file mới trong khi patch được tạo từ mã cũ. Nhánh đọc hash lỗi còn `except: pass`, làm thiếu guard cho file đó.
+- Đã cải thiện so với không truyền hash: edit xảy ra sau khi chụp hash mới được chặn. Chưa đủ để khẳng định tất cả stale patch đã bị chặn.
+- **Sửa:** kế hoạch phải mang hash của chính nội dung gốc được dùng để xây/validate patch, đối chiếu với snapshot phân tích; không đọc lại một phiên bản mới để xác lập baseline. Không có expected hash cho patch yêu cầu ghi phải báo conflict, không bỏ qua guard.
+- **Test cần có:** chạy `_run_fix` qua build_plan/apply thật với scanner giả lập; thay file giữa scan và plan, giữa plan và hash, giữa hash và apply. Test unit của apply_plan chưa bao phủ các ranh giới này.
+
+### Hướng đi tiếp sau cập nhật
+
+Ưu tiên **N01 → N02/N03 → R07 timing**, sau đó chạy lại suite và một smoke scan/check/fix không mock toàn Scanner. R08–R14 của review gốc vẫn cần nghiệm thu riêng. Bản mới có tiến bộ nhỏ ngoài R01–R07: doctor thiếu Semgrep đã báo lỗi, MCP serializer trả thêm assessment/corroborated, stale đồng bộ bản assessment và lưu event history; các thay đổi này chưa hoàn tất host hooks, persistent audit, cache identity, UI và thực nghiệm.
+
+**Kết luận mới nhất:** các ca cũ R01/R02/R04/R05/R06 đã có bản sửa và test tương ứng pass; không thể ghi “đã xử lý triệt để R01–R07” khi R03/R07 còn hở và scan mặc định vừa phát sinh regression.
+
 - Ngày review: 11/09/2026.
 - Commit được kiểm tra: `5929004` — `feat: complete end-to-end workflows 1-6 according to plan`.
 - Mốc đối chiếu thay đổi: `7fe1c8c`.
