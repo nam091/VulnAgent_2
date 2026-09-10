@@ -34,6 +34,7 @@ def make_vuln(
     description: str = "a finding",
     secure_code_example: str = "",
     taint_path: Optional[List[Dict[str, Any]]] = None,
+    file_hash: Optional[str] = None,
 ) -> Vulnerability:
     """
     Build a Vulnerability with sensible defaults for tests.
@@ -50,6 +51,7 @@ def make_vuln(
         description: Description text
         secure_code_example: Suggested rewrite
         taint_path: Traced dataflow path
+        file_hash: Snapshot hash of analyzed file content
 
     Returns:
         Vulnerability: A populated finding
@@ -75,6 +77,7 @@ def make_vuln(
         secure_code_example=secure_code_example,
         source=source,
         taint_path=taint_path or [],
+        file_hash=file_hash,
     )
 
 

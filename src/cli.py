@@ -408,7 +408,21 @@ async def _run_fix(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     _apply_suppressions(result)
-    plan = build_plan(result.vulnerabilities, result.root, confirmed_only=args.confirmed_only)
+    baseline_hashes = getattr(result, "file_hashes", None) or result.stats.get("file_hashes") or result.stats.get("snapshot_hashes")
+    plan = build_plan(
+        result.vulnerabilities,
+        result.root,
+        confirmed_only=args.confirmed_only,
+        baseline_hashes=baseline_hashes,
+        require_baseline=bool(baseline_hashes),
+    )
+
+    if plan.conflicts or plan.stale:
+        print("\nerror: file(s) modified since analysis or baseline stale/conflict; please re-scan before patching.", file=sys.stderr)
+        for vuln, why in plan.rejected:
+            if any(k in why.lower() for k in ("stale", "baseline", "modified", "conflict")):
+                print(f"  conflict at {vuln.location.file_path}:L{vuln.location.start_line}: {why}", file=sys.stderr)
+        return EXIT_ERROR
 
     if not plan.patches:
         print("\nNo applicable patches.")

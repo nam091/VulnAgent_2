@@ -185,6 +185,8 @@ class PatchPlan:
     patches: List[Patch] = field(default_factory=list)
     rejected: List[Tuple[Vulnerability, str]] = field(default_factory=list)
     snapshot_hashes: Dict[Path, str] = field(default_factory=dict)
+    conflicts: List[Tuple[Vulnerability, str]] = field(default_factory=list)
+    stale: bool = False
 
     @property
     def by_file(self) -> Dict[Path, List[Patch]]:
@@ -266,7 +268,9 @@ def _reindent(replacement: str, target_indent: str) -> str:
 def build_plan(
     vulnerabilities: Sequence[Vulnerability],
     root: Path,
-    confirmed_only: bool = False
+    confirmed_only: bool = False,
+    baseline_hashes: Optional[Dict[Any, str]] = None,
+    require_baseline: bool = False,
 ) -> PatchPlan:
     """
     Turn findings into validated patches.
@@ -275,6 +279,8 @@ def build_plan(
         vulnerabilities: Findings that may carry a secure rewrite
         root: Directory that finding paths are relative to
         confirmed_only: Only patch findings corroborated by both tiers
+        baseline_hashes: Expected file hashes from scan analysis snapshot
+        require_baseline: Reject patches if baseline analysis hash is missing
 
     Returns:
         PatchPlan: Accepted patches and rejection reasons
@@ -314,6 +320,43 @@ def build_plan(
             except OSError as e:
                 plan.rejected.append((vuln, f"unreadable: {e}"))
                 continue
+
+        current_hash = plan.snapshot_hashes[file_path]
+
+        # Check analysis baseline contract (analysis -> plan)
+        expected_baseline = getattr(vuln, "file_hash", None)
+        if not expected_baseline and baseline_hashes:
+            expected_baseline = (
+                baseline_hashes.get(file_path)
+                or baseline_hashes.get(str(file_path))
+                or baseline_hashes.get(vuln.location.file_path)
+            )
+            if not expected_baseline:
+                try:
+                    rel_p = file_path.relative_to(root).as_posix()
+                    expected_baseline = baseline_hashes.get(rel_p)
+                except Exception:
+                    pass
+
+        if expected_baseline is not None:
+            if current_hash != expected_baseline:
+                plan.rejected.append((
+                    vuln,
+                    f"file modified since analysis: baseline hash mismatch "
+                    f"(expected {expected_baseline[:8]}, current {current_hash[:8]}); "
+                    f"stale suggestion requires re-scan"
+                ))
+                plan.conflicts.append((vuln, f"stale baseline mismatch for {vuln.location.file_path}"))
+                plan.stale = True
+                continue
+        elif require_baseline:
+            plan.rejected.append((
+                vuln,
+                f"missing baseline analysis hash for {vuln.location.file_path}; requires re-scan"
+            ))
+            plan.conflicts.append((vuln, f"missing baseline analysis hash for {vuln.location.file_path}"))
+            plan.stale = True
+            continue
 
         lines = file_cache[file_path]
         start = max(1, vuln.location.start_line or 0)

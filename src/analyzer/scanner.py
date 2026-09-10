@@ -89,11 +89,48 @@ class ScanResult:
         self,
         reports: List[VulnerabilityReport],
         root: Path,
-        stats: Dict[str, Any]
+        stats: Dict[str, Any],
+        file_hashes: Optional[Dict[str, str]] = None,
     ) -> None:
         self.reports = reports
         self.root = root
         self.stats = stats
+        self.file_hashes: Dict[str, str] = {}
+        if file_hashes:
+            self.file_hashes.update(file_hashes)
+        if "file_hashes" in self.stats and isinstance(self.stats["file_hashes"], dict):
+            self.file_hashes.update(self.stats["file_hashes"])
+        elif "snapshot_hashes" in self.stats and isinstance(self.stats["snapshot_hashes"], dict):
+            self.file_hashes.update(self.stats["snapshot_hashes"])
+
+        for r in self.reports:
+            for v in r.vulnerabilities:
+                if getattr(v, "file_hash", None):
+                    self.file_hashes[v.location.file_path] = v.file_hash
+                    try:
+                        self.file_hashes[str((self.root / v.location.file_path).resolve())] = v.file_hash
+                    except Exception:
+                        pass
+
+        if not self.file_hashes:
+            for r in self.reports:
+                if r.file_name:
+                    fp = (self.root / r.file_name).resolve()
+                    if fp.is_file():
+                        try:
+                            content = fp.read_text(encoding="utf-8", errors="replace")
+                            h = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                            self.file_hashes[r.file_name] = h
+                            self.file_hashes[str(fp)] = h
+                        except OSError:
+                            pass
+
+        self.stats["file_hashes"] = self.file_hashes
+        self.stats["snapshot_hashes"] = self.file_hashes
+
+    @property
+    def snapshot_hashes(self) -> Dict[str, str]:
+        return self.file_hashes
 
     @property
     def vulnerabilities(self) -> List[Vulnerability]:
@@ -297,6 +334,17 @@ class Scanner:
                 "files_scanned": len(failed_reports),
                 "engine_failure": bool(missing_requested),
             })
+        file_hashes: Dict[str, str] = {}
+        for f in files:
+            try:
+                if f.path.is_file():
+                    content = f.path.read_text(encoding="utf-8", errors="replace")
+                    h = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                    file_hashes[f.relative] = h
+                    file_hashes[str(f.path.resolve())] = h
+            except OSError:
+                pass
+
         self._emit(
             "discovery", f"Found {len(files)} source file(s)", 6,
             files_discovered=len(files)
@@ -341,7 +389,7 @@ class Scanner:
         llm_elapsed = time.perf_counter() - llm_started
 
         self._emit("fusion", "Merging results from both tiers", 72)
-        reports = self._assemble(files, rule_by_file, llm_by_file, tier_status, missing_files=missing_requested)
+        reports = self._assemble(files, rule_by_file, llm_by_file, tier_status, missing_files=missing_requested, file_hashes=file_hashes)
 
         found = sum(len(r.vulnerabilities) for r in reports)
         confirmed = sum(
@@ -376,6 +424,8 @@ class Scanner:
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
             "rule_error": self._rule_error,
+            "file_hashes": file_hashes,
+            "snapshot_hashes": file_hashes,
             **verify_stats,
         }
         logging.info(f"Scan complete: {stats}")
@@ -389,7 +439,7 @@ class Scanner:
             100, findings=total_found, chains=chains
         )
 
-        return ScanResult(reports, root, stats)
+        return ScanResult(reports, root, stats, file_hashes=file_hashes)
 
     def _emit(
         self,
@@ -752,6 +802,7 @@ class Scanner:
         llm_by_file: Dict[str, List[Vulnerability]],
         tier_status: Dict[str, str],
         missing_files: Optional[Set[str]] = None,
+        file_hashes: Optional[Dict[str, str]] = None,
     ) -> List[VulnerabilityReport]:
         """
         Fuse both tiers per file and build one report per file with findings.
@@ -852,6 +903,11 @@ class Scanner:
                     "findings": len(llm_findings),
                 },
             }
+
+            if file_hashes:
+                for v in fused.vulnerabilities:
+                    if not getattr(v, "file_hash", None):
+                        v.file_hash = file_hashes.get(relative) or file_hashes.get(str(item.path.resolve()))
 
             report = VulnerabilityReport(
                 file_name=relative,

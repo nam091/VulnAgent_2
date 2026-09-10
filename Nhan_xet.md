@@ -1,5 +1,27 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — b1462d1 (11/09/2026)
+
+**81/81 test pass (8.64 giây, 1 warning). N01–N03 đã có bản sửa và các regression test tương ứng pass. R07 đóng được khoảng thời gian từ build_plan đến apply, nhưng chưa đóng khoảng thời gian từ nội dung được phân tích đến build_plan.** Các phần cập nhật bên dưới là lịch sử ở commit cũ, không thay thế kết luận này.
+
+- N01: kiểm tra bổ sung gọi Scanner thật, không truyền files, trên thư mục rỗng và thư mục có một file; cả hai trả completed, không còn UnboundLocalError. Hai engine disabled trong probe để không gọi API/Semgrep.
+- N02/N03: code đã resolve path qua reader, validate TaintStep và so enum chính xác. Test path khác hậu tố, kind lạ và kind số pass. Chưa mở lại các lỗi này trong review hiện tại.
+- R07: snapshot_hashes được tính từ đúng buffer đọc trong build_plan và CLI truyền xuống apply; không có hash thì bỏ qua patch. Test CLI thay đổi file sau build_plan đã pass. Đây là cải thiện đúng đối với plan→apply.
+
+### R07 còn lại — P1, đã tái hiện qua CLI: thay đổi sau phân tích nhưng trước build_plan vẫn bị ghi đè
+
+**Probe:** dùng file tạm `app.py` chứa `x = 1`. Scanner giả lập trả finding ở dòng 1, context `x = 1`, suggestion `x = 2`, nhưng trước khi trả kết quả scanner thay nội dung trên đĩa thành `x = 999`, mô phỏng user edit sau lúc mã cũ được phân tích. Chạy `_run_fix` thật với `yes=True`, `verify=False`; build_plan và apply_plan không bị mock.
+
+**Kết quả:** CLI tạo patch từ `x = 999` sang `x = 2`, áp dụng thành công, exit 0. File cuối là `x = 2`; thay đổi mới `x = 999` bị ghi đè.
+
+**Nguyên nhân:** build_plan vẫn tin location/suggestion từ kết quả scan cũ rồi đọc nội dung hiện tại để làm original và hash mới. Hash plan chứng minh file không đổi từ lúc lập plan; không chứng minh plan dùng cùng snapshot mà finding/suggestion dựa vào. Đây là khoảng thời gian đã được yêu cầu kiểm tra trong R07 của review trước.
+
+**Cách sửa:** gắn file hash/snapshot thực của nội dung phân tích vào ScanResult hoặc finding, chuyển contract đó vào build_plan. So sánh hash của buffer lập plan với hash phân tích trước khi tạo patch; mismatch/thiếu baseline phải conflict và yêu cầu quét lại. Có thể kiểm tra context/anchor để phát hiện drift, nhưng không dùng context ngắn thay cho hợp đồng snapshot. Tiếp tục giữ hash plan→apply và written hash→rollback đang có.
+
+**Test đóng lỗi:** mock scanner trả finding từ snapshot A sau khi file đã đổi sang B; `_run_fix` không ghi file B và báo stale/conflict. Ca file không đổi từ scan→plan→apply phải vẫn áp dụng bình thường. Thêm assertions cho exit code và nội dung file, không chỉ hash map.
+
+Không gọi API/model thật hoặc sửa file project trong probe. Review chỉ cập nhật tài liệu. Các phần R08–R14 và nghiệm thu đầu-cuối vẫn giữ phạm vi như review trước.
+
 > **Cập nhật review tại `9c30986` (11/09/2026):** 78/78 test pass, nhưng chưa đóng toàn bộ R01–R07. Có regression mới ở scanner không truyền `files`; R03 còn lỗi path/schema; R07 mới bảo vệ hash chụp sau build plan. Phần cập nhật dưới đây là kết luận mới nhất. Các mục từ “1. Kết luận” trở đi giữ lại làm lịch sử review tại `5929004`.
 
 ## Cập nhật sau bản sửa R01–R07 — commit 9c30986

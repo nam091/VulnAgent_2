@@ -1174,6 +1174,103 @@ async def test_r07_timing_detects_file_modification_between_plan_and_apply(tmp_p
             assert f.read_text(encoding="utf-8") == "x = 999\n"
 
 
+@pytest.mark.asyncio
+async def test_r07_detects_file_modification_between_analysis_and_plan(tmp_path: Path):
+    """
+    R07: changes between analysis and build_plan must be rejected as stale/conflict.
+    The file on disk must NOT be overwritten with the old suggestion.
+    """
+    from cli import _run_fix, EXIT_ERROR, EXIT_CLEAN
+    from analyzer.scanner import ScanResult
+    from conftest import make_vuln
+    import argparse
+    import hashlib
+
+    app_file = tmp_path / "app.py"
+    initial_content = "x = 1\n"
+    app_file.write_text(initial_content, encoding="utf-8")
+    hash_a = hashlib.sha256(initial_content.encode("utf-8")).hexdigest()
+
+    vuln = make_vuln(
+        file_path="app.py",
+        start_line=1,
+        context="x = 1",
+        secure_code_example="x = 2\n",
+        file_hash=hash_a,
+    )
+    report = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[vuln],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    scan_res = ScanResult([report], tmp_path, {}, file_hashes={"app.py": hash_a})
+
+    args = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=False,
+        confirmed_only=False,
+        dry_run=False,
+        verify=False,
+        yes=True,
+        include_risky=True,
+    )
+
+    # 1. Simulate user edit after analysis (x = 1 -> x = 999) before build_plan runs
+    app_file.write_text("x = 999\n", encoding="utf-8")
+
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = scan_res
+        code = await _run_fix(args)
+
+        # Must report stale/conflict error, NOT exit 0
+        assert code == EXIT_ERROR
+        # Must NOT overwrite x = 999 with x = 2
+        assert app_file.read_text(encoding="utf-8") == "x = 999\n"
+
+    # 2. When file is unchanged from analysis, fix must apply cleanly
+    app_file.write_text(initial_content, encoding="utf-8")
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = scan_res
+        code = await _run_fix(args)
+
+        assert code == EXIT_CLEAN
+        assert app_file.read_text(encoding="utf-8") == "x = 2\n"
+
+
+@pytest.mark.asyncio
+async def test_r07_scanner_populates_baseline_file_hashes(tmp_path: Path):
+    """
+    R07: Scanner computes snapshot hashes during discovery and sets file_hash on findings.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+    from analyzer.fixer import build_plan
+    from conftest import make_vuln
+    import hashlib
+
+    f = tmp_path / "hello.py"
+    f.write_text("print('hello')\n", encoding="utf-8")
+    expected_hash = hashlib.sha256(b"print('hello')\n").hexdigest()
+
+    scanner = Scanner(ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False))
+    res = await scanner.scan()
+
+    assert "hello.py" in res.file_hashes
+    assert res.file_hashes["hello.py"] == expected_hash
+
+    # Now simulate a finding based on this snapshot
+    vuln = make_vuln(file_path="hello.py", start_line=1, secure_code_example="print('world')\n")
+    # File is modified before build_plan
+    f.write_text("print('modified')\n", encoding="utf-8")
+
+    plan = build_plan([vuln], tmp_path, baseline_hashes=res.file_hashes)
+    assert plan.stale is True
+    assert len(plan.conflicts) == 1
+    assert len(plan.patches) == 0
+
+
+
 
 
 
