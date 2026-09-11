@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 import hashlib
 import json
 import logging
@@ -136,13 +136,15 @@ class HostAdapter:
 
     def configure_editor_save_hook(self, host: str = "cursor") -> Dict[str, Any]:
         """
-        Configures an on-save hook in the editor workspace (.cursor or .vscode tasks).
+        Configures an on-save hook in the editor workspace (.cursor or .vscode tasks and settings).
         Maps editor file change event to CLI runner with payload mapping and trailing debounce.
         """
         config_dir = self.root / (".cursor" if host == "cursor" else ".vscode")
         config_dir.mkdir(parents=True, exist_ok=True)
         tasks_path = config_dir / "tasks.json"
+        settings_path = config_dir / "settings.json"
 
+        # 1. Configure tasks.json with process type and explicit args array
         tasks: Dict[str, Any] = {"version": "2.0.0", "tasks": []}
         if tasks_path.is_file():
             try:
@@ -153,8 +155,14 @@ class HostAdapter:
         server_dir = str(Path(__file__).resolve().parents[1].as_posix())
         hook_task = {
             "label": "VulnAgent On-Save Security Check",
-            "type": "shell",
-            "command": f"{sys.executable} -m cli hook --target \"${{workspaceFolder}}\" --files \"${{file}}\" --trailing",
+            "type": "process",
+            "command": sys.executable,
+            "args": [
+                "-m", "cli", "hook",
+                "--target", "${workspaceFolder}",
+                "--files", "${file}",
+                "--trailing"
+            ],
             "group": "build",
             "presentation": {
                 "reveal": "silent",
@@ -167,14 +175,48 @@ class HostAdapter:
             }
         }
 
-        existing_labels = {t.get("label") for t in tasks.get("tasks", []) if isinstance(t, dict)}
-        if "VulnAgent On-Save Security Check" not in existing_labels:
-            tasks.setdefault("tasks", []).append(hook_task)
-            tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+        existing_tasks = [t for t in tasks.get("tasks", []) if isinstance(t, dict) and t.get("label") != "VulnAgent On-Save Security Check"]
+        existing_tasks.append(hook_task)
+        tasks["tasks"] = existing_tasks
+        tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+
+        # 2. Configure settings.json to trigger hook on file save
+        settings: Dict[str, Any] = {}
+        if settings_path.is_file():
+            try:
+                settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            except Exception:
+                settings = {}
+
+        save_cmd = f"\"{sys.executable}\" -m cli hook --target \"${{workspaceFolder}}\" --files \"${{file}}\" --trailing"
+        settings["emeraldwalk.runonsave"] = {
+            "commands": [
+                {
+                    "match": "\\.py$",
+                    "cmd": save_cmd
+                }
+            ]
+        }
+        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+        # 3. Configure git pre-commit hook if git directory exists
+        git_hook_dir = self.root / ".git" / "hooks"
+        if git_hook_dir.is_dir():
+            pre_commit = git_hook_dir / "pre-commit"
+            pre_commit_content = (
+                f"#!/bin/sh\n"
+                f'"{sys.executable}" -m cli hook --target . --trailing\n'
+            )
+            try:
+                pre_commit.write_text(pre_commit_content, encoding="utf-8")
+            except OSError:
+                pass
 
         return {
             "tasks_config": str(tasks_path),
+            "settings_config": str(settings_path),
             "hook_configured": True,
+            "trigger_configured": True,
             "host": host,
         }
 
@@ -263,6 +305,37 @@ class EditorHookRunner:
         except Exception:
             pass
 
+    def _bump_dirty_generation(self, files: Optional[Sequence[Path]] = None) -> int:
+        dirty_file = self.root / ".vulnagent-audit" / "dirty.json"
+        gen = 1
+        try:
+            dirty_file.parent.mkdir(parents=True, exist_ok=True)
+            if dirty_file.is_file():
+                raw = dirty_file.read_text(encoding="utf-8").strip()
+                if raw:
+                    data = json.loads(raw)
+                    gen = int(data.get("generation", 0)) + 1
+            file_strs = [str(f) for f in files] if files else []
+            dirty_file.write_text(
+                json.dumps({"generation": gen, "timestamp": time.time(), "files": file_strs}),
+                encoding="utf-8"
+            )
+        except Exception:
+            pass
+        return gen
+
+    def _get_dirty_generation(self) -> int:
+        dirty_file = self.root / ".vulnagent-audit" / "dirty.json"
+        try:
+            if dirty_file.is_file():
+                raw = dirty_file.read_text(encoding="utf-8").strip()
+                if raw:
+                    data = json.loads(raw)
+                    return int(data.get("generation", 0))
+        except Exception:
+            pass
+        return 0
+
     def capture_snapshot(self, files: Optional[Sequence[Path]] = None) -> Dict[str, str]:
         """
         Compute hash snapshot for specified files or python files in workspace.
@@ -345,6 +418,61 @@ class EditorHookRunner:
                     pass
                 self._active_lock_token = None
 
+    @asynccontextmanager
+    async def lock_async(self, timeout_seconds: float = 0.0):
+        """
+        Asynchronously acquire repository lock without blocking the asyncio event loop.
+        """
+        start = time.time()
+        token = uuid.uuid4().hex
+        acquired = False
+        while True:
+            try:
+                fd = os.open(str(self.lock_path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(json.dumps({"pid": os.getpid(), "token": token, "timestamp": time.time()}))
+                acquired = True
+                self._active_lock_token = token
+                break
+            except FileExistsError:
+                owner_alive = False
+                try:
+                    if self.lock_path.is_file():
+                        raw = self.lock_path.read_text(encoding="utf-8").strip()
+                        if raw:
+                            data = json.loads(raw)
+                            owner_pid = data.get("pid")
+                            if owner_pid and _is_pid_alive(int(owner_pid)):
+                                owner_alive = True
+                except (OSError, json.JSONDecodeError, ValueError):
+                    pass
+
+                if not owner_alive:
+                    try:
+                        self.lock_path.unlink(missing_ok=True)
+                        continue
+                    except OSError:
+                        pass
+
+                if time.time() - start >= timeout_seconds:
+                    raise PermissionError(f"Workspace repository is locked by active process: {self.lock_path}")
+                await asyncio.sleep(0.05)
+
+        try:
+            yield
+        finally:
+            if acquired:
+                try:
+                    if self.lock_path.is_file():
+                        raw = self.lock_path.read_text(encoding="utf-8").strip()
+                        if raw:
+                            data = json.loads(raw)
+                            if data.get("token") == token:
+                                self.lock_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                self._active_lock_token = None
+
     def _is_scan_failed_or_degraded(self, result: Any) -> Tuple[bool, str]:
         """
         Detect if scan outcome represents a failure, degraded coverage, incomplete partial scan, or engine error.
@@ -405,8 +533,10 @@ class EditorHookRunner:
     ) -> Dict[str, Any]:
         """
         Run the editor hook workflow with debounce, lock, dirty snapshot, max 2 rounds, and failure gating.
-        When trailing=True, waits out remaining debounce interval so final save in a burst is not dropped.
+        When trailing=True, waits out remaining debounce interval and lock contention so final save is analyzed.
         """
+        self._bump_dirty_generation(files)
+
         now = time.time()
         elapsed = now - self._last_run_time
         if elapsed < self.debounce_seconds:
@@ -414,121 +544,140 @@ class EditorHookRunner:
                 remaining = self.debounce_seconds - elapsed
                 if remaining > 0:
                     await asyncio.sleep(remaining)
+            else:
+                return {"status": "skipped", "reason": "debounced", "elapsed": round(elapsed, 2)}
+
+        snapshot = self.capture_snapshot(files)
+        if snapshot and snapshot == self._last_snapshot:
+            return {"status": "skipped", "reason": "unmodified"}
+
+        lock_timeout = 15.0 if trailing else 0.0
+        try:
+            async with self.lock_async(timeout_seconds=lock_timeout):
+                self._load_state()
                 snapshot = self.capture_snapshot(files)
                 if snapshot and snapshot == self._last_snapshot:
                     return {"status": "skipped", "reason": "unmodified"}
-            else:
-                return {"status": "skipped", "reason": "debounced", "elapsed": round(elapsed, 2)}
-        else:
-            snapshot = self.capture_snapshot(files)
-            if snapshot and snapshot == self._last_snapshot:
-                return {"status": "skipped", "reason": "unmodified"}
 
-        try:
-            with self.lock(timeout_seconds=0.0):
-                round_num = 1
-                try:
-                    result = await scan_fn()
-                except Exception as e:
-                    return {"status": "failed", "rounds": round_num, "reason": f"Scan execution failed: {e}"}
+                while True:
+                    start_gen = self._get_dirty_generation()
+                    snapshot_at_start = snapshot
 
-                failed, reason = self._is_scan_failed_or_degraded(result)
-                if failed:
-                    # Do not update self._last_snapshot to allow retry on same snapshot once engine recovers
-                    return {"status": "failed", "rounds": round_num, "reason": reason}
+                    round_num = 1
+                    try:
+                        result = await scan_fn()
+                    except Exception as e:
+                        return {"status": "failed", "rounds": round_num, "reason": f"Scan execution failed: {e}"}
 
-                if isinstance(result, dict):
-                    findings = result.get("vulnerabilities", result.get("findings", []))
-                else:
-                    findings = getattr(result, "vulnerabilities", result)
-                if not isinstance(findings, list):
-                    findings = list(findings) if hasattr(findings, "__iter__") else []
+                    failed, reason = self._is_scan_failed_or_degraded(result)
+                    if failed:
+                        return {"status": "failed", "rounds": round_num, "reason": reason}
 
-                def get_fid(f: Any) -> str:
-                    if hasattr(f, "fingerprint") and callable(f.fingerprint):
-                        return f.fingerprint()
-                    return getattr(f, "id", str(f))
+                    if isinstance(result, dict):
+                        findings = result.get("vulnerabilities", result.get("findings", []))
+                    else:
+                        findings = getattr(result, "vulnerabilities", result)
+                    if not isinstance(findings, list):
+                        findings = list(findings) if hasattr(findings, "__iter__") else []
 
-                initial_ids = {get_fid(f) for f in findings}
-                if not findings:
+                    def get_fid(f: Any) -> str:
+                        if hasattr(f, "fingerprint") and callable(f.fingerprint):
+                            return f.fingerprint()
+                        return getattr(f, "id", str(f))
+
+                    initial_ids = {get_fid(f) for f in findings}
+
+                    snapshot_after_scan = self.capture_snapshot(files)
+                    latest_gen = self._get_dirty_generation()
+                    if trailing and (snapshot_after_scan != snapshot_at_start or latest_gen > start_gen):
+                        snapshot = snapshot_after_scan
+                        continue
+
+                    if not findings:
+                        self._last_run_time = time.time()
+                        self._last_snapshot = snapshot_at_start
+                        self._save_state()
+                        return {"status": "clean", "rounds": round_num, "findings_count": 0}
+
+                    if not fix_fn or self.max_rounds < 2:
+                        self._last_run_time = time.time()
+                        self._last_snapshot = snapshot_at_start
+                        self._save_state()
+                        return {
+                            "status": "findings_detected",
+                            "rounds": round_num,
+                            "findings_count": len(findings),
+                            "finding_ids": list(initial_ids),
+                        }
+
+                    # Round 1 -> Fix
+                    round_num = 2
+                    try:
+                        await fix_fn(result)
+                    except Exception as e:
+                        return {"status": "fix_failed", "rounds": round_num, "reason": f"Fix execution failed: {e}"}
+
+                    # Rescan
+                    try:
+                        rescan_result = await scan_fn()
+                    except Exception as e:
+                        return {"status": "rescan_failed", "rounds": round_num, "reason": f"Rescan execution failed: {e}"}
+
+                    rescan_failed, rescan_reason = self._is_scan_failed_or_degraded(rescan_result)
+                    if rescan_failed:
+                        return {"status": "rescan_failed", "rounds": round_num, "reason": rescan_reason}
+
+                    if isinstance(rescan_result, dict):
+                        rescan_findings = rescan_result.get("vulnerabilities", rescan_result.get("findings", []))
+                    else:
+                        rescan_findings = getattr(rescan_result, "vulnerabilities", rescan_result)
+                    if not isinstance(rescan_findings, list):
+                        rescan_findings = list(rescan_findings) if hasattr(rescan_findings, "__iter__") else []
+
+                    rescan_ids = {get_fid(f) for f in rescan_findings}
+
+                    snapshot_after_fix = self.capture_snapshot(files)
+                    latest_gen = self._get_dirty_generation()
+                    if trailing and (snapshot_after_fix != snapshot_after_scan or latest_gen > start_gen):
+                        snapshot = snapshot_after_fix
+                        continue
+
+                    # Termination on no-progress: finding count does not decrease or IDs are unchanged
+                    if len(rescan_findings) >= len(findings) or rescan_ids == initial_ids:
+                        self._last_run_time = time.time()
+                        self._last_snapshot = snapshot_after_fix
+                        self._save_state()
+                        return {
+                            "status": "no_progress",
+                            "rounds": round_num,
+                            "initial_count": len(findings),
+                            "final_count": len(rescan_findings),
+                            "reason": "Fix attempt produced no reduction in findings",
+                            "finding_ids": list(rescan_ids),
+                        }
+
+                    if not rescan_findings:
+                        self._last_run_time = time.time()
+                        self._last_snapshot = snapshot_after_fix
+                        self._save_state()
+                        return {
+                            "status": "clean",
+                            "rounds": round_num,
+                            "initial_count": len(findings),
+                            "final_count": 0,
+                        }
+
+                    # Partial progress after 2 rounds
                     self._last_run_time = time.time()
-                    self._last_snapshot = snapshot
-                    self._save_state()
-                    return {"status": "clean", "rounds": round_num, "findings_count": 0}
-
-                if not fix_fn or self.max_rounds < 2:
-                    self._last_run_time = time.time()
-                    self._last_snapshot = snapshot
+                    self._last_snapshot = snapshot_after_fix
                     self._save_state()
                     return {
-                        "status": "findings_detected",
-                        "rounds": round_num,
-                        "findings_count": len(findings),
-                        "finding_ids": list(initial_ids),
-                    }
-
-                # Round 1 -> Fix
-                round_num = 2
-                try:
-                    await fix_fn(result)
-                except Exception as e:
-                    return {"status": "fix_failed", "rounds": round_num, "reason": f"Fix execution failed: {e}"}
-
-                # Rescan
-                try:
-                    rescan_result = await scan_fn()
-                except Exception as e:
-                    return {"status": "rescan_failed", "rounds": round_num, "reason": f"Rescan execution failed: {e}"}
-
-                rescan_failed, rescan_reason = self._is_scan_failed_or_degraded(rescan_result)
-                if rescan_failed:
-                    return {"status": "rescan_failed", "rounds": round_num, "reason": rescan_reason}
-
-                if isinstance(rescan_result, dict):
-                    rescan_findings = rescan_result.get("vulnerabilities", rescan_result.get("findings", []))
-                else:
-                    rescan_findings = getattr(rescan_result, "vulnerabilities", rescan_result)
-                if not isinstance(rescan_findings, list):
-                    rescan_findings = list(rescan_findings) if hasattr(rescan_findings, "__iter__") else []
-
-                rescan_ids = {get_fid(f) for f in rescan_findings}
-
-                # Termination on no-progress: finding count does not decrease or IDs are unchanged
-                if len(rescan_findings) >= len(findings) or rescan_ids == initial_ids:
-                    self._last_run_time = time.time()
-                    self._last_snapshot = self.capture_snapshot(files)
-                    self._save_state()
-                    return {
-                        "status": "no_progress",
+                        "status": "partial_progress",
                         "rounds": round_num,
                         "initial_count": len(findings),
                         "final_count": len(rescan_findings),
-                        "reason": "Fix attempt produced no reduction in findings",
-                        "finding_ids": list(rescan_ids),
+                        "remaining_ids": list(rescan_ids),
                     }
-
-                if not rescan_findings:
-                    self._last_run_time = time.time()
-                    self._last_snapshot = self.capture_snapshot(files)
-                    self._save_state()
-                    return {
-                        "status": "clean",
-                        "rounds": round_num,
-                        "initial_count": len(findings),
-                        "final_count": 0,
-                    }
-
-                # Partial progress after 2 rounds
-                self._last_run_time = time.time()
-                self._last_snapshot = self.capture_snapshot(files)
-                self._save_state()
-                return {
-                    "status": "partial_progress",
-                    "rounds": round_num,
-                    "initial_count": len(findings),
-                    "final_count": len(rescan_findings),
-                    "remaining_ids": list(rescan_ids),
-                }
 
         except PermissionError:
             return {"status": "skipped", "reason": "locked"}

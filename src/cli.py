@@ -175,7 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
     check_cmd.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     hook_cmd = subparsers.add_parser("hook", help="Run editor hook lifecycle with debounce and lock")
-    hook_cmd.add_argument("target", nargs="?", default=".", help="Target directory (default: .)")
+    hook_cmd.add_argument("target", nargs="?", default=None, help="Target directory (default: .)")
+    hook_cmd.add_argument("--target", dest="target_opt", default=None, help="Target directory option")
     hook_cmd.add_argument("--files", nargs="*", default=None, help="Specific files changed")
     hook_cmd.add_argument("--max-rounds", type=int, default=2, help="Max hook rounds (default: 2)")
     hook_cmd.add_argument("--debounce", type=float, default=3.0, help="Debounce in seconds (default: 3.0)")
@@ -606,9 +607,11 @@ async def _run_init(args: argparse.Namespace) -> int:
     host = args.host if args.host != "auto" else adapter.detect_host()
     if host == "cursor":
         res = adapter.configure_cursor()
+        res_hook = adapter.configure_editor_save_hook(host="cursor")
         print(f"VulnAgent initialized for Cursor.")
         print(f"  MCP configuration: {res['mcp_config']}")
         print(f"  Security rules:    {res['rules_file']}")
+        print(f"  On-save hook:      {res_hook['tasks_config']}")
     elif host == "claude":
         res = adapter.configure_claude_code()
         print(f"VulnAgent initialized for Claude Code.")
@@ -652,9 +655,14 @@ async def _run_doctor(args: argparse.Namespace) -> int:
 
     # 4. Host MCP configurations
     cursor_mcp = Path.cwd() / ".cursor" / "mcp.json"
+    cursor_tasks = Path.cwd() / ".cursor" / "tasks.json"
     claude_mcp = Path.cwd() / ".claude" / "mcp.json"
     if cursor_mcp.exists():
         print(f"  [OK] Cursor MCP config detected: {cursor_mcp}")
+        if cursor_tasks.exists():
+            print(f"  [OK] Cursor on-save hook detected: {cursor_tasks}")
+        else:
+            print("  [INFO] Cursor on-save hook not yet configured. Run 'vulnagent init' to configure.")
     elif claude_mcp.exists():
         print(f"  [OK] Claude Code MCP config detected: {claude_mcp}")
     else:
@@ -761,7 +769,8 @@ async def _run_check(args: argparse.Namespace) -> int:
 async def _run_hook(args: argparse.Namespace) -> int:
     from integrations.host_adapter import EditorHookRunner
 
-    root = Path(args.target).resolve()
+    target_dir = getattr(args, "target_opt", None) or getattr(args, "target", None) or "."
+    root = Path(target_dir).resolve()
     runner = EditorHookRunner(
         root=root,
         debounce_seconds=getattr(args, "debounce", 3.0),

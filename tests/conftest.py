@@ -1,7 +1,8 @@
-"""Shared fixtures.
+"""Shared fixtures and testing policies.
 
-Every test here runs offline. Nothing in this suite may reach the network or
-an LLM provider: a test that needs an API key is a test nobody runs.
+Testing policies:
+- All unit and gate tests are strictly offline and hermetic; no network or external LLM API calls are permitted.
+- Integration tests marked with `@pytest.mark.integration` (e.g. R14 E2E) run locally using the installed Semgrep binary and local pinned rule definitions (rules/pinned_security_rules.yaml); they do not make outbound network requests.
 """
 
 import sys

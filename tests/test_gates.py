@@ -1480,6 +1480,70 @@ async def test_r09_editor_hook_runner_lock_and_no_progress(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_r09_editor_hook_runner_trailing_concurrent_save_during_lock(tmp_path: Path):
+    """
+    R09 (E03 regression): Trailing save hook does NOT drop save events
+    when another scan is actively holding the repository lock.
+    Instead of returning skipped/locked, trailing=True waits for the lock
+    and executes a follow-up scan on the updated contents.
+    """
+    import asyncio
+    from integrations.host_adapter import EditorHookRunner
+
+    target_file = tmp_path / "app.py"
+    target_file.write_text("x = 1\n", encoding="utf-8")
+
+    runner1 = EditorHookRunner(root=tmp_path, debounce_seconds=0.0)
+    runner2 = EditorHookRunner(root=tmp_path, debounce_seconds=0.0)
+
+    scan1_started = asyncio.Event()
+    allow_scan1_finish = asyncio.Event()
+    scanned_contents = []
+
+    async def scan1():
+        scanned_contents.append(target_file.read_text(encoding="utf-8").strip())
+        scan1_started.set()
+        await allow_scan1_finish.wait()
+        return {"status": "clean", "vulnerabilities": []}
+
+    async def scan2():
+        scanned_contents.append(target_file.read_text(encoding="utf-8").strip())
+        return {"status": "clean", "vulnerabilities": []}
+
+    # Start first scan that holds the lock while running
+    t1 = asyncio.create_task(runner1.run(scan_fn=scan1, files=[target_file], trailing=False))
+    await scan1_started.wait()
+
+    # While scan1 holds the lock, modify the file on disk
+    target_file.write_text("x = 2\n", encoding="utf-8")
+
+    # Start second scan with trailing=True (simulating on-save hook while scan in-flight)
+    t2 = asyncio.create_task(runner2.run(scan_fn=scan2, files=[target_file], trailing=True))
+
+    # Also test non-trailing runner: should immediately return skipped/locked
+    runner_nontrailing = EditorHookRunner(root=tmp_path, debounce_seconds=0.0)
+    res_nontrailing = await runner_nontrailing.run(scan_fn=scan2, files=[target_file], trailing=False)
+    assert res_nontrailing["status"] == "skipped"
+    assert res_nontrailing["reason"] == "locked"
+
+    # Give t2 a moment to enter lock_async wait
+    await asyncio.sleep(0.08)
+
+    # Allow scan1 to finish and release the lock
+    allow_scan1_finish.set()
+    res1 = await t1
+    res2 = await t2
+
+    assert res1["status"] == "clean"
+    # Trailing runner must NOT be skipped as locked
+    assert res2.get("reason") != "locked"
+    assert res2["status"] == "clean"
+    # Both initial x=1 and trailing x=2 must have been scanned
+    assert "x = 1" in scanned_contents
+    assert "x = 2" in scanned_contents
+
+
+@pytest.mark.asyncio
 async def test_r09_doctor_mcp_smoke_and_semgrep_advice():
     """
     R09: doctor command includes MCP in-process handshake smoke test and
@@ -2284,9 +2348,17 @@ async def test_r14_real_semgrep_detector_and_rescan_e2e_integration(tmp_path: Pa
     ev_store = EvidenceStore(tmp_path)
     snap = ev_store.create_snapshot()
 
-    # Step 1: Real Semgrep scan
-    options = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=True)
+    # Step 1: Real Semgrep scan using pinned offline rules
+    rules_path = Path(__file__).resolve().parent.parent / "rules" / "pinned_security_rules.yaml"
+    assert rules_path.is_file(), f"Pinned rules missing: {rules_path}"
+    options = ScanOptions(
+        target=str(tmp_path),
+        use_llm=False,
+        use_semgrep=True,
+        semgrep_configs=(str(rules_path),),
+    )
     scanner = Scanner(options)
+    assert scanner.semgrep.configs == (str(rules_path),)
     scan_res = await scanner.scan()
 
     # Step 2: Assert real detector found vulnerability
@@ -2334,15 +2406,19 @@ async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
     12. Spawns brand new server subprocess (simulating restart): verifies cross-process & cross-cwd session restoration.
     """
     import json
+    import os
     import sys
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
     server_script = Path(__file__).resolve().parent.parent / "src" / "mcp_server.py"
+    rules_path = Path(__file__).resolve().parent.parent / "rules" / "pinned_security_rules.yaml"
+    assert rules_path.is_file(), f"Pinned rules missing: {rules_path}"
+    server_env = {**os.environ, "VULNAGENT_SEMGREP_RULES": str(rules_path)}
     params = StdioServerParameters(
         command=sys.executable,
         args=[str(server_script)],
-        env=None,
+        env=server_env,
     )
 
     calc_py = tmp_path / "calculator.py"
