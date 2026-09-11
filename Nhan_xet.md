@@ -1,5 +1,21 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 0938478 (11/09/2026)
+
+**84/84 test pass (10.31 giây, 1 warning). Xác nhận đóng các ca R07 đã tái hiện trong chuỗi review, bao gồm fallback khi thiếu baseline.** Các cập nhật bên dưới giữ lại làm lịch sử, không phải trạng thái hiện tại của các lỗi đã đóng.
+
+Đã xác minh code bỏ đọc đĩa tạo baseline trong ScanResult và CLI luôn dùng `require_baseline=True`. Chạy thêm ba ca qua `_run_fix`, build_plan/apply_plan thật, chỉ mock Scanner.scan và dùng file tạm:
+
+| Ca | Kết quả |
+|---|---|
+| Finding cũ, thiếu baseline, file đã đổi thành `x = 999` trước khi tạo ScanResult | Exit 2, yêu cầu re-scan; giữ nguyên `x = 999` |
+| Finding cũ, baseline `x = 1`, file đã đổi thành `x = 999` | Exit 2, baseline conflict; giữ nguyên `x = 999` |
+| Baseline hợp lệ, file vẫn là `x = 1`, suggestion `x = 2` | Exit 0; áp dụng đúng thành `x = 2` |
+
+Ca hợp lệ cho thấy bản sửa không chỉ từ chối mọi patch. Các regression N01–N03 và R01–R07 trong suite tiếp tục pass. Phạm vi kết luận là các đường lỗi đã nêu và kiểm tra; chưa phải chứng minh mọi race/concurrency hoặc toàn bộ G5 đã được nghiệm thu. Chưa chạy model/Semgrep thật trong lượt này, chưa kiểm tra behavioral tests hay editor end-to-end.
+
+**Bước tiếp theo:** chuyển trọng tâm sang R08–R14 và demo Python/MCP đầu-cuối theo ma trận ở review gốc; không cần tiếp tục sửa lại fallback R07 đã đóng nếu không có bằng chứng mới. Review chỉ cập nhật tài liệu, không sửa mã nguồn.
+
 ## Cập nhật mới nhất — 8b68183 (11/09/2026)
 
 **83/83 test pass (10.92 giây, 1 warning). R07 đã chặn ca scan→plan khi có baseline phân tích được truyền đúng. Hợp đồng thiếu baseline vẫn chưa fail-closed.** Các mục cập nhật bên dưới là lịch sử.

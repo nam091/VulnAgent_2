@@ -58,6 +58,9 @@ import uuid
 
 load_dotenv()
 
+# Mode selection: 'editor' (zero outbound LLM calls) or 'standalone' (allows backend LLM calls)
+EDITOR_MODE = os.getenv("VULNAGENT_MODE", "editor").lower() in ("editor", "local", "rule_only")
+
 INSTRUCTIONS = """VulnAgent finds security vulnerabilities in source code by combining
 rule-based static analysis (Semgrep) with LLM semantic analysis.
 
@@ -106,30 +109,24 @@ def _severity_marker(severity: str) -> str:
 
 def _to_dict(vuln: Vulnerability) -> Dict[str, Any]:
     """
-    Render a finding as a compact dictionary for an agent to consume.
-
-    Verbose report fields are deliberately trimmed: an agent needs to know
-    where the defect is, why it matters and what to write instead.
-
-    Args:
-        vuln: The finding
-
-    Returns:
-        Dict[str, Any]: Compact representation
+    Render a finding as a versioned dictionary for an agent to consume.
+    Provides structured provenance and assessment contracts alongside backward-compatible fields.
     """
-
     label = {
         FindingSource.CONFIRMED: "confirmed",
         FindingSource.SEMGREP: "rule-only",
         FindingSource.LLM: "llm-only",
-    }.get(vuln.source, vuln.source.value)
+    }.get(vuln.source, vuln.source.value if hasattr(vuln.source, "value") else str(vuln.source))
+
+    engine_sources = getattr(vuln, "engine_sources", [label])
+    corroborated = getattr(vuln, "corroborated", False)
+    assessment_status = getattr(vuln, "assessment_status", "unreviewed")
+    file_hash = getattr(vuln, "file_hash", None)
 
     payload = {
         "id": vuln.id,
-        "type": vuln.type.value,
-        "severity": vuln.severity.value,
-        "source": label,
-        "confidence": round(vuln.confidence, 2),
+        "type": vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type),
+        "severity": vuln.severity.value if hasattr(vuln.severity, "value") else str(vuln.severity),
         "file": vuln.location.file_path,
         "start_line": vuln.location.start_line,
         "end_line": vuln.location.end_line,
@@ -137,16 +134,29 @@ def _to_dict(vuln: Vulnerability) -> Dict[str, Any]:
         "description": vuln.description,
         "impact": vuln.impact,
         "remediation": vuln.remediation,
+        # Structured provenance (B10, R10)
+        "provenance": {
+            "source": label,
+            "engine_sources": engine_sources,
+            "corroborated": corroborated,
+            "confidence": round(vuln.confidence, 2),
+            "file_hash": file_hash,
+        },
+        # Structured assessment & evidence semantics
+        "assessment": {
+            "status": assessment_status,
+            "details": getattr(vuln, "assessment", None),
+            "evidence_ids": getattr(vuln, "evidence_ids", []),
+            "taint_path": getattr(vuln, "taint_path", []),
+        },
+        # Backward-compatible fields
+        "source": label,
+        "confidence": round(vuln.confidence, 2),
+        "corroborated": corroborated,
+        "assessment_status": assessment_status,
     }
     if vuln.location.context:
         payload["snippet"] = vuln.location.context
-
-    if hasattr(vuln, "corroborated"):
-        payload["corroborated"] = bool(vuln.corroborated)
-    if hasattr(vuln, "assessment_status") and vuln.assessment_status:
-        payload["assessment_status"] = vuln.assessment_status
-    if hasattr(vuln, "assessment") and vuln.assessment:
-        payload["assessment"] = vuln.assessment
 
     fix = _fix_for(vuln)
     if fix:
@@ -229,9 +239,10 @@ async def _scan_target(
         Dict[str, Any]: Summary, findings and scan statistics
     """
 
+    use_llm = (mode == "deep") and not EDITOR_MODE
     options = ScanOptions(
         target=target,
-        use_llm=(mode == "deep"),
+        use_llm=use_llm,
         use_semgrep=True,
         concurrency=concurrency,
     )
@@ -527,7 +538,8 @@ async def scan_changes(
         if Path(v.location.file_path).as_posix().lstrip("./") in target_scope
     ]
 
-    assessment_store = AssessmentStore()
+    audit_dir = root / ".vulnagent-audit"
+    assessment_store = AssessmentStore(storage_dir=audit_dir)
     scan_id = f"scan_{uuid.uuid4().hex[:12]}"
     _scan_sessions[scan_id] = {
         "root": root,
@@ -781,13 +793,18 @@ async def get_assessment_history(scan_id: str, finding_id: Optional[str] = None)
 
     if finding_id:
         entries = assessment_store.get_history(finding_id)
-        return {"finding_id": finding_id, "history": [e.model_dump() for e in entries]}
+        events = [e for e in assessment_store.get_events() if e.get("finding_id") == finding_id]
+        return {
+            "finding_id": finding_id,
+            "history": [e.model_dump() for e in entries],
+            "events": events,
+        }
     else:
         all_hist = {
             fid: [e.model_dump() for e in assessment_store.get_history(fid)]
             for fid in session["findings"]
         }
-        return {"history": all_hist}
+        return {"history": all_hist, "events": assessment_store.get_events()}
 
 
 @mcp.tool(
@@ -913,8 +930,22 @@ async def capabilities() -> Dict[str, Any]:
     runner = SemgrepRunner()
     return {
         "schema_version": "2.0.0",
-        "editor_mode": True,
-        "backend_llm_calls": False,
+        "editor_mode": EDITOR_MODE,
+        "backend_llm_calls": not EDITOR_MODE,
+        "mode": "editor" if EDITOR_MODE else "standalone",
+        "tools": {
+            "scan_changes": {"mode": "editor", "backend_llm_calls": False},
+            "get_finding_context": {"mode": "editor", "backend_llm_calls": False},
+            "read_evidence": {"mode": "editor", "backend_llm_calls": False},
+            "submit_assessment": {"mode": "editor", "backend_llm_calls": False},
+            "check_stale_assessments": {"mode": "editor", "backend_llm_calls": False},
+            "get_assessment_history": {"mode": "editor", "backend_llm_calls": False},
+            "check_fix": {"mode": "editor", "backend_llm_calls": False},
+            "scan_code": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
+            "scan_file": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
+            "scan_directory": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
+            "suggest_fix": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
+        },
         "rule_engine": {
             "name": "semgrep",
             "available": runner.available,
@@ -935,6 +966,8 @@ async def capabilities() -> Dict[str, Any]:
         "note": (
             "Editor mode runs local rule analysis with zero outbound model requests. "
             "Host editor drives investigations and submits evidence-backed assessments."
+            if EDITOR_MODE else
+            "Standalone mode allows both fast rule analysis and deep LLM semantic analysis."
         ),
     }
 

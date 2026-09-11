@@ -471,13 +471,27 @@ def apply_plan(
             continue
 
         if expected_hashes is not None:
-            if file_path not in expected_hashes:
+            expected_h = (
+                expected_hashes.get(file_path)
+                or expected_hashes.get(str(file_path))
+                or expected_hashes.get(file_path.name)
+            )
+            if not expected_h:
+                try:
+                    for k, v in expected_hashes.items():
+                        if str(k).endswith(file_path.name):
+                            expected_h = v
+                            break
+                except Exception:
+                    pass
+
+            if not expected_h:
                 logging.warning(
                     f"No baseline snapshot hash recorded for {file_path}; skipping patch to protect unverified file."
                 )
                 continue
             current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            if current_hash != expected_hashes[file_path]:
+            if current_hash != expected_h:
                 logging.warning(
                     f"File {file_path} modified on disk since plan creation (hash mismatch); skipping patch to avoid corrupting stale lines."
                 )

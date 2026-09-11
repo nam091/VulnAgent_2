@@ -34,7 +34,7 @@ class EvidenceStore:
         for f in sorted(files, key=lambda p: reader.to_relative(p)):
             rel = reader.to_relative(f)
             try:
-                content = f.read_bytes()
+                content = f.read_text(encoding="utf-8", errors="replace").encode("utf-8")
                 h = hashlib.sha256(content).hexdigest()
                 file_hashes[rel] = h
                 hasher.update(f"{rel}:{h}".encode("utf-8"))
@@ -94,9 +94,9 @@ class EvidenceStore:
                     snapshot_id, path, start_line, end_line, f"File not found: {path}", origin
                 )
             rel_path = self.reader.to_relative(real_file)
-            file_bytes = real_file.read_bytes()
+            file_bytes = real_file.read_text(encoding="utf-8", errors="replace").encode("utf-8")
             current_file_hash = hashlib.sha256(file_bytes).hexdigest()
-            file_text = file_bytes.decode("utf-8", errors="replace")
+            file_text = file_bytes.decode("utf-8")
             lines = file_text.splitlines()
             total_lines = len(lines)
         except Exception as e:
@@ -230,12 +230,12 @@ class EvidenceStore:
             if not manifest_file_hash:
                 return False, EvidenceStatus.INVALID, f"File '{record.path}' is not in snapshot '{current_snapshot_id}' manifest"
 
-            file_bytes = target.read_bytes()
+            file_bytes = target.read_text(encoding="utf-8", errors="replace").encode("utf-8")
             current_hash = hashlib.sha256(file_bytes).hexdigest()
             if current_hash != manifest_file_hash or (record.content_hash and record.content_hash != "unknown" and current_hash != record.content_hash):
                 return False, EvidenceStatus.STALE, f"File '{record.path}' was modified on disk after snapshot"
 
-            file_text = file_bytes.decode("utf-8", errors="replace")
+            file_text = file_bytes.decode("utf-8")
             lines = file_text.splitlines()
             total_lines = len(lines)
             if record.start_line < 1 or record.end_line < record.start_line or record.start_line > total_lines or record.end_line > total_lines:

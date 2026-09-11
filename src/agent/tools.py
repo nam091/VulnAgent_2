@@ -17,7 +17,14 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from evidence.safe_reader import MAX_FILE_BYTES, MAX_MATCHES, MAX_READ_LINES, PathEscapeError, SafeReader
+from evidence.safe_reader import (
+    FileTooLargeError,
+    MAX_FILE_BYTES,
+    MAX_MATCHES,
+    MAX_READ_LINES,
+    PathEscapeError,
+    SafeReader,
+)
 
 
 class ToolError(Exception):
@@ -88,30 +95,14 @@ class CodeTools:
             Dict[str, Any]: The requested lines, each prefixed with its number
         """
 
-        target = self._resolve(path)
-        content = target.read_text(encoding="utf-8", errors="replace")
-        lines = content.splitlines()
-        total_lines = len(lines) or 1
-        if not lines:
-            lines = [""]
-
-        start = max(1, int(start_line or 1))
-        end = int(end_line) or start + MAX_READ_LINES - 1
-        end = min(max(end, start), total_lines, start + MAX_READ_LINES - 1)
-
-        body = "\n".join(
-            f"{i:>5} | {lines[i - 1]}" for i in range(start, end + 1)
-        )
-        rel_path = self._relative(target)
-        raw_lines = lines[start - 1:end]
-        return {
-            "path": rel_path,
-            "start_line": start,
-            "end_line": end,
-            "total_lines": total_lines,
-            "content": body,
-            "raw_lines": raw_lines,
-        }
+        try:
+            return self.reader.read_lines(path, start_line, end_line)
+        except (PathEscapeError, FileTooLargeError) as e:
+            raise ToolError(str(e))
+        except FileNotFoundError:
+            raise ToolError(f"no such file: {path}")
+        except Exception as e:
+            raise ToolError(f"cannot read {path}: {e}")
 
     def find_definition(self, name: str, path: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -130,9 +121,9 @@ class CodeTools:
 
         for target in targets:
             try:
-                source = target.read_text(encoding="utf-8", errors="replace")
+                source = self.reader.read_file(self._relative(target))
                 tree = ast.parse(source)
-            except (OSError, SyntaxError):
+            except (OSError, SyntaxError, PathEscapeError, FileTooLargeError):
                 continue
 
             lines = source.splitlines()
@@ -174,18 +165,27 @@ class CodeTools:
             Dict[str, Any]: Matching lines with their locations
         """
 
+        if not pattern or not isinstance(pattern, str):
+            raise ToolError("pattern must be a non-empty string")
+        if len(pattern) > 200:
+            raise ToolError("regular expression exceeds maximum length (200 characters)")
+        if re.search(r"\([^)]*[+*]\)[+*]", pattern):
+            raise ToolError("potentially catastrophic nested repetition in regular expression rejected")
+
         try:
             compiled = re.compile(pattern)
         except re.error as e:
             raise ToolError(f"invalid regular expression: {e}")
 
         targets = [self._resolve(path)] if path else self._python_files()
+        targets = targets[:100]
         matches = []
 
         for target in targets:
             try:
-                lines = target.read_text(encoding="utf-8", errors="replace").split("\n")
-            except OSError:
+                content = self.reader.read_file(self._relative(target))
+                lines = content.splitlines()
+            except (OSError, PathEscapeError, FileTooLargeError):
                 continue
             for number, line in enumerate(lines, 1):
                 if compiled.search(line):

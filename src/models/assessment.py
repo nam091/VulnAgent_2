@@ -1,3 +1,5 @@
+import json
+import logging
 from collections import defaultdict
 from enum import Enum
 import time
@@ -286,16 +288,62 @@ def check_assessment_stale(assessment: FindingAssessment, evidence_store: Any) -
 
 class AssessmentStore:
     """
-    In-memory or persistent store for finding assessments and their audit history.
+    Store for finding assessments and their audit history with optional persistence.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, storage_dir: Optional[Path] = None) -> None:
+        self.storage_dir = Path(storage_dir).resolve() if storage_dir else None
         self._assessments: Dict[str, FindingAssessment] = {}
         self._history: Dict[str, List[FindingAssessment]] = defaultdict(list)
+        self._events: List[Dict[str, Any]] = []
+        if self.storage_dir:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            self._load_persisted()
+
+    def _log_file(self) -> Optional[Path]:
+        return self.storage_dir / "audit_log.jsonl" if self.storage_dir else None
+
+    def _load_persisted(self) -> None:
+        log_file = self._log_file()
+        if not log_file or not log_file.is_file():
+            return
+        try:
+            for line in log_file.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                data = json.loads(line)
+                if data.get("record_type") == "assessment":
+                    assessment = FindingAssessment.model_validate(data["data"])
+                    self._assessments[assessment.finding_id] = assessment
+                    self._history[assessment.finding_id].append(assessment)
+                elif data.get("record_type") == "event":
+                    self._events.append(data["data"])
+        except Exception as e:
+            logging.debug(f"Failed to load persisted assessments: {e}")
+
+    def _persist_record(self, record_type: str, data: Dict[str, Any]) -> None:
+        log_file = self._log_file()
+        if not log_file:
+            return
+        try:
+            entry = json.dumps({"record_type": record_type, "data": data}, ensure_ascii=False)
+            with log_file.open("a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+        except OSError as e:
+            logging.debug(f"Failed to persist assessment record: {e}")
 
     def save(self, assessment: FindingAssessment) -> None:
         self._assessments[assessment.finding_id] = assessment
         self._history[assessment.finding_id].append(assessment.model_copy(deep=True))
+        self._persist_record("assessment", assessment.model_dump())
+
+    def record_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        evt = {"event": event_type, "timestamp": time.time(), **payload}
+        self._events.append(evt)
+        self._persist_record("event", evt)
+
+    def get_events(self) -> List[Dict[str, Any]]:
+        return list(self._events)
 
     def get(self, finding_id: str) -> Optional[FindingAssessment]:
         return self._assessments.get(finding_id)
@@ -310,7 +358,17 @@ class AssessmentStore:
         stale_ids = []
         for fid, a in self._assessments.items():
             if a.status in (AssessmentStatus.SUPPORTED, AssessmentStatus.REFUTED):
+                prev_status = a.status.value
+                prev_reason = a.reason
                 if check_assessment_stale(a, evidence_store):
                     stale_ids.append(fid)
                     self._history[fid].append(a.model_copy(deep=True))
+                    self._persist_record("assessment", a.model_dump())
+                    self.record_event("stale_detected", {
+                        "finding_id": fid,
+                        "previous_status": prev_status,
+                        "previous_reason": prev_reason,
+                        "new_status": a.status.value,
+                        "stale_reason": a.reason,
+                    })
         return stale_ids

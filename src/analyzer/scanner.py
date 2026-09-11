@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -959,11 +960,13 @@ class Scanner:
     def _cache_key(self, content: str) -> str:
         """
         Derive the cache key for a file's LLM analysis.
-        Includes pipeline version, provider, model, and content hash.
+        Includes pipeline version, provider, model, endpoint, prompt version, and content hash.
         """
         model = os.getenv("OPENAI_MODEL", "default")
         provider = os.getenv("AI_PROVIDER", "openai")
-        payload = f"{CACHE_VERSION}|{provider}|{model}|prompt_v1|{content}"
+        endpoint = os.getenv("OPENAI_BASE_URL", os.getenv("AI_ENDPOINT", "default_endpoint"))
+        prompt_version = "prompt_v2_structured"
+        payload = f"{CACHE_VERSION}|{provider}|{model}|{endpoint}|{prompt_version}|{content}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _resolve_cache_dir(self) -> Optional[Path]:
@@ -1027,7 +1030,7 @@ class Scanner:
             return
 
         path = cache_dir / f"{self._cache_key(content)}.json"
-        tmp_path = path.with_suffix(f".tmp_{os.getpid()}")
+        tmp_path = path.with_suffix(f".tmp_{os.getpid()}_{uuid.uuid4().hex[:8]}")
         try:
             tmp_path.write_text(json.dumps(analysis, ensure_ascii=False), encoding="utf-8")
             tmp_path.replace(path)

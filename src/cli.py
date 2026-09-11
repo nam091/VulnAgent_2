@@ -633,6 +633,7 @@ async def _run_doctor(args: argparse.Namespace) -> int:
         print(f"  [OK] Semgrep executable detected: {semgrep_path}")
     else:
         print("  [ERROR] Semgrep not found on PATH. Fast rule scans will fail unless installed.")
+        print("    Remediation: run 'pip install semgrep' or ensure semgrep is on system PATH.")
         all_ok = False
 
     # 3. Git
@@ -659,6 +660,19 @@ async def _run_doctor(args: argparse.Namespace) -> int:
         print("  [OK] EvidenceStore & AST analyzer loaded successfully")
     except Exception as e:
         print(f"  [ERROR] Core components failed to load: {e}")
+        all_ok = False
+
+    # 6. MCP handshake smoke test
+    try:
+        from mcp_server import capabilities as mcp_capabilities
+        caps = await mcp_capabilities()
+        if "tools" in caps and "schema_version" in caps:
+            print(f"  [OK] MCP handshake smoke test passed (mode: {caps.get('mode', 'editor')}, tools: {len(caps['tools'])})")
+        else:
+            print("  [ERROR] MCP capabilities handshake returned unexpected schema.")
+            all_ok = False
+    except Exception as e:
+        print(f"  [ERROR] MCP in-process handshake failed: {e}")
         all_ok = False
 
     return EXIT_CLEAN if all_ok else EXIT_ERROR

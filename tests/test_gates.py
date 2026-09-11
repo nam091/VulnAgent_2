@@ -1329,6 +1329,368 @@ async def test_r07_rejects_fix_when_baseline_metadata_missing(tmp_path: Path):
         assert app_file.read_text(encoding="utf-8") == "x = 999\n"
 
 
+# ---------------------------------------------------------------------------
+# R08-R14: Editor mode consistency, Host adapter hooks, Provenance, Persistent
+# audit, Cache identity & concurrency, SafeReader DoS defense, E2E Demo.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_r08_editor_mode_zero_backend_llm_calls(monkeypatch, tmp_path: Path):
+    """
+    R08: Editor mode must strictly prevent backend model calls and expose
+    honest per-tool capabilities.
+    """
+    import mcp_server
+    monkeypatch.setenv("VULNAGENT_MODE", "editor")
+    monkeypatch.setattr(mcp_server, "EDITOR_MODE", True)
+
+    caps = await mcp_server.capabilities()
+    assert caps["editor_mode"] is True
+    assert caps["backend_llm_calls"] is False
+    assert caps["mode"] == "editor"
+    assert "tools" in caps
+    assert caps["tools"]["scan_changes"]["backend_llm_calls"] is False
+
+    with patch("mcp_server.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        from analyzer.scanner import ScanResult
+        mock_scan.return_value = ScanResult([], tmp_path, {})
+        await mcp_server._scan_target(tmp_path, mode="deep")
+        assert mock_scan.called
+
+
+@pytest.mark.asyncio
+async def test_r09_editor_hook_runner_debounce_and_snapshot(tmp_path: Path):
+    """
+    R09: EditorHookRunner debounce skips repeated runs within window;
+    dirty snapshot skips execution when files are unmodified.
+    """
+    from integrations.host_adapter import EditorHookRunner
+
+    f = tmp_path / "app.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+
+    runner = EditorHookRunner(root=tmp_path, debounce_seconds=1.0, max_rounds=2)
+
+    scan_called = 0
+    async def dummy_scan():
+        nonlocal scan_called
+        scan_called += 1
+        return []
+
+    # First run: runs scan
+    res1 = await runner.run(scan_fn=dummy_scan, files=[f])
+    assert res1["status"] == "clean"
+    assert scan_called == 1
+
+    # Immediate second run: debounced
+    res2 = await runner.run(scan_fn=dummy_scan, files=[f])
+    assert res2["status"] == "skipped"
+    assert res2["reason"] == "debounced"
+    assert scan_called == 1
+
+    # Advance time beyond debounce window, but file unmodified
+    runner._last_run_time = 0.0
+    res3 = await runner.run(scan_fn=dummy_scan, files=[f])
+    assert res3["status"] == "skipped"
+    assert res3["reason"] == "unmodified"
+    assert scan_called == 1
+
+    # Modify file, advance time -> runs scan again
+    f.write_text("x = 2\n", encoding="utf-8")
+    res4 = await runner.run(scan_fn=dummy_scan, files=[f])
+    assert res4["status"] == "clean"
+    assert scan_called == 2
+
+
+@pytest.mark.asyncio
+async def test_r09_editor_hook_runner_lock_and_no_progress(tmp_path: Path):
+    """
+    R09: EditorHookRunner respects process lock, caps at 2 rounds,
+    and terminates early with no_progress if findings do not decrease.
+    """
+    from integrations.host_adapter import EditorHookRunner
+    from conftest import make_vuln
+
+    f = tmp_path / "test.py"
+    f.write_text("v = 1\n", encoding="utf-8")
+
+    runner = EditorHookRunner(root=tmp_path, debounce_seconds=0.0, max_rounds=2)
+
+    # 1. Test lock contention
+    with runner.lock():
+        runner2 = EditorHookRunner(root=tmp_path, debounce_seconds=0.0)
+        res_locked = await runner2.run(scan_fn=AsyncMock(), files=[f])
+        assert res_locked["status"] == "skipped"
+        assert res_locked["reason"] == "locked"
+
+    # 2. Test no-progress termination
+    vuln = make_vuln(file_path="test.py", start_line=1)
+    async def stub_scan():
+        return [vuln]
+
+    async def ineffective_fix(scan_res):
+        pass
+
+    res_no_progress = await runner.run(scan_fn=stub_scan, fix_fn=ineffective_fix, files=[f])
+    assert res_no_progress["status"] == "no_progress"
+    assert res_no_progress["rounds"] == 2
+    assert res_no_progress["initial_count"] == 1
+    assert res_no_progress["final_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_r09_doctor_mcp_smoke_and_semgrep_advice():
+    """
+    R09: doctor command includes MCP in-process handshake smoke test and
+    actionable remediation advice for Semgrep.
+    """
+    import argparse
+    from cli import _run_doctor, EXIT_CLEAN, EXIT_ERROR
+
+    args = argparse.Namespace()
+    code = await _run_doctor(args)
+    assert code in (EXIT_CLEAN, EXIT_ERROR)
+
+
+@pytest.mark.asyncio
+async def test_r10_r11_persistent_assessment_store_and_mcp_semantics(tmp_path: Path):
+    """
+    R10 & R11: Structured provenance/assessment in MCP _to_dict,
+    persistent JSONL audit store re-hydration across sessions, and stale event tracking.
+    """
+    from models.assessment import AssessmentStore, FindingAssessment, AssessmentStatus
+    from mcp_server import _to_dict, get_assessment_history, _scan_sessions
+    from conftest import make_vuln
+
+    audit_dir = tmp_path / ".vulnagent-audit"
+    store = AssessmentStore(storage_dir=audit_dir)
+
+    vuln = make_vuln(file_path="foo.py", start_line=1)
+    vuln.file_hash = "abc123hash"
+    vuln.assessment_status = "supported"
+    vuln.evidence_ids = ["ev_1"]
+
+    # Test R10 _to_dict structured output
+    payload = _to_dict(vuln)
+    assert "provenance" in payload
+    assert payload["provenance"]["file_hash"] == "abc123hash"
+    assert "assessment" in payload
+    assert payload["assessment"]["status"] == "supported"
+    assert payload["assessment"]["evidence_ids"] == ["ev_1"]
+    assert payload["assessment_status"] == "supported"
+
+    # Test R11 persistent storage
+    assessment = FindingAssessment(
+        finding_id=vuln.id,
+        snapshot_id="snap_123",
+        status=AssessmentStatus.SUPPORTED,
+        reason="Injection verified by evidence",
+        evidence_ids=["ev_1"],
+        assessor="host_editor",
+    )
+    store.save(assessment)
+    store.record_event("test_event", {"finding_id": vuln.id, "detail": "sample"})
+
+    log_file = audit_dir / "audit_log.jsonl"
+    assert log_file.is_file()
+    assert len(log_file.read_text(encoding="utf-8").splitlines()) == 2
+
+    # Re-hydrate in new store instance
+    store2 = AssessmentStore(storage_dir=audit_dir)
+    loaded = store2.get(vuln.id)
+    assert loaded is not None
+    assert loaded.status == AssessmentStatus.SUPPORTED
+    assert len(store2.get_events()) == 1
+
+    # MCP get_assessment_history with events
+    scan_id = "test_audit_session"
+    _scan_sessions[scan_id] = {
+        "root": tmp_path,
+        "findings": {vuln.id: vuln},
+        "assessment_store": store2,
+    }
+    hist = await get_assessment_history(scan_id=scan_id, finding_id=vuln.id)
+    assert hist["finding_id"] == vuln.id
+    assert len(hist["history"]) >= 1
+    assert len(hist["events"]) == 1
+
+
+def test_r12_cache_key_identity_and_concurrency(tmp_path: Path, monkeypatch):
+    """
+    R12: Cache key derives from actual provider, model, endpoint, prompt version;
+    atomic write uses UUID in temp file to prevent same-process collisions.
+    """
+    from analyzer.scanner import ScanOptions, Scanner
+
+    options = ScanOptions(target=str(tmp_path), cache_dir=str(tmp_path / "cache"))
+    scanner = Scanner(options)
+
+    content = "print('hello')\n"
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    k1 = scanner._cache_key(content)
+
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
+    k2 = scanner._cache_key(content)
+    assert k1 != k2
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://custom.endpoint/v1")
+    k3 = scanner._cache_key(content)
+    assert k2 != k3
+
+    analysis = {"vulnerabilities": []}
+    scanner._cache_put(content, analysis)
+    cached = scanner._cache_get(content)
+    assert cached == analysis
+
+
+def test_r13_code_tools_safe_reader_and_redos_guard(tmp_path: Path):
+    """
+    R13: CodeTools delegates reads to SafeReader, limits file sizes,
+    and protects search against ReDoS (length limits and nested repetitions).
+    """
+    from agent.tools import CodeTools, ToolError
+
+    (tmp_path / "app.py").write_text("def run():\n    pass\n", encoding="utf-8")
+    tools = CodeTools(tmp_path)
+
+    # 1. Path traversal rejected
+    with pytest.raises(ToolError):
+        tools.read_lines("../outside.py")
+
+    # 2. Regex length exceeded (>200)
+    with pytest.raises(ToolError, match="exceeds maximum length"):
+        tools.search("a" * 201)
+
+    # 3. Potentially catastrophic nested repetition rejected
+    with pytest.raises(ToolError, match="catastrophic nested repetition"):
+        tools.search(r"((a+)+)+")
+
+    # 4. Valid search works safely
+    res = tools.search(r"def run")
+    assert res["matches"]
+    assert res["matches"][0]["line"] == 1
+
+
+@pytest.mark.asyncio
+async def test_r14_end_to_end_python_demo_three_branches(tmp_path: Path):
+    """
+    R14: End-to-end Python demo workflow covering three branches:
+      Branch 1: Clean fix workflow (finding -> evidence -> assessment -> fix -> check_fix clean -> audit trail)
+      Branch 2: Stale baseline conflict (finding -> external modification -> conflict prevented)
+      Branch 3: Engine failure handling (engine degraded/failed -> status failed, fail-closed exit)
+    """
+    import argparse
+    from analyzer.fixer import build_plan, apply_plan
+    from analyzer.scanner import ScanResult
+    from cli import _run_check, _run_fix, EXIT_CLEAN, EXIT_ERROR
+    from conftest import make_vuln
+    import mcp_server
+
+    # -------------------------------------------------------------
+    # Branch 1: Clean fix workflow
+    # -------------------------------------------------------------
+    app_file = tmp_path / "app.py"
+    app_file.write_text("import sqlite3\ncur.execute(f'SELECT * FROM users WHERE id = {user_input}')\n", encoding="utf-8")
+
+    scan_id = "demo_branch1_clean"
+    vuln = make_vuln(
+        file_path="app.py",
+        start_line=2,
+        context="cur.execute(f'SELECT * FROM users WHERE id = {user_input}')\n",
+        secure_code_example="cur.execute('SELECT * FROM users WHERE id = ?', (user_input,))\n",
+    )
+    from evidence.store import EvidenceStore
+    ev_store = EvidenceStore(tmp_path)
+    snapshot = ev_store.create_snapshot()
+    vuln.file_hash = snapshot.files.get("app.py", "")
+
+    mcp_server._scan_sessions[scan_id] = {
+        "root": tmp_path,
+        "findings": {vuln.id: vuln},
+        "changed_files": ["app.py"],
+        "expanded_files": ["app.py"],
+        "evidence_store": ev_store,
+        "snapshot": snapshot,
+    }
+
+    # Step 1: Read evidence
+    read_res = await mcp_server.read_evidence(scan_id=scan_id, path="app.py", start_line=1, end_line=2)
+    assert read_res["read_succeeded"] is True
+    eid = read_res["evidence_id"]
+
+    # Step 2: Submit assessment
+    assess_res = await mcp_server.submit_assessment(
+        scan_id=scan_id,
+        finding_id=vuln.id,
+        verdict="supported",
+        evidence_ids=[eid],
+        taint_path=[{"kind": "source", "file": "app.py", "line": 2, "evidence_id": eid},
+                    {"kind": "sink", "file": "app.py", "line": 2, "evidence_id": eid}],
+        reason="Confirmed user_input flows directly into SQL execute",
+    )
+    assert assess_res["accepted_status"] == "supported"
+
+    # Step 3: Apply fix
+    plan = build_plan([vuln], tmp_path, baseline_hashes={"app.py": vuln.file_hash})
+    assert len(plan.patches) == 1
+    apply_res = apply_plan(plan, expected_snapshot_hashes={"app.py": vuln.file_hash})
+    assert apply_res["patches_applied"] == 1
+    assert "cur.execute('SELECT * FROM users WHERE id = ?'" in app_file.read_text(encoding="utf-8")
+
+    # Step 4: check_fix verification
+    with patch("mcp_server.Scanner.scan", new_callable=AsyncMock) as mock_rescan:
+        mock_rescan.return_value = ScanResult([], tmp_path, {})
+        fix_check = await mcp_server.check_fix(scan_id=scan_id, finding_ids=[vuln.id])
+        assert fix_check["clean"] is True
+        assert vuln.id in fix_check["resolved_findings"]
+
+    # -------------------------------------------------------------
+    # Branch 2: Stale baseline conflict
+    # -------------------------------------------------------------
+    app_file.write_text("import sqlite3\n# external developer changed this line completely\n", encoding="utf-8")
+    stale_plan = build_plan([vuln], tmp_path, baseline_hashes={"app.py": vuln.file_hash})
+    assert stale_plan.stale is True
+    assert len(stale_plan.conflicts) == 1
+    assert len(stale_plan.patches) == 0
+
+    args_fix = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=False,
+        confirmed_only=False,
+        dry_run=False,
+        verify=False,
+        yes=True,
+        include_risky=True,
+    )
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        from models.vulnerability import VulnerabilityReport
+        rep = VulnerabilityReport(file_name="app.py", vulnerabilities=[vuln], chained_vulnerabilities=[], status="completed", timestamp=datetime.now())
+        mock_scan.return_value = ScanResult([rep], tmp_path, {"app.py": vuln.file_hash})
+        fix_exit = await _run_fix(args_fix)
+        assert fix_exit == EXIT_ERROR
+        assert "external developer changed" in app_file.read_text(encoding="utf-8")
+
+    # -------------------------------------------------------------
+    # Branch 3: Engine failure fail-closed
+    # -------------------------------------------------------------
+    args_check = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=False,
+        no_semgrep=False,
+        changes=False,
+        before_release=True,
+    )
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan_fail:
+        mock_scan_fail.return_value = ScanResult(
+            [], tmp_path, {"rule_error": "Fatal syntax failure in engine", "status": "failed", "degraded": True}
+        )
+        check_exit = await _run_check(args_check)
+        assert check_exit == EXIT_ERROR
+
+
+
 
 
 

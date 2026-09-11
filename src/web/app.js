@@ -635,12 +635,16 @@ function phaseNote(job, phase) {
 
 function findingCard(f) {
   const verified = f.verification && f.verification.verdict === 'confirmed';
+  const assessmentStatus = f.assessment_status || (f.assessment && f.assessment.status);
+  const corroborated = f.corroborated || (f.provenance && f.provenance.corroborated);
   return `
     <div class="finding ${esc(f.severity)}">
       <div class="f-head">
         <span class="pill ${esc(f.severity)}">${esc(f.severity)}</span>
         <span class="f-type">${esc(f.type)}</span>
         <span class="tag ${esc(f.source)}">${esc(f.source)} ${f.confidence}</span>
+        ${corroborated ? '<span class="tag corroborated">corroborated</span>' : ''}
+        ${assessmentStatus ? `<span class="tag assessment-${esc(assessmentStatus)}">${esc(assessmentStatus)}</span>` : ''}
         ${verified ? '<span class="tag verified">agent-verified</span>' : ''}
         ${f.cwe ? `<span class="tag">${esc(f.cwe)}</span>` : ''}
         <span class="f-loc">${esc(f.file)}:${f.start_line}</span>
@@ -649,6 +653,13 @@ function findingCard(f) {
         ${f.description ? `<div>${esc(f.description)}</div>` : ''}
         ${f.impact ? `<h4>Impact</h4><div>${esc(f.impact)}</div>` : ''}
         ${f.remediation ? `<h4>Fix</h4><div>${esc(f.remediation)}</div>` : ''}
+        ${f.assessment ? `
+          <h4>Assessment Audit</h4>
+          <div><b>Status:</b> ${esc(f.assessment.status || assessmentStatus)}</div>
+          ${f.assessment.reason ? `<div><b>Reason:</b> ${esc(f.assessment.reason)}</div>` : ''}
+          ${f.assessment.mitigating_control ? `<div><b>Mitigating Control:</b> ${esc(f.assessment.mitigating_control)}</div>` : ''}
+          ${(f.assessment.evidence_ids || []).length ? `<div><b>Evidence IDs:</b> ${esc(f.assessment.evidence_ids.join(', '))}</div>` : ''}
+        ` : ''}
         ${(f.taint_path || []).length ? `<h4>Traced dataflow</h4><div class="taint">
           ${f.taint_path.map(s => `
             <div class="taint-step">
