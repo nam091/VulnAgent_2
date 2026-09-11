@@ -1,5 +1,28 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 918c2e8 (11/09/2026)
+
+**101/101 test pass (24.04 giây, 1 warning). Hai ca lỗi tái hiện ở lượt trước đã được chặn. Behavioral demo đã kiểm tra input hợp lệ trước/sau và áp dụng patch thật; khâu phát hiện/rescan vẫn giả lập nên chưa gọi là full scanner/host E2E.** Các phần bên dưới là lịch sử review.
+
+### Xác minh hai bản sửa
+
+1. **Partial gate:** probe dùng ScanResult thật `status=partial`, `degraded=False`; runner trả failed với lý do coverage incomplete, không clean. Lượt retry cùng snapshot với callback completed đi tiếp và trả clean. Không bị khóa retry bởi snapshot của lần partial.
+2. **Cross-cwd restore:** lưu snapshot/session ở repo tạm, registry ở thư mục tạm qua `VULNAGENT_REGISTRY_DIR`; bỏ session khỏi RAM trong khi cwd vẫn khác repo; gọi public `read_evidence(scan_id, 'app.py', 1, 1)` không root_hint. Kết quả read_succeeded=True, evidence valid và đúng nội dung file. Xác nhận đường registry→root→session→evidence hoạt động cho ca này. Đây là mô phỏng mất RAM, chưa phải MCP subprocess restart/transport thật.
+
+### Behavioral demo: phần đã đạt và giới hạn cần ghi đúng
+
+`test_r14_comprehensive_runtime_demo_with_pipeline_and_valid_input` đã chạy SQLite thật: input `1` trả Alice trước/sau; payload `999 OR 1=1` lấy hai người trước sửa và không lấy được bản ghi sau sửa. Patch đi qua build_plan/apply_plan thật trên cùng file. Phần giữ chức năng hợp lệ và vô hiệu hóa injection của mẫu này đã có bằng chứng thực thi.
+
+Tuy nhiên, test vẫn tạo finding/suggestion bằng `make_vuln`, tự tạo `_scan_sessions`, và mock `mcp_server.Scanner.scan` trả kết quả rỗng cho check_fix. Docstring “Real scan -> finding detection” chưa đúng với phần thực thi. Test chứng minh fixer áp dụng bản sửa cho sẵn và bản sửa giữ hành vi mong muốn; chưa chứng minh detector tìm được lỗi hoặc rescan thực xác nhận resolution.
+
+**Để nghiệm thu tiếp:** đặt tên/mô tả test là behavioral integration với finding/rescan giả lập; bổ sung một bài integration riêng dùng rules/engine thật, có coverage thực cho file và snapshot, không mock toàn Scanner.scan. Với demo editor, còn cần MCP transport/host transcript. Model/suggestion có thể là fixture trong test xác định nhưng phải ghi rõ phần đó; không coi fixture là kết quả model thật.
+
+### Trạng thái kết luận
+
+Đóng hai ca partial→clean và không restore được target khác cwd trong phạm vi đã tái hiện. Không phát hiện lỗi mới chặn hai bản sửa đó trong lượt kiểm tra này. Không mở lại các lỗi cũ đã đóng. Chưa đánh dấu toàn bộ R09/R14/G4/G5/G6/G7 hoàn tất: host thực, transport, detector/rescan thực, môi trường tái lập và protocol/benchmark vẫn cần bằng chứng riêng.
+
+Review chỉ cập nhật tài liệu; không sửa mã nguồn và không gọi model/Semgrep thật. Bộ test đã thực thi các chương trình SQLite mẫu bằng subprocess như mô tả trên.
+
 ## Cập nhật mới nhất — fab6ba3 (11/09/2026)
 
 **98/98 test pass (19.02 giây, 1 warning). H02/H03 và các ca failed/degraded của H01 đã được cải thiện có test. H01 vẫn còn partial→clean; R11 chỉ restore được khi root audit được tìm thấy qua cwd/root_hint. R09/R14 có bước triển khai thực tế nhưng chưa hoàn tất nghiệm thu host end-to-end.** Các phần bên dưới giữ làm lịch sử.

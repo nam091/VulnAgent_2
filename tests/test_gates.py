@@ -2109,13 +2109,13 @@ async def test_r11_public_mcp_tools_restore_session_when_cwd_differs_from_repo(t
 
 
 @pytest.mark.asyncio
-async def test_r14_comprehensive_runtime_demo_with_pipeline_and_valid_input(tmp_path: Path):
+async def test_r14_behavioral_integration_pipeline_demo_with_simulated_finding_and_rescan(tmp_path: Path):
     """
-    R14: Complete end-to-end security demo with full pipeline:
-    1. Runtime SQLite verification with valid input (returns single user) and injection (unauthorized dump).
-    2. Real scan -> finding detection -> plan building -> patch application.
-    3. Rescan verification confirming finding resolution.
-    4. Post-patch runtime verification: valid input still works; injection is neutralized.
+    R14 Behavioral integration demo (simulated finding/rescan):
+    1. Runtime SQLite verification: valid input ('1') returns Alice; malicious input ('999 OR 1=1') leaks database.
+    2. VulnAgent fixer pipeline: build_plan -> apply_plan rewrites code with parameterized query.
+    3. check_fix simulated verification.
+    4. Post-patch runtime verification: valid input preserved, injection completely neutralized.
     """
     import sqlite3
     import subprocess
@@ -2168,7 +2168,7 @@ if __name__ == "__main__":
     assert "USER:Alice:admin" in p_inj.stdout
     assert "USER:Bob:user" in p_inj.stdout
 
-    # Step 4: Vulnerability detection and finding binding
+    # Step 4: Vulnerability detection and finding binding (simulated fixture finding)
     ev_store = EvidenceStore(tmp_path)
     snap = ev_store.create_snapshot()
     vuln = make_vuln(
@@ -2213,6 +2213,119 @@ if __name__ == "__main__":
     p_post_inj = subprocess.run([sys.executable, str(app_py), "999 OR 1=1"], capture_output=True, text=True, check=True)
     assert "COUNT:0" in p_post_inj.stdout
     assert "Alice" not in p_post_inj.stdout
+
+
+@pytest.mark.asyncio
+async def test_r14_real_semgrep_detector_and_rescan_e2e_integration(tmp_path: Path):
+    """
+    R14 End-to-end integration with REAL Semgrep engine and REAL rescan coverage:
+    1. Creates file with real OS Command Injection (subprocess.call(cmd, shell=True)).
+    2. Runs real Scanner.scan() with use_semgrep=True, use_llm=False.
+    3. Asserts real Semgrep finding detected (CWE-78 / OS_COMMAND_INJECTION) and real coverage report status='completed'.
+    4. Applies secure rewrite through build_plan and apply_plan (changing shell=True to shell=False).
+    5. Runs real Scanner.scan() rescan: asserts finding resolved, 0 vulnerabilities, status='completed'.
+    """
+    from analyzer.fixer import build_plan, apply_plan
+    from analyzer.scanner import ScanOptions, Scanner
+    from evidence.store import EvidenceStore
+    from models.vulnerability import VulnerabilityType
+
+    app_py = tmp_path / "command_runner.py"
+    app_py.write_text(
+        "import subprocess\n"
+        "\n"
+        "def execute_user_command(cmd: str):\n"
+        "    subprocess.call(cmd, shell=True)\n",
+        encoding="utf-8"
+    )
+
+    ev_store = EvidenceStore(tmp_path)
+    snap = ev_store.create_snapshot()
+
+    # Step 1: Real Semgrep scan
+    options = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=True)
+    scanner = Scanner(options)
+    scan_res = await scanner.scan()
+
+    # Step 2: Assert real detector found vulnerability
+    assert scan_res.status == "completed"
+    assert scan_res.degraded is False
+    assert len(scan_res.reports) == 1
+    assert scan_res.reports[0].status == "completed"
+    assert len(scan_res.vulnerabilities) >= 1
+
+    vuln = next((v for v in scan_res.vulnerabilities if v.type == VulnerabilityType.OS_COMMAND_INJECTION or "78" in getattr(v, "cwe_id", "")), None)
+    assert vuln is not None
+    assert vuln.location.file_path in ("command_runner.py", str(app_py))
+
+    # Step 3: Secure rewrite through fixer pipeline
+    vuln.secure_code_example = "    subprocess.call(cmd, shell=False)"
+    plan = build_plan([vuln], tmp_path, baseline_hashes={vuln.location.file_path: snap.files.get("command_runner.py", "")})
+    assert len(plan.patches) == 1
+    apply_res = apply_plan(plan, expected_snapshot_hashes={vuln.location.file_path: snap.files.get("command_runner.py", "")})
+    assert apply_res["patches_applied"] == 1
+    assert "shell=False" in app_py.read_text(encoding="utf-8")
+
+    # Step 4: Real Semgrep rescan confirms resolution
+    rescan_res = await scanner.scan()
+    assert rescan_res.status == "completed"
+    assert rescan_res.degraded is False
+    assert len(rescan_res.vulnerabilities) == 0
+
+
+@pytest.mark.asyncio
+async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
+    """
+    R14 Real MCP stdio transport client handshake & E2E tool execution:
+    1. Launches python src/mcp_server.py over real stdio transport.
+    2. Performs protocol initialize() handshake and lists all registered tools.
+    3. Calls 'capabilities' tool over transport: asserts schema version and editor mode.
+    4. Calls 'scan_changes' tool over transport with real working tree.
+    """
+    import json
+    import sys
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    server_script = Path(__file__).resolve().parent.parent / "src" / "mcp_server.py"
+    params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(server_script)],
+        env=None,
+    )
+
+    (tmp_path / "hello.py").write_text("print('test')\n", encoding="utf-8")
+
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            # 1. Transport handshake
+            init_res = await session.initialize()
+            assert init_res.serverInfo.name == "vulnagent"
+
+            # 2. Tool list discovery
+            tools_res = await session.list_tools()
+            tool_names = {t.name for t in tools_res.tools}
+            expected_tools = {
+                "scan_changes", "get_finding_context", "read_evidence",
+                "submit_assessment", "check_stale_assessments", "get_assessment_history",
+                "check_fix", "capabilities"
+            }
+            assert expected_tools.issubset(tool_names)
+
+            # 3. Call capabilities over stdio
+            cap_res = await session.call_tool("capabilities", {})
+            assert cap_res.content and len(cap_res.content) > 0
+            cap_data = json.loads(cap_res.content[0].text)
+            assert cap_data["schema_version"] == "2.0.0"
+            assert cap_data["editor_mode"] is True
+
+            # 4. Call scan_changes over stdio
+            scan_call = await session.call_tool("scan_changes", {"target": str(tmp_path)})
+            assert scan_call.content and len(scan_call.content) > 0
+            scan_out = json.loads(scan_call.content[0].text)
+            assert "scan_id" in scan_out
+            assert "snapshot_id" in scan_out
+            assert "coverage" in scan_out
 
 
 
