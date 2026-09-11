@@ -1582,9 +1582,10 @@ async def test_r09_editor_hook_runner_trailing_auto_fix_budget_capped(tmp_path: 
 @pytest.mark.asyncio
 async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: Path):
     """
-    R09 (E05 regression): configure_editor_save_hook must preserve existing JSONC comments,
-    unrelated settings (e.g. editor.tabSize), existing on-save commands, existing tasks,
-    and must not overwrite existing git pre-commit hooks.
+    R09 (E05 regression): configure_editor_save_hook must preserve existing JSONC settings,
+    unrelated settings (e.g. editor.tabSize), string literals containing ',}' or ',]' or URLs,
+    existing user on-save commands (e.g. tools/cli.py, echo commands mentioning vulnagent),
+    existing tasks, and must not overwrite existing git pre-commit hooks.
     """
     import json
     from integrations.host_adapter import HostAdapter
@@ -1592,11 +1593,16 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     config_dir = tmp_path / ".cursor"
     config_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Existing settings.json with JSONC comments, trailing commas, and other extensions
+    # 1. Existing settings.json with JSONC comments, trailing commas, strings with commas/brackets/escapes/URLs,
+    # and diverse user commands including 'tools/cli.py lint', 'echo keep-me vulnagent', and legacy hook.
     existing_settings_raw = (
         "{\n"
         "  // Custom developer settings\n"
         '  "editor.tabSize": 8,\n'
+        '  "custom.url": "https://example.com/api?foo=1//not-a-comment",\n'
+        '  "custom.escape": "escaped \\"quote\\" and /* not block */",\n'
+        '  "custom.trailing_bracket": "a,}",\n'
+        '  "custom.trailing_square": "b,]",\n'
         '  "emeraldwalk.runonsave": {\n'
         '    "autoClearConsole": true,\n'
         '    "commands": [\n'
@@ -1604,23 +1610,38 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
         '        "match": "\\\\.js$",\n'
         '        "cmd": "eslint ${file}",\n'
         '      },\n'
+        '      {\n'
+        '        "match": "\\\\.py$",\n'
+        '        "cmd": "python tools/cli.py lint",\n'
+        '      },\n'
+        '      {\n'
+        '        "match": ".*",\n'
+        '        "cmd": "echo \'keep-me vulnagent mention\'",\n'
+        '      },\n'
+        '      {\n'
+        '        "match": "\\\\.py$",\n'
+        '        "cmd": "python -m cli hook --target \\"${workspaceFolder}\\" --files \\"${file}\\" --trailing",\n'
+        '      },\n'
         '    ],\n'
         '  },\n'
         "}\n"
     )
     (config_dir / "settings.json").write_text(existing_settings_raw, encoding="utf-8")
 
-    # 2. Existing tasks.json with custom user task
-    existing_tasks_raw = json.dumps({
-        "version": "2.0.0",
-        "tasks": [
-            {
-                "label": "My Custom Build",
-                "type": "shell",
-                "command": "make build"
-            }
-        ]
-    }, indent=2)
+    # 2. Existing tasks.json with custom user task containing comment and trailing commas
+    existing_tasks_raw = (
+        "{\n"
+        '  "version": "2.0.0",\n'
+        '  // Developer build tasks\n'
+        '  "tasks": [\n'
+        "    {\n"
+        '      "label": "My Custom Build",\n'
+        '      "type": "shell",\n'
+        '      "command": "make build",\n'
+        "    },\n"
+        "  ],\n"
+        "}\n"
+    )
     (config_dir / "tasks.json").write_text(existing_tasks_raw, encoding="utf-8")
 
     # 3. Existing git pre-commit hook
@@ -1637,13 +1658,24 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     # Check Git hook was NOT overwritten
     assert custom_hook.read_text(encoding="utf-8") == "#!/bin/sh\necho 'my custom pre-commit'\n"
 
-    # Check settings.json preserved tabSize, autoClearConsole, and eslint
+    # Check settings.json preserved all strings intact without data corruption
     settings_data = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
     assert settings_data["editor.tabSize"] == 8
+    assert settings_data["custom.url"] == "https://example.com/api?foo=1//not-a-comment"
+    assert settings_data["custom.escape"] == 'escaped "quote" and /* not block */'
+    assert settings_data["custom.trailing_bracket"] == "a,}"
+    assert settings_data["custom.trailing_square"] == "b,]"
     assert settings_data["emeraldwalk.runonsave"]["autoClearConsole"] is True
+
     cmds = settings_data["emeraldwalk.runonsave"]["commands"]
+    # User commands must ALL be preserved
     assert any(c.get("cmd") == "eslint ${file}" for c in cmds)
-    assert any("hook" in c.get("cmd", "") for c in cmds)
+    assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds)
+    assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds)
+    # Legacy hook command replaced by current hook command
+    assert not any(c.get("cmd") == 'python -m cli hook --target "${workspaceFolder}" --files "${file}" --trailing' for c in cmds)
+    assert any(c.get("id") == "vulnagent-on-save" for c in cmds)
+    assert len(cmds) == 4
 
     # Check tasks.json preserved user build task
     tasks_data = json.loads((config_dir / "tasks.json").read_text(encoding="utf-8"))
@@ -1655,7 +1687,45 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     res2 = adapter.configure_editor_save_hook(host="cursor")
     assert res2["hook_configured"] is True
     settings_data2 = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
-    assert len(settings_data2["emeraldwalk.runonsave"]["commands"]) == 2
+    cmds2 = settings_data2["emeraldwalk.runonsave"]["commands"]
+    assert len(cmds2) == 4
+    assert any(c.get("cmd") == "eslint ${file}" for c in cmds2)
+    assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds2)
+    assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds2)
+
+
+def test_r09_parse_jsonc_preserves_complex_strings():
+    """
+    R09 (E05 regression): _parse_jsonc must preserve strings containing structural characters
+    like ',}' or ',]', quote escapes, URLs with '//', and comment markers, while correctly
+    stripping JS comments and structural trailing commas.
+    """
+    from integrations.host_adapter import _parse_jsonc
+
+    raw_jsonc = (
+        "{\n"
+        "  // Single-line comment\n"
+        '  "test_comma_bracket": "a,}",\n'
+        '  "test_comma_square": "b,]",\n'
+        '  "test_url": "https://example.com/api//v1",\n'
+        '  "test_escaped": "val \\"with quotes\\" and \\\\ backslash",\n'
+        '  "test_comment_markers": "/* not a block comment */ and // not line comment",\n'
+        "  /* Multi-line\n"
+        "     block comment */\n"
+        '  "test_list": [\n'
+        '    "elem1",\n'
+        '    "elem2,]", // trailing comma in list\n'
+        "  ],\n"
+        "}\n"
+    )
+
+    data = _parse_jsonc(raw_jsonc)
+    assert data["test_comma_bracket"] == "a,}"
+    assert data["test_comma_square"] == "b,]"
+    assert data["test_url"] == "https://example.com/api//v1"
+    assert data["test_escaped"] == 'val "with quotes" and \\ backslash'
+    assert data["test_comment_markers"] == "/* not a block comment */ and // not line comment"
+    assert data["test_list"] == ["elem1", "elem2,]"]
 
 
 @pytest.mark.asyncio

@@ -34,20 +34,124 @@ CLAUDE_CODE_INSTRUCTIONS = """VulnAgent MCP Integration:
 """
 
 
+def _clean_jsonc(text: str) -> str:
+    """
+    Remove single-line comments (//...), block comments (/*...*/), and structural
+    trailing commas from JSONC text while strictly preserving all string literal
+    contents intact (including commas, quotes, escape sequences, URLs, and comment markers).
+    """
+    n = len(text)
+    i = 0
+    tokens = []
+
+    while i < n:
+        c = text[i]
+        # 1. String literal
+        if c == '"':
+            start = i
+            i += 1
+            while i < n:
+                if text[i] == '\\':
+                    i += 2  # skip escaped character
+                elif text[i] == '"':
+                    i += 1
+                    break
+                else:
+                    i += 1
+            tokens.append(('STR', text[start:i]))
+        # 2. Single-line comment: // ...
+        elif c == '/' and i + 1 < n and text[i + 1] == '/':
+            i += 2
+            while i < n and text[i] != '\n':
+                i += 1
+        # 3. Block comment: /* ... */
+        elif c == '/' and i + 1 < n and text[i + 1] == '*':
+            i += 2
+            end = text.find('*/', i)
+            if end == -1:
+                i = n
+            else:
+                i = end + 2
+        # 4. Comma: candidate for trailing comma
+        elif c == ',':
+            tokens.append(('COMMA', ','))
+            i += 1
+        # 5. Whitespace
+        elif c.isspace():
+            start = i
+            while i < n and text[i].isspace():
+                i += 1
+            tokens.append(('WS', text[start:i]))
+        # 6. Any other structural character or token
+        else:
+            tokens.append(('CHAR', c))
+            i += 1
+
+    # Filter out structural trailing commas
+    out = []
+    num_tokens = len(tokens)
+    for idx, (ttype, val) in enumerate(tokens):
+        if ttype == 'COMMA':
+            is_trailing = False
+            for j in range(idx + 1, num_tokens):
+                next_type, next_val = tokens[j]
+                if next_type == 'WS':
+                    continue
+                if next_type == 'CHAR' and next_val in ('}', ']'):
+                    is_trailing = True
+                break
+            if not is_trailing:
+                out.append(val)
+        else:
+            out.append(val)
+
+    return "".join(out)
+
+
 def _parse_jsonc(text: str) -> Dict[str, Any]:
     """
     Parse JSON text that may contain JavaScript-style comments or trailing commas (JSONC).
-    Preserves double-quoted strings while stripping single-line/block comments and trailing commas.
+    Preserves all string values intact (including URLs, comment markers, escapes, and commas)
+    while removing JavaScript comments outside strings and structural trailing commas.
+    Note: When serialized back out to disk, comments are not preserved by standard JSON;
+    all configuration keys, values, and structures are preserved faithfully.
     """
-    import re
-    pattern = r'("(?:\\.|[^"\\])*")|//.*?$|/\*.*?\*/'
-    def replace(match: re.Match) -> str:
-        if match.group(1):
-            return match.group(1)
-        return ""
-    cleaned = re.sub(pattern, replace, text, flags=re.MULTILINE | re.DOTALL)
-    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    cleaned = _clean_jsonc(text)
     return json.loads(cleaned)
+
+
+def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
+    """
+    Check if a command entry in emeraldwalk.runonsave['commands'] belongs to VulnAgent,
+    avoiding false positives on user commands like 'python tools/cli.py lint' or 'echo vulnagent'.
+    """
+    if not isinstance(item, dict):
+        return False
+    # 1. Check stable identifier
+    if item.get("id") == "vulnagent-on-save" or item.get("name") == "VulnAgent On-Save Security Check":
+        return True
+
+    cmd = str(item.get("cmd", "")).strip()
+    if not cmd:
+        return False
+
+    # 2. Check if current launcher is explicitly invoked with 'hook'
+    if current_launcher and current_launcher in cmd:
+        import re
+        if re.search(r'\bhook\b', cmd):
+            return True
+
+    # 3. Known legacy VulnAgent command patterns for migration
+    import re
+    legacy_patterns = [
+        r'^(?:python\d*(?:\.exe)?|sys\.executable|"[^"]*python[^"]*")\s+-m\s+cli\s+hook\b',
+        r'(?:^|\s)["\']?[^"\']*?[/\\]src[/\\]cli\.py["\']?\s+hook\b',
+    ]
+    for pattern in legacy_patterns:
+        if re.search(pattern, cmd, re.IGNORECASE):
+            return True
+
+    return False
 
 
 class HostAdapter:
@@ -234,9 +338,11 @@ class HostAdapter:
 
         filtered_cmds = [
             c for c in existing_cmds
-            if not (isinstance(c, dict) and any(kw in str(c.get("cmd", "")).lower() for kw in ("vulnagent", "cli.py", "cli hook")))
+            if not _is_vulnagent_save_command(c, cli_entry_str)
         ]
         filtered_cmds.append({
+            "id": "vulnagent-on-save",
+            "name": "VulnAgent On-Save Security Check",
             "match": "\\.py$",
             "cmd": save_cmd
         })

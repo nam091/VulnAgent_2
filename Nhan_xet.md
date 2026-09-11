@@ -1,5 +1,37 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 325ada9 (12/09/2026)
+
+**Review E02, E05, E06: launcher đã sửa; hard budget đã có; E05 chưa đóng hoàn toàn. 108/108 tests pass.** Các phần phía dưới là lịch sử review.
+
+### Đã xác minh và có thể đóng
+
+- **E02, lỗi import launcher:** task và save command cùng dùng đường dẫn tuyệt đối tới src/cli.py; cli.py tự thêm thư mục src vào sys.path. Test mới chạy launcher từ cwd khác, không có PYTHONPATH. Điều này sửa lỗi No module named cli của lượt trước; không đồng nghĩa đã nghiệm thu trigger trong editor thật.
+- **E06, vượt ngân sách auto-fix:** fixes_attempted nằm ngoài vòng while, chỉ tăng, bị chặn ở max(0, max_rounds - 1). Snapshot sau patch được chụp trước rescan; sửa của fixer không còn tự động cấp lại ngân sách. Regression mới kiểm tra finding không giảm, fixer đổi file, trailing=True: chỉ một lần fix với max_rounds=2 và kết thúc no_progress.
+- **E05, các ca cũ:** bỏ ghi pre-commit; giữ setting editor.tabSize, tùy chọn Run On Save và command eslint trong fixture; file không parse được được giữ lại. Hai lần cấu hình không nhân đôi task/command trong ca test hiện có.
+
+### E05 — P1 vẫn mở: hai ca làm mất hoặc thay đổi cấu hình người dùng
+
+**1. Parser JSONC thay đổi nội dung string (`host_adapter.py:49`).** Regex bỏ trailing comma chạy trên toàn bộ text, kể cả bên trong chuỗi. Probe trực tiếp với JSON hợp lệ cho kết quả `"a,}"` thành `"a}"` và `"b,]"` thành `"b]"`. Khi init ghi lại settings/tasks, giá trị bị đổi âm thầm. Đây là lỗi bảo toàn dữ liệu, không chỉ mất định dạng.
+
+Sửa: dùng parser JSONC hoặc tokenizer có trạng thái string/escape/comment; chỉ bỏ dấu phẩy cấu trúc ngoài string. Nghiệm thu round-trip giữ nguyên giá trị string chứa `,}`, `,]`, quote escape, URL và comment markers; kiểm tra cả tasks và settings. json.dumps hiện cũng bỏ comments: nếu chỉ cam kết giữ giá trị, sửa docstring/test description cho đúng; nếu cam kết giữ comments thì cần chỉnh sửa JSONC có bảo toàn văn bản.
+
+**2. Nhận diện command sở hữu bằng substring quá rộng (`host_adapter.py:235–237`).** Probe settings có command người dùng `python tools/cli.py lint` và `echo keep-me`: sau configure, lệnh lint bị xóa, chỉ còn echo và hook mới. Điều kiện chứa cli.py/vulnagent/cli hook không đủ xác định command thuộc VulnAgent.
+
+Sửa: chỉ thay command do adapter sở hữu bằng định danh ổn định được host hỗ trợ, hoặc nhận diện chính xác launcher và cấu trúc args; migration chỉ khớp mẫu lệnh VulnAgent cũ đã biết. Giữ nguyên command không xác định được chủ sở hữu. Regression cần lệnh tools/cli.py, lệnh chỉ nhắc chữ VulnAgent, lệnh VulnAgent thực, rồi chạy configure hai lần và assert các lệnh người dùng còn nguyên.
+
+### Giới hạn nghiệm thu host
+
+Doctor vẫn dựa trên file/key tồn tại và launcher.is_file, chưa xác minh extension đang hoạt động hoặc editor thực sự nạp trigger. Chưa demo save từ host thật trong lượt review này. Có thể đóng lỗi launcher E02, nhưng giữ nghiệm thu host/save của G4 riêng; không gọi toàn bộ E02/editor integration hoàn tất chỉ nhờ smoke launcher. Giới hạn contention dài/đa file ở E03 của lượt trước chưa được kiểm chứng thêm trong diff này.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **108 passed, 1 warning, 138.12 giây**, không có skip được báo.
+- Probe lệnh hook sinh từ task: thay workspaceFolder/file bằng repo tạm, chạy từ cwd repo tạm, bỏ PYTHONPATH, truyền rules cục bộ. Kết quả **exit 0, Hook status: clean**; xác minh cả hook thực thi, không chỉ --version.
+- Hai probe E05 ngoài suite tái hiện thay đổi string và xóa command người dùng như mô tả trên. Chỉ thao tác thư mục tạm.
+
+Ưu tiên sửa hai ca E05 trên, sau đó demo host thực tế và tiếp tục G6/G7 theo plan. Không cần đổi hướng Python + Semgrep. Review chỉ cập nhật tài liệu, không sửa code, không thay cấu hình thật và không gọi model.
+
 ## C?p nh?t m?i nh?t ? 595e3cd (12/09/2026)
 
 **Review t?p trung E01?E04 v? regression trong ph?n thay ??i. ??ng h??ng Python + Semgrep; ch?a th? ??ng to?n b? editor gate.** K?t qu? suite: **105 passed, 1 warning, 112.81 gi?y** v?i `python -m pytest tests -q -ra`; kh?ng c? skip ???c b?o. C?c ph?n d??i l? l?ch s?, kh?ng ph?i m?i l?i c? ??u c?n m?.
