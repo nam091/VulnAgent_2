@@ -14,6 +14,9 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+# Allow standalone execution from arbitrary cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from analyzer.baseline import BASELINE_FILENAME, Baseline, SuppressionIndex, gate
 from analyzer.fixer import apply_plan, build_plan
 from analyzer.scanner import ScanOptions, Scanner, ScanResult
@@ -656,13 +659,26 @@ async def _run_doctor(args: argparse.Namespace) -> int:
     # 4. Host MCP configurations
     cursor_mcp = Path.cwd() / ".cursor" / "mcp.json"
     cursor_tasks = Path.cwd() / ".cursor" / "tasks.json"
+    cursor_settings = Path.cwd() / ".cursor" / "settings.json"
     claude_mcp = Path.cwd() / ".claude" / "mcp.json"
+    cli_launcher = (Path(__file__).resolve().parent / "cli.py").resolve()
+
     if cursor_mcp.exists():
         print(f"  [OK] Cursor MCP config detected: {cursor_mcp}")
         if cursor_tasks.exists():
             print(f"  [OK] Cursor on-save hook detected: {cursor_tasks}")
         else:
             print("  [INFO] Cursor on-save hook not yet configured. Run 'vulnagent init' to configure.")
+        if cursor_settings.exists():
+            try:
+                from integrations.host_adapter import _parse_jsonc
+                st_data = _parse_jsonc(cursor_settings.read_text(encoding="utf-8"))
+                if "emeraldwalk.runonsave" in st_data:
+                    print(f"  [OK] Cursor on-save trigger configured: {cursor_settings}")
+                    if cli_launcher.is_file():
+                        print(f"  [OK] Standalone CLI launcher verified: {cli_launcher}")
+            except Exception:
+                pass
     elif claude_mcp.exists():
         print(f"  [OK] Claude Code MCP config detected: {claude_mcp}")
     else:

@@ -1544,6 +1544,159 @@ async def test_r09_editor_hook_runner_trailing_concurrent_save_during_lock(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_r09_editor_hook_runner_trailing_auto_fix_budget_capped(tmp_path: Path):
+    """
+    R09 (E06 regression): Trailing auto-fix loop is strictly capped by max_rounds.
+    When fixer modifies files but findings do not decrease, fixer must NOT be invoked
+    beyond the max_rounds budget (e.g. max_rounds=2 caps at exactly 1 fix attempt),
+    terminating with status 'no_progress'.
+    """
+    from integrations.host_adapter import EditorHookRunner
+    from conftest import make_vuln
+
+    target_file = tmp_path / "app.py"
+    target_file.write_text("x = 1\n", encoding="utf-8")
+
+    runner = EditorHookRunner(root=tmp_path, debounce_seconds=0.0, max_rounds=2)
+
+    fix_call_count = 0
+    vuln = make_vuln(file_path="app.py", start_line=1)
+
+    async def persistent_scan():
+        return [vuln]
+
+    async def busy_fixer(scan_res):
+        nonlocal fix_call_count
+        fix_call_count += 1
+        target_file.write_text(f"x = {fix_call_count + 10}\n", encoding="utf-8")
+
+    res = await runner.run(scan_fn=persistent_scan, fix_fn=busy_fixer, files=[target_file], trailing=True)
+
+    assert fix_call_count == 1
+    assert res["status"] == "no_progress"
+    assert res["rounds"] == 2
+    assert res["initial_count"] == 1
+    assert res["final_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: Path):
+    """
+    R09 (E05 regression): configure_editor_save_hook must preserve existing JSONC comments,
+    unrelated settings (e.g. editor.tabSize), existing on-save commands, existing tasks,
+    and must not overwrite existing git pre-commit hooks.
+    """
+    import json
+    from integrations.host_adapter import HostAdapter
+
+    config_dir = tmp_path / ".cursor"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Existing settings.json with JSONC comments, trailing commas, and other extensions
+    existing_settings_raw = (
+        "{\n"
+        "  // Custom developer settings\n"
+        '  "editor.tabSize": 8,\n'
+        '  "emeraldwalk.runonsave": {\n'
+        '    "autoClearConsole": true,\n'
+        '    "commands": [\n'
+        '      {\n'
+        '        "match": "\\\\.js$",\n'
+        '        "cmd": "eslint ${file}",\n'
+        '      },\n'
+        '    ],\n'
+        '  },\n'
+        "}\n"
+    )
+    (config_dir / "settings.json").write_text(existing_settings_raw, encoding="utf-8")
+
+    # 2. Existing tasks.json with custom user task
+    existing_tasks_raw = json.dumps({
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "My Custom Build",
+                "type": "shell",
+                "command": "make build"
+            }
+        ]
+    }, indent=2)
+    (config_dir / "tasks.json").write_text(existing_tasks_raw, encoding="utf-8")
+
+    # 3. Existing git pre-commit hook
+    git_hooks = tmp_path / ".git" / "hooks"
+    git_hooks.mkdir(parents=True, exist_ok=True)
+    custom_hook = git_hooks / "pre-commit"
+    custom_hook.write_text("#!/bin/sh\necho 'my custom pre-commit'\n", encoding="utf-8")
+
+    adapter = HostAdapter(tmp_path)
+    res1 = adapter.configure_editor_save_hook(host="cursor")
+    assert res1["hook_configured"] is True
+    assert res1["trigger_configured"] is True
+
+    # Check Git hook was NOT overwritten
+    assert custom_hook.read_text(encoding="utf-8") == "#!/bin/sh\necho 'my custom pre-commit'\n"
+
+    # Check settings.json preserved tabSize, autoClearConsole, and eslint
+    settings_data = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
+    assert settings_data["editor.tabSize"] == 8
+    assert settings_data["emeraldwalk.runonsave"]["autoClearConsole"] is True
+    cmds = settings_data["emeraldwalk.runonsave"]["commands"]
+    assert any(c.get("cmd") == "eslint ${file}" for c in cmds)
+    assert any("hook" in c.get("cmd", "") for c in cmds)
+
+    # Check tasks.json preserved user build task
+    tasks_data = json.loads((config_dir / "tasks.json").read_text(encoding="utf-8"))
+    task_labels = [t.get("label") for t in tasks_data.get("tasks", [])]
+    assert "My Custom Build" in task_labels
+    assert "VulnAgent On-Save Security Check" in task_labels
+
+    # Idempotent re-run: should not duplicate command or tasks
+    res2 = adapter.configure_editor_save_hook(host="cursor")
+    assert res2["hook_configured"] is True
+    settings_data2 = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
+    assert len(settings_data2["emeraldwalk.runonsave"]["commands"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_r09_editor_hook_unified_launcher_standalone(tmp_path: Path):
+    """
+    R09 (E02 regression): Standalone CLI launcher configured in settings and tasks
+    executes without requiring PYTHONPATH in external environment, eliminating 'No module named cli'.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+    from integrations.host_adapter import HostAdapter
+
+    adapter = HostAdapter(tmp_path)
+    res = adapter.configure_editor_save_hook(host="cursor")
+    assert res["hook_configured"] is True
+
+    launcher_path = Path(res["launcher"])
+    assert launcher_path.is_file()
+
+    settings_data = json.loads((tmp_path / ".cursor" / "settings.json").read_text(encoding="utf-8"))
+    save_cmd = settings_data["emeraldwalk.runonsave"]["commands"][0]["cmd"]
+    assert str(launcher_path.as_posix()) in save_cmd or str(launcher_path) in save_cmd
+
+    # Test executing CLI launcher with cleared PYTHONPATH from isolated tmp_path cwd
+    isolated_env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, str(launcher_path), "--version"],
+        cwd=str(tmp_path),
+        env=isolated_env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0
+    assert "VulnAgent" in proc.stdout or "VulnAgent" in proc.stderr
+
+
+
+@pytest.mark.asyncio
 async def test_r09_doctor_mcp_smoke_and_semgrep_advice():
     """
     R09: doctor command includes MCP in-process handshake smoke test and

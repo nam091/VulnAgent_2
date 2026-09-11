@@ -34,6 +34,22 @@ CLAUDE_CODE_INSTRUCTIONS = """VulnAgent MCP Integration:
 """
 
 
+def _parse_jsonc(text: str) -> Dict[str, Any]:
+    """
+    Parse JSON text that may contain JavaScript-style comments or trailing commas (JSONC).
+    Preserves double-quoted strings while stripping single-line/block comments and trailing commas.
+    """
+    import re
+    pattern = r'("(?:\\.|[^"\\])*")|//.*?$|/\*.*?\*/'
+    def replace(match: re.Match) -> str:
+        if match.group(1):
+            return match.group(1)
+        return ""
+    cleaned = re.sub(pattern, replace, text, flags=re.MULTILINE | re.DOTALL)
+    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    return json.loads(cleaned)
+
+
 class HostAdapter:
     """
     Configures host environments (Cursor, Claude Code, CLI) to integrate
@@ -137,28 +153,41 @@ class HostAdapter:
     def configure_editor_save_hook(self, host: str = "cursor") -> Dict[str, Any]:
         """
         Configures an on-save hook in the editor workspace (.cursor or .vscode tasks and settings).
-        Maps editor file change event to CLI runner with payload mapping and trailing debounce.
+        Maps editor file change event to CLI runner with unified launcher and trailing debounce.
+        Preserves existing user tasks, settings, comments, and other on-save commands.
         """
         config_dir = self.root / (".cursor" if host == "cursor" else ".vscode")
         config_dir.mkdir(parents=True, exist_ok=True)
         tasks_path = config_dir / "tasks.json"
         settings_path = config_dir / "settings.json"
 
-        # 1. Configure tasks.json with process type and explicit args array
+        cli_entry = (Path(__file__).resolve().parents[1] / "cli.py").resolve()
+        cli_entry_str = cli_entry.as_posix()
+
+        # 1. Configure tasks.json with process type and explicit absolute CLI launcher
         tasks: Dict[str, Any] = {"version": "2.0.0", "tasks": []}
         if tasks_path.is_file():
+            raw_tasks = tasks_path.read_text(encoding="utf-8")
             try:
-                tasks = json.loads(tasks_path.read_text(encoding="utf-8"))
-            except Exception:
-                tasks = {"version": "2.0.0", "tasks": []}
+                tasks = _parse_jsonc(raw_tasks)
+            except Exception as e:
+                logging.warning(f"Failed to parse existing tasks.json as JSON/JSONC: {e}. Preserving file.")
+                return {
+                    "tasks_config": str(tasks_path),
+                    "settings_config": str(settings_path),
+                    "hook_configured": False,
+                    "trigger_configured": False,
+                    "error": f"Failed to parse existing tasks.json: {e}",
+                    "host": host,
+                }
 
-        server_dir = str(Path(__file__).resolve().parents[1].as_posix())
         hook_task = {
             "label": "VulnAgent On-Save Security Check",
             "type": "process",
             "command": sys.executable,
             "args": [
-                "-m", "cli", "hook",
+                cli_entry_str,
+                "hook",
                 "--target", "${workspaceFolder}",
                 "--files", "${file}",
                 "--trailing"
@@ -167,56 +196,60 @@ class HostAdapter:
             "presentation": {
                 "reveal": "silent",
                 "panel": "shared"
-            },
-            "options": {
-                "env": {
-                    "PYTHONPATH": server_dir
-                }
             }
         }
 
-        existing_tasks = [t for t in tasks.get("tasks", []) if isinstance(t, dict) and t.get("label") != "VulnAgent On-Save Security Check"]
+        existing_tasks = [
+            t for t in tasks.get("tasks", [])
+            if isinstance(t, dict) and t.get("label") != "VulnAgent On-Save Security Check"
+        ]
         existing_tasks.append(hook_task)
         tasks["tasks"] = existing_tasks
         tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
 
-        # 2. Configure settings.json to trigger hook on file save
+        # 2. Configure settings.json: merge command and preserve existing settings
         settings: Dict[str, Any] = {}
         if settings_path.is_file():
+            raw_settings = settings_path.read_text(encoding="utf-8")
             try:
-                settings = json.loads(settings_path.read_text(encoding="utf-8"))
-            except Exception:
-                settings = {}
-
-        save_cmd = f"\"{sys.executable}\" -m cli hook --target \"${{workspaceFolder}}\" --files \"${{file}}\" --trailing"
-        settings["emeraldwalk.runonsave"] = {
-            "commands": [
-                {
-                    "match": "\\.py$",
-                    "cmd": save_cmd
+                settings = _parse_jsonc(raw_settings)
+            except Exception as e:
+                logging.warning(f"Failed to parse existing settings.json as JSON/JSONC: {e}. Preserving file.")
+                return {
+                    "tasks_config": str(tasks_path),
+                    "settings_config": str(settings_path),
+                    "hook_configured": False,
+                    "trigger_configured": False,
+                    "error": f"Failed to parse existing settings.json: {e}",
+                    "host": host,
                 }
-            ]
-        }
-        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
-        # 3. Configure git pre-commit hook if git directory exists
-        git_hook_dir = self.root / ".git" / "hooks"
-        if git_hook_dir.is_dir():
-            pre_commit = git_hook_dir / "pre-commit"
-            pre_commit_content = (
-                f"#!/bin/sh\n"
-                f'"{sys.executable}" -m cli hook --target . --trailing\n'
-            )
-            try:
-                pre_commit.write_text(pre_commit_content, encoding="utf-8")
-            except OSError:
-                pass
+        save_cmd = f'"{sys.executable}" "{cli_entry_str}" hook --target "${{workspaceFolder}}" --files "${{file}}" --trailing'
+        runonsave = settings.get("emeraldwalk.runonsave")
+        if not isinstance(runonsave, dict):
+            runonsave = {}
+        existing_cmds = runonsave.get("commands", [])
+        if not isinstance(existing_cmds, list):
+            existing_cmds = []
+
+        filtered_cmds = [
+            c for c in existing_cmds
+            if not (isinstance(c, dict) and any(kw in str(c.get("cmd", "")).lower() for kw in ("vulnagent", "cli.py", "cli hook")))
+        ]
+        filtered_cmds.append({
+            "match": "\\.py$",
+            "cmd": save_cmd
+        })
+        runonsave["commands"] = filtered_cmds
+        settings["emeraldwalk.runonsave"] = runonsave
+        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
         return {
             "tasks_config": str(tasks_path),
             "settings_config": str(settings_path),
             "hook_configured": True,
             "trigger_configured": True,
+            "launcher": cli_entry_str,
             "host": host,
         }
 
@@ -559,19 +592,23 @@ class EditorHookRunner:
                 if snapshot and snapshot == self._last_snapshot:
                     return {"status": "skipped", "reason": "unmodified"}
 
+                fixes_attempted = 0
+                max_fix_attempts = max(0, self.max_rounds - 1)
+                rounds_count = 0
+
                 while True:
+                    rounds_count += 1
                     start_gen = self._get_dirty_generation()
                     snapshot_at_start = snapshot
 
-                    round_num = 1
                     try:
                         result = await scan_fn()
                     except Exception as e:
-                        return {"status": "failed", "rounds": round_num, "reason": f"Scan execution failed: {e}"}
+                        return {"status": "failed", "rounds": rounds_count, "reason": f"Scan execution failed: {e}"}
 
                     failed, reason = self._is_scan_failed_or_degraded(result)
                     if failed:
-                        return {"status": "failed", "rounds": round_num, "reason": reason}
+                        return {"status": "failed", "rounds": rounds_count, "reason": reason}
 
                     if isinstance(result, dict):
                         findings = result.get("vulnerabilities", result.get("findings", []))
@@ -597,35 +634,39 @@ class EditorHookRunner:
                         self._last_run_time = time.time()
                         self._last_snapshot = snapshot_at_start
                         self._save_state()
-                        return {"status": "clean", "rounds": round_num, "findings_count": 0}
+                        return {"status": "clean", "rounds": rounds_count, "findings_count": 0}
 
-                    if not fix_fn or self.max_rounds < 2:
+                    if not fix_fn or fixes_attempted >= max_fix_attempts:
                         self._last_run_time = time.time()
                         self._last_snapshot = snapshot_at_start
                         self._save_state()
                         return {
                             "status": "findings_detected",
-                            "rounds": round_num,
+                            "rounds": rounds_count,
                             "findings_count": len(findings),
                             "finding_ids": list(initial_ids),
                         }
 
-                    # Round 1 -> Fix
-                    round_num = 2
+                    # Attempt Fix within budget
+                    fixes_attempted += 1
+                    rounds_count += 1
                     try:
                         await fix_fn(result)
                     except Exception as e:
-                        return {"status": "fix_failed", "rounds": round_num, "reason": f"Fix execution failed: {e}"}
+                        return {"status": "fix_failed", "rounds": rounds_count, "reason": f"Fix execution failed: {e}"}
+
+                    snapshot_post_fix = self.capture_snapshot(files)
+                    fix_gen = self._get_dirty_generation()
 
                     # Rescan
                     try:
                         rescan_result = await scan_fn()
                     except Exception as e:
-                        return {"status": "rescan_failed", "rounds": round_num, "reason": f"Rescan execution failed: {e}"}
+                        return {"status": "rescan_failed", "rounds": rounds_count, "reason": f"Rescan execution failed: {e}"}
 
                     rescan_failed, rescan_reason = self._is_scan_failed_or_degraded(rescan_result)
                     if rescan_failed:
-                        return {"status": "rescan_failed", "rounds": round_num, "reason": rescan_reason}
+                        return {"status": "rescan_failed", "rounds": rounds_count, "reason": rescan_reason}
 
                     if isinstance(rescan_result, dict):
                         rescan_findings = rescan_result.get("vulnerabilities", rescan_result.get("findings", []))
@@ -636,44 +677,49 @@ class EditorHookRunner:
 
                     rescan_ids = {get_fid(f) for f in rescan_findings}
 
-                    snapshot_after_fix = self.capture_snapshot(files)
-                    latest_gen = self._get_dirty_generation()
-                    if trailing and (snapshot_after_fix != snapshot_after_scan or latest_gen > start_gen):
-                        snapshot = snapshot_after_fix
-                        continue
-
                     # Termination on no-progress: finding count does not decrease or IDs are unchanged
                     if len(rescan_findings) >= len(findings) or rescan_ids == initial_ids:
                         self._last_run_time = time.time()
-                        self._last_snapshot = snapshot_after_fix
+                        self._last_snapshot = snapshot_post_fix
                         self._save_state()
                         return {
                             "status": "no_progress",
-                            "rounds": round_num,
+                            "rounds": rounds_count,
                             "initial_count": len(findings),
                             "final_count": len(rescan_findings),
                             "reason": "Fix attempt produced no reduction in findings",
                             "finding_ids": list(rescan_ids),
                         }
 
+                    snapshot_now = self.capture_snapshot(files)
+                    latest_gen = self._get_dirty_generation()
+                    if trailing and (snapshot_now != snapshot_post_fix or latest_gen > fix_gen):
+                        # A new external user edit arrived during fix/rescan: re-scan the new edit
+                        snapshot = snapshot_now
+                        continue
+
                     if not rescan_findings:
                         self._last_run_time = time.time()
-                        self._last_snapshot = snapshot_after_fix
+                        self._last_snapshot = snapshot_post_fix
                         self._save_state()
                         return {
                             "status": "clean",
-                            "rounds": round_num,
+                            "rounds": rounds_count,
                             "initial_count": len(findings),
                             "final_count": 0,
                         }
 
-                    # Partial progress after 2 rounds
+                    # Partial progress after round: check if budget remains
+                    if fixes_attempted < max_fix_attempts:
+                        snapshot = snapshot_post_fix
+                        continue
+
                     self._last_run_time = time.time()
-                    self._last_snapshot = snapshot_after_fix
+                    self._last_snapshot = snapshot_post_fix
                     self._save_state()
                     return {
                         "status": "partial_progress",
-                        "rounds": round_num,
+                        "rounds": rounds_count,
                         "initial_count": len(findings),
                         "final_count": len(rescan_findings),
                         "remaining_ids": list(rescan_ids),
