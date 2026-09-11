@@ -482,6 +482,21 @@ async def suggest_fix(
 _scan_sessions: Dict[str, Dict[str, Any]] = {}
 
 
+def _get_registry_file() -> Path:
+    override = os.getenv("VULNAGENT_REGISTRY_DIR")
+    if override:
+        base_dir = Path(override).resolve()
+    else:
+        base_dir = Path.home() / ".vulnagent"
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        return base_dir / "scan_registry.jsonl"
+    except OSError:
+        temp_reg = Path(tempfile.gettempdir()) / ".vulnagent"
+        temp_reg.mkdir(parents=True, exist_ok=True)
+        return temp_reg / "scan_registry.jsonl"
+
+
 def _persist_session(audit_dir: Path, session_data: Dict[str, Any]) -> None:
     try:
         audit_dir.mkdir(parents=True, exist_ok=True)
@@ -491,15 +506,45 @@ def _persist_session(audit_dir: Path, session_data: Dict[str, Any]) -> None:
     except OSError as e:
         logging.debug(f"Failed to persist session: {e}")
 
+    try:
+        reg_file = _get_registry_file()
+        reg_entry = {
+            "scan_id": session_data.get("scan_id"),
+            "root": str(session_data.get("root")),
+            "audit_dir": str(audit_dir.resolve()),
+            "created_at": session_data.get("created_at", time.time()),
+        }
+        with reg_file.open("a", encoding="utf-8") as rf:
+            rf.write(json.dumps(reg_entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        logging.debug(f"Failed to record in scan registry: {e}")
+
 
 def _get_session(scan_id: str, root_hint: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     session = _scan_sessions.get(scan_id)
     if session:
         return session
 
-    roots_to_check = [Path.cwd()]
+    roots_to_check: List[Path] = []
     if root_hint:
-        roots_to_check.insert(0, Path(root_hint).resolve())
+        roots_to_check.append(Path(root_hint).resolve())
+    roots_to_check.append(Path.cwd().resolve())
+
+    # Check global scan registry to resolve repo root even if server cwd differs
+    reg_file = _get_registry_file()
+    if reg_file.is_file():
+        try:
+            for line in reversed(reg_file.read_text(encoding="utf-8").splitlines()):
+                if not line.strip():
+                    continue
+                reg_data = json.loads(line)
+                if reg_data.get("scan_id") == scan_id:
+                    registered_root = Path(reg_data["root"]).resolve()
+                    if registered_root not in roots_to_check:
+                        roots_to_check.append(registered_root)
+                    break
+        except Exception as e:
+            logging.debug(f"Failed to query scan registry: {e}")
 
     for r in roots_to_check:
         audit_dir = r / ".vulnagent-audit"

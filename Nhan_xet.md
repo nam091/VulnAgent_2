@@ -1,5 +1,48 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — fab6ba3 (11/09/2026)
+
+**98/98 test pass (19.02 giây, 1 warning). H02/H03 và các ca failed/degraded của H01 đã được cải thiện có test. H01 vẫn còn partial→clean; R11 chỉ restore được khi root audit được tìm thấy qua cwd/root_hint. R09/R14 có bước triển khai thực tế nhưng chưa hoàn tất nghiệm thu host end-to-end.** Các phần bên dưới giữ làm lịch sử.
+
+### Những điểm được xác nhận
+
+- Runner kiểm tra initial/rescan failure và exception, không ghi last-successful snapshot ở các nhánh thất bại đã xử lý. Tests failed/retry pass.
+- Lock dùng PID liveness thay vì chỉ xét mtime, cleanup kiểm token. Ca owner còn sống quá 60 giây có regression test pass; chưa kết luận mọi race/PID reuse đã được chứng minh an toàn.
+- Regex chạy worker subprocess với timeout 1.5 giây. Probe bổ sung dùng `^a+a+a+a+$` trên 10.000 ký tự `a` và `!`, vượt static guard nhưng trả ToolError timeout sau **1.53 giây**. Đây là hard timeout đã thực thi, không chỉ đọc tham số trong code.
+- CLI có entrypoint `vulnagent hook` gọi EditorHookRunner. Chưa xác nhận host config thực sự tự kích hoạt entrypoint này.
+- Snapshot, evidence và session có lưu JSONL; test reload trong cwd trùng repo pass.
+- Demo SQLite thực thi mã vulnerable và mã parameterized, xác nhận payload `999 OR 1=1` lấy được hai bản ghi trước sửa và không lấy được bản ghi sau sửa. Đây là kiểm tra hành vi thực, tốt hơn assertion trên chuỗi mã.
+
+### H01 còn lại — P1: partial với degraded=False vẫn bị nhận clean
+
+**Đã tái hiện:** tạo ScanResult thật chứa report `status='partial'`, tiers `semgrep='ok'`, `llm='not_routed'`, findings rỗng. Result có `status='partial'`, `degraded=False`. Runner trả `{'status':'clean','rounds':1,'findings_count':0}`.
+
+`_is_scan_failed_or_degraded()` chỉ kiểm status failed/error và degraded. Không phải mọi incomplete đều có degraded=True; routing có thể được coi là intentional nhưng phần yêu cầu phân tích chưa hoàn tất.
+
+**Sửa:** contract rõ cho completed/partial/failed/skipped, kiểm status và coverage ở cả initial/rescan. Nếu policy cho intentional routing là hoàn tất trong scope được yêu cầu, status phải thể hiện điều đó nhất quán từ Scanner; không cho runner tự chuyển partial thành clean. Partial chưa đủ phải giữ incomplete và cho retry; không ghi nhận như successful snapshot. Test thêm partial với degraded=False và unknown/missing status theo contract đã chọn.
+
+### R11 còn lại — P1: public MCP tools không restore được scan_id của repo khác cwd
+
+**Đã tái hiện:** lưu snapshot/session trong thư mục repo tạm bằng code persistence thật; xóa session khỏi RAM để mô phỏng restart; gọi `get_assessment_history(scan_id)` khi cwd vẫn ở workspace khác repo tạm. Kết quả `Unknown scan_id`. Gọi private `_get_session(scan_id, root_hint=temp_root)` thì restore được.
+
+**Nguyên nhân:** `_get_session` chỉ tìm cwd và root_hint; public tools không nhận/truyền root_hint. `scan_changes(target=...)` cho quét repo bất kỳ nhưng scan_id không có registry để tìm root sau restart. Test hiện dùng os.chdir vào đúng repo nên bỏ sót ca này.
+
+**Sửa:** registry scan_id→authorized repo/audit location bền vững, hoặc session handle/API có root đã cấp rõ ràng và được validate. Không dò tùy tiện toàn filesystem. Test subprocess restart với cwd khác target, rồi gọi public MCP tools để đọc snapshot/evidence/history và kiểm stale.
+
+### R09 còn phần nghiệm thu
+
+Có CLI hook entrypoint là tiến bộ thật, nhưng cần chứng minh adapter đã đăng ký sự kiện của một host, payload→args mapping, trailing debounce/dirty queue và output feedback. Runner hiện vẫn bỏ lượt trong debounce window; nếu không có sự kiện tiếp theo, cần bảo đảm edit cuối không bị bỏ. Doctor vẫn kiểm capabilities bằng lời gọi Python trực tiếp, chưa phải MCP transport handshake. Chưa chạy editor thật hoặc stdio client trong review này.
+
+### R14: behavioral demo chưa hoàn tất vòng sản phẩm hoặc G6
+
+Test mới viết riêng vulnerable script và patched script, không dùng finding/suggestion từ scanner để tạo patch rồi verify. Chỉ chạy payload injection; chưa có assertion input hợp lệ vẫn trả đúng người dùng. Do đó xác nhận cơ chế parameterized SQL của mẫu, chưa xác nhận cả pipeline sửa lỗi của VulnAgent.
+
+**Bổ sung:** input hợp lệ trước/sau, patch đi qua build/apply/verify trên cùng demo, scanner/rules thật và transcript MCP transport/host. Giữ fault injection cho nhánh failure/stale. Runtime demo này không thay thế dataset/protocol/baseline/raw metrics của G6; không đánh dấu R14/evaluation hoàn tất chỉ vì số test tăng.
+
+### Trạng thái hành động
+
+Đóng các ca H02/H03 đã nêu và failed/degraded H01 đã qua tests; sửa partial gate và repo lookup sau restart trước khi tuyên bố H01/R11 triệt để. Sau đó nghiệm thu host/transport và demo hành vi đầy đủ. Không mở lại R07 trong lượt này. Review chỉ dùng dữ liệu tạm, mock/fault injection và cập nhật tài liệu; không sửa mã nguồn hoặc gọi model thật.
+
 ## Cập nhật mới nhất — 740281f (11/09/2026)
 
 **92/92 test pass (12.46 giây, 1 warning). Có tiến bộ ở R08–R13, nhưng chưa đủ căn cứ đóng R08–R14 hoặc gọi demo là nghiệm thu editor đầu-cuối. Runner mới còn false clean và lỗi lock; bộ lọc regex chưa chống ReDoS đầy đủ.** Các kết luận ở các cập nhật trước được giữ làm lịch sử.

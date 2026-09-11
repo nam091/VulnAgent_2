@@ -302,22 +302,45 @@ class EditorHookRunner:
 
     def _is_scan_failed_or_degraded(self, result: Any) -> Tuple[bool, str]:
         """
-        Detect if scan outcome represents a failure, degraded coverage, or engine error.
+        Detect if scan outcome represents a failure, degraded coverage, incomplete partial scan, or engine error.
         """
         if result is None:
             return True, "Scan returned no result"
-        if getattr(result, "status", None) in ("failed", "error"):
-            return True, f"Scan failed with status '{result.status}'"
+
+        if hasattr(result, "engine_failure") and result.engine_failure:
+            return True, "Engine failure reported"
+        if isinstance(result, dict) and result.get("engine_failure"):
+            return True, "Engine failure reported"
+        if isinstance(result, dict) and result.get("rule_error"):
+            return True, f"Rule error: {result['rule_error']}"
+
+        status = getattr(result, "status", None)
+        if isinstance(result, dict):
+            status = result.get("status", status)
+
+        if status in ("failed", "error"):
+            return True, f"Scan failed with status '{status}'"
+        if status in ("partial", "incomplete"):
+            return True, f"Scan coverage incomplete (status: '{status}')"
+
         if getattr(result, "degraded", False):
             return True, "Scan completed with degraded coverage"
+
         if isinstance(result, dict):
-            if result.get("engine_failure"):
-                return True, "Engine failure reported"
-            if result.get("rule_error"):
-                return True, f"Rule error: {result['rule_error']}"
-            if result.get("status") in ("failed", "error") or result.get("degraded"):
-                reason = result.get("reason") or result.get("error") or f"Scan failed with status '{result.get('status')}'"
+            if result.get("degraded"):
+                return True, "Scan completed with degraded coverage"
+            if status not in ("completed", "clean", None):
+                reason = result.get("reason") or result.get("error") or f"Scan incomplete with status '{status}'"
                 return True, reason
+
+        # Check reports inside ScanResult for partial or failed reports
+        reports = getattr(result, "reports", None)
+        if isinstance(reports, list):
+            for rep in reports:
+                rep_status = getattr(rep, "status", None)
+                if rep_status in ("failed", "partial", "degraded"):
+                    return True, f"Scan report for '{getattr(rep, 'file_name', 'file')}' is {rep_status}"
+
         stats = getattr(result, "stats", None)
         if isinstance(stats, dict):
             if stats.get("rule_error"):

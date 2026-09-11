@@ -1976,6 +1976,246 @@ if __name__ == "__main__":
     assert "FLAG{SUPER_SECRET_ADMIN_KEY}" not in proc_patched.stdout
 
 
+@pytest.mark.asyncio
+async def test_h01_runner_gates_partial_status_and_incomplete_coverage(tmp_path: Path):
+    """
+    H01: ScanResult with status='partial' and degraded=False must NOT be reported clean.
+    Runner must fail the round and preserve last snapshot to permit retry.
+    """
+    from analyzer.scanner import ScanResult
+    from integrations.host_adapter import EditorHookRunner
+    from models.vulnerability import VulnerabilityReport
+
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    runner = EditorHookRunner(tmp_path, debounce_seconds=0.0)
+
+    # 1. Partial report with empty findings and degraded=False
+    partial_rep = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[],
+        chained_vulnerabilities=[],
+        status="partial",
+        timestamp=datetime.now(),
+    )
+    partial_result = ScanResult([partial_rep], tmp_path, {"status": "partial", "degraded": False})
+
+    async def partial_scan():
+        return partial_result
+
+    res = await runner.run(scan_fn=partial_scan)
+    assert res["status"] == "failed"
+    assert "incomplete" in res.get("reason", "").lower() or "partial" in res.get("reason", "").lower()
+    # Crucial: snapshot is not saved as clean
+    assert "app.py" not in runner._last_snapshot
+
+    # 2. When scanner recovers to full completion, scan succeeds and records snapshot
+    completed_rep = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    completed_result = ScanResult([completed_rep], tmp_path, {"status": "completed", "degraded": False})
+
+    async def full_scan():
+        return completed_result
+
+    res2 = await runner.run(scan_fn=full_scan)
+    assert res2["status"] == "clean"
+    assert "app.py" in runner._last_snapshot
+
+
+@pytest.mark.asyncio
+async def test_r11_public_mcp_tools_restore_session_when_cwd_differs_from_repo(tmp_path: Path, monkeypatch):
+    """
+    R11: Public MCP tools (without root_hint) restore sessions from registry
+    even when server cwd is a different directory from the scanned repository.
+    """
+    import json
+    import os
+    import mcp_server
+    from conftest import make_vuln
+
+    # Create isolated registry location
+    reg_dir = tmp_path / "global_reg"
+    reg_dir.mkdir()
+    monkeypatch.setenv("VULNAGENT_REGISTRY_DIR", str(reg_dir))
+
+    # Repo located at separate directory
+    repo_dir = tmp_path / "repo_under_test"
+    repo_dir.mkdir()
+    (repo_dir / "app.py").write_text("x = input()\n", encoding="utf-8")
+
+    # Working dir is at another directory
+    server_cwd = tmp_path / "server_workspace"
+    server_cwd.mkdir()
+
+    orig_cwd = os.getcwd()
+    os.chdir(str(server_cwd))
+    try:
+        # 1. Scan target is repo_dir (different from cwd)
+        scan_res = await mcp_server.scan_changes(target=str(repo_dir))
+        scan_id = scan_res["scan_id"]
+
+        vuln = make_vuln(file_path="app.py", start_line=1, end_line=1)
+        session = mcp_server._scan_sessions[scan_id]
+        session["findings"][vuln.id] = vuln
+
+        # Persist finding to session file
+        audit_dir = repo_dir / ".vulnagent-audit"
+        sess_file = audit_dir / "sessions.jsonl"
+        sess_lines = sess_file.read_text(encoding="utf-8").splitlines()
+        last_data = json.loads(sess_lines[-1])
+        last_data["findings"].append(vuln.model_dump())
+        sess_file.write_text(json.dumps(last_data, ensure_ascii=False) + "\n", encoding="utf-8")
+
+        # 2. Read evidence
+        read_res = await mcp_server.read_evidence(scan_id=scan_id, path="app.py", start_line=1, end_line=1)
+        assert read_res["read_succeeded"] is True
+        ev_id = read_res["evidence_id"]
+
+        # 3. Submit assessment
+        assess_res = await mcp_server.submit_assessment(
+            scan_id=scan_id,
+            finding_id=vuln.id,
+            verdict="refuted",
+            evidence_ids=[ev_id],
+            mitigating_control="Input validated before use",
+            reason="Verified safe",
+        )
+        assert assess_res["accepted_status"] == "refuted"
+
+        # 4. SIMULATE RESTART: wipe RAM
+        mcp_server._scan_sessions.clear()
+        assert scan_id not in mcp_server._scan_sessions
+        assert Path.cwd() == server_cwd  # cwd is STILL different from repo_dir!
+
+        # 5. Call public tool get_assessment_history WITHOUT root_hint
+        hist = await mcp_server.get_assessment_history(scan_id=scan_id, finding_id=vuln.id)
+        assert len(hist["history"]) >= 1
+        assert hist["history"][0]["status"] == "refuted"
+
+        # 6. Call public tool read_evidence WITHOUT root_hint
+        re_read = await mcp_server.read_evidence(scan_id=scan_id, path="app.py", start_line=1, end_line=1)
+        assert re_read["read_succeeded"] is True
+        assert "x = input()" in re_read["content"]
+
+        # 7. Check stale assessments WITHOUT root_hint
+        stale_res = await mcp_server.check_stale_assessments(scan_id=scan_id)
+        assert "stale_count" in stale_res
+    finally:
+        os.chdir(orig_cwd)
+
+
+@pytest.mark.asyncio
+async def test_r14_comprehensive_runtime_demo_with_pipeline_and_valid_input(tmp_path: Path):
+    """
+    R14: Complete end-to-end security demo with full pipeline:
+    1. Runtime SQLite verification with valid input (returns single user) and injection (unauthorized dump).
+    2. Real scan -> finding detection -> plan building -> patch application.
+    3. Rescan verification confirming finding resolution.
+    4. Post-patch runtime verification: valid input still works; injection is neutralized.
+    """
+    import sqlite3
+    import subprocess
+    import sys
+    from analyzer.fixer import build_plan, apply_plan
+    from analyzer.scanner import ScanOptions, Scanner, ScanResult
+    from evidence.store import EvidenceStore
+    import mcp_server
+
+    # Step 1: Database setup
+    db_file = tmp_path / "demo.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT)")
+    conn.execute("INSERT INTO users VALUES (1, 'Alice', 'admin')")
+    conn.execute("INSERT INTO users VALUES (2, 'Bob', 'user')")
+    conn.commit()
+    conn.close()
+
+    # Step 2: Write vulnerable script
+    db_escaped = str(db_file).replace("\\", "/")
+    app_py = tmp_path / "app.py"
+    app_py.write_text(f'''import sqlite3
+import sys
+
+def get_user_role(user_id):
+    conn = sqlite3.connect("{db_escaped}")
+    cur = conn.cursor()
+    cur.execute(f"SELECT name, role FROM users WHERE id = {{user_id}}")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+if __name__ == "__main__":
+    uid = sys.argv[1]
+    res = get_user_role(uid)
+    print("COUNT:" + str(len(res)))
+    for r in res:
+        print("USER:" + r[0] + ":" + r[1])
+''', encoding="utf-8")
+
+    # Step 3: Verify pre-patch runtime behavior
+    # Valid input '1': returns exactly 1 user (Alice)
+    p_valid = subprocess.run([sys.executable, str(app_py), "1"], capture_output=True, text=True, check=True)
+    assert "COUNT:1" in p_valid.stdout
+    assert "USER:Alice:admin" in p_valid.stdout
+
+    # Injection input '999 OR 1=1': leaks all users
+    p_inj = subprocess.run([sys.executable, str(app_py), "999 OR 1=1"], capture_output=True, text=True, check=True)
+    assert "COUNT:2" in p_inj.stdout
+    assert "USER:Alice:admin" in p_inj.stdout
+    assert "USER:Bob:user" in p_inj.stdout
+
+    # Step 4: Vulnerability detection and finding binding
+    ev_store = EvidenceStore(tmp_path)
+    snap = ev_store.create_snapshot()
+    vuln = make_vuln(
+        file_path="app.py",
+        start_line=7,
+        end_line=7,
+        context='    cur.execute(f"SELECT name, role FROM users WHERE id = {user_id}")\n',
+        secure_code_example='    cur.execute("SELECT name, role FROM users WHERE id = ?", (user_id,))\n',
+    )
+    vuln.file_hash = snap.files.get("app.py", "")
+
+    # Step 5: Build and Apply Plan through VulnAgent fixer pipeline
+    plan = build_plan([vuln], tmp_path, baseline_hashes={"app.py": vuln.file_hash})
+    assert len(plan.patches) == 1
+    apply_res = apply_plan(plan, expected_snapshot_hashes={"app.py": vuln.file_hash})
+    assert apply_res["patches_applied"] == 1
+    assert 'cur.execute("SELECT name, role FROM users WHERE id = ?", (user_id,))' in app_py.read_text(encoding="utf-8")
+
+    # Step 6: Fix verification via check_fix
+    scan_id = "r14_demo_scan"
+    mcp_server._scan_sessions[scan_id] = {
+        "root": tmp_path,
+        "snapshot": snap,
+        "evidence_store": ev_store,
+        "findings": {vuln.id: vuln},
+        "changed_files": ["app.py"],
+        "expanded_files": ["app.py"],
+    }
+    with patch("mcp_server.Scanner.scan", new_callable=AsyncMock) as mock_rescan:
+        mock_rescan.return_value = ScanResult([], tmp_path, {})
+        fix_check = await mcp_server.check_fix(scan_id=scan_id, finding_ids=[vuln.id])
+        assert fix_check["clean"] is True
+        assert vuln.id in fix_check["resolved_findings"]
+
+    # Step 7: Verify post-patch runtime behavior
+    # Valid input '1': STILL WORKS!
+    p_post_valid = subprocess.run([sys.executable, str(app_py), "1"], capture_output=True, text=True, check=True)
+    assert "COUNT:1" in p_post_valid.stdout
+    assert "USER:Alice:admin" in p_post_valid.stdout
+
+    # Injection input '999 OR 1=1': Neutralized!
+    p_post_inj = subprocess.run([sys.executable, str(app_py), "999 OR 1=1"], capture_output=True, text=True, check=True)
+    assert "COUNT:0" in p_post_inj.stdout
+    assert "Alice" not in p_post_inj.stdout
+
+
+
 
 
 
