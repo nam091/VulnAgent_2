@@ -414,7 +414,7 @@ async def _run_fix(args: argparse.Namespace) -> int:
         result.root,
         confirmed_only=args.confirmed_only,
         baseline_hashes=baseline_hashes,
-        require_baseline=bool(baseline_hashes),
+        require_baseline=True,
     )
 
     if plan.conflicts or plan.stale:

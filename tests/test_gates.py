@@ -1136,8 +1136,10 @@ async def test_r07_timing_detects_file_modification_between_plan_and_apply(tmp_p
 
     f = tmp_path / "code.py"
     f.write_text("x = 1\n", encoding="utf-8")
+    import hashlib
+    code_hash = hashlib.sha256(b"x = 1\n").hexdigest()
 
-    vuln = make_vuln(file_path="code.py", start_line=1, secure_code_example="x = 2\n")
+    vuln = make_vuln(file_path="code.py", start_line=1, secure_code_example="x = 2\n", file_hash=code_hash)
     report = VulnerabilityReport(
         file_name="code.py",
         vulnerabilities=[vuln],
@@ -1145,7 +1147,7 @@ async def test_r07_timing_detects_file_modification_between_plan_and_apply(tmp_p
         status="completed",
         timestamp=datetime.now(),
     )
-    scan_res = ScanResult([report], tmp_path, {})
+    scan_res = ScanResult([report], tmp_path, {}, file_hashes={"code.py": code_hash})
 
     args = argparse.Namespace(
         target=str(tmp_path),
@@ -1268,6 +1270,64 @@ async def test_r07_scanner_populates_baseline_file_hashes(tmp_path: Path):
     assert plan.stale is True
     assert len(plan.conflicts) == 1
     assert len(plan.patches) == 0
+
+
+@pytest.mark.asyncio
+async def test_r07_rejects_fix_when_baseline_metadata_missing(tmp_path: Path):
+    """
+    R07: When ScanResult/vulnerability lacks baseline hash metadata,
+    CLI fix must fail-closed (require_baseline=True), report conflict/re-scan,
+    and NOT overwrite user changes on disk.
+    """
+    from cli import _run_fix, EXIT_ERROR
+    from analyzer.scanner import ScanResult
+    from conftest import make_vuln
+    import argparse
+
+    app_file = tmp_path / "app.py"
+    app_file.write_text("x = 1\n", encoding="utf-8")
+
+    # Finding based on old code x = 1, but missing file_hash metadata
+    vuln = make_vuln(
+        file_path="app.py",
+        start_line=1,
+        context="x = 1",
+        secure_code_example="x = 2\n",
+        file_hash=None,
+    )
+    report = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[vuln],
+        chained_vulnerabilities=[],
+        status="completed",
+        timestamp=datetime.now(),
+    )
+    # Simulated legacy/mock scanner returning result without hash metadata
+    scan_res = ScanResult([report], tmp_path, {})
+    assert not scan_res.file_hashes
+
+    # File on disk modified to x = 999 after analysis
+    app_file.write_text("x = 999\n", encoding="utf-8")
+
+    args = argparse.Namespace(
+        target=str(tmp_path),
+        no_llm=False,
+        confirmed_only=False,
+        dry_run=False,
+        verify=False,
+        yes=True,
+        include_risky=True,
+    )
+
+    with patch("cli.Scanner.scan", new_callable=AsyncMock) as mock_scan:
+        mock_scan.return_value = scan_res
+        code = await _run_fix(args)
+
+        # Must report error, NOT exit 0
+        assert code == EXIT_ERROR
+        # Must keep user change x = 999
+        assert app_file.read_text(encoding="utf-8") == "x = 999\n"
+
 
 
 

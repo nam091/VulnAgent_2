@@ -112,19 +112,6 @@ class ScanResult:
                     except Exception:
                         pass
 
-        if not self.file_hashes:
-            for r in self.reports:
-                if r.file_name:
-                    fp = (self.root / r.file_name).resolve()
-                    if fp.is_file():
-                        try:
-                            content = fp.read_text(encoding="utf-8", errors="replace")
-                            h = hashlib.sha256(content.encode("utf-8")).hexdigest()
-                            self.file_hashes[r.file_name] = h
-                            self.file_hashes[str(fp)] = h
-                        except OSError:
-                            pass
-
         self.stats["file_hashes"] = self.file_hashes
         self.stats["snapshot_hashes"] = self.file_hashes
 

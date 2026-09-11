@@ -1,5 +1,25 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 8b68183 (11/09/2026)
+
+**83/83 test pass (10.92 giây, 1 warning). R07 đã chặn ca scan→plan khi có baseline phân tích được truyền đúng. Hợp đồng thiếu baseline vẫn chưa fail-closed.** Các mục cập nhật bên dưới là lịch sử.
+
+### Ca đã xác nhận sửa được
+
+Probe `_run_fix` thật, chỉ mock Scanner.scan: finding từ `x = 1`, file trên đĩa đổi thành `x = 999`, ScanResult mang hash phân tích của `x = 1`. Kết quả **exit 2**, báo conflict và giữ nguyên `x = 999`. Việc gắn file_hash và truyền baseline vào build_plan đã xử lý đúng ca có baseline.
+
+### Phần còn lại của R07: fallback tự tạo baseline từ file hiện tại
+
+`ScanResult.__init__` khi không có file_hashes sẽ đọc lại file hiện tại để tạo hash. Hash này không có bằng chứng là hash của nội dung đã phân tích. CLI đồng thời dùng `require_baseline=bool(baseline_hashes)`, nên khi baseline hoàn toàn không có lại tắt yêu cầu baseline.
+
+**Đã tái hiện:** cùng probe trên nhưng Scanner giả lập trả finding cũ qua `ScanResult([report], root, {})` sau khi file đổi sang `x = 999`. Constructor tự gắn hash của `x = 999`; build_plan chấp nhận suggestion cũ, CLI ghi `x = 2` và **exit 0**.
+
+**Giới hạn bằng chứng:** đây là kiểm thử contract của ScanResult/CLI khi thiếu metadata, không phải khẳng định Scanner bình thường luôn bỏ hash. Scanner mới đã truyền hash ở đường chạy chính. Tuy nhiên, đường legacy/adapter hoặc thiếu metadata vẫn có thể bị hợp thức hóa bằng hash đọc muộn.
+
+**Sửa cần thiết để đóng contract:** không suy ra hash phân tích bằng cách đọc file trong constructor kết quả. Thiếu hash phải giữ missing. CLI có thao tác ghi phải yêu cầu baseline bắt buộc (`require_baseline=True`); thiếu baseline là conflict/re-scan. Nếu cần compatibility cho báo cáo cũ, vẫn cho xem báo cáo nhưng không tự cho áp dụng patch. Chụp hash tại đúng nội dung đưa vào engine, hoặc kiểm tra snapshot không đổi trong quá trình scan, để không gắn findings từ nhiều phiên bản vào một baseline.
+
+**Test cần bổ sung:** kết quả không có hash + file đã thay đổi phải giữ file, exit lỗi; kết quả có hash đúng vẫn áp dụng được; hash stale giữ conflict. Không tạo baseline muộn chỉ để test legacy pass. Review này không gọi model/Semgrep thật và không sửa mã nguồn.
+
 ## Cập nhật mới nhất — b1462d1 (11/09/2026)
 
 **81/81 test pass (8.64 giây, 1 warning). N01–N03 đã có bản sửa và các regression test tương ứng pass. R07 đóng được khoảng thời gian từ build_plan đến apply, nhưng chưa đóng khoảng thời gian từ nội dung được phân tích đến build_plan.** Các phần cập nhật bên dưới là lịch sử ở commit cũ, không thay thế kết luận này.
