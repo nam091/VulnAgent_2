@@ -1,5 +1,86 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 740281f (11/09/2026)
+
+**92/92 test pass (12.46 giây, 1 warning). Có tiến bộ ở R08–R13, nhưng chưa đủ căn cứ đóng R08–R14 hoặc gọi demo là nghiệm thu editor đầu-cuối. Runner mới còn false clean và lỗi lock; bộ lọc regex chưa chống ReDoS đầy đủ.** Các kết luận ở các cập nhật trước được giữ làm lịch sử.
+
+### Phần đã cải thiện
+
+- MCP có EDITOR_MODE; `_scan_target` không bật LLM trong editor mode, capabilities mô tả tools/modes. Đây là thay đổi thực thi, tốt hơn chỉ khai báo không gọi API.
+- AssessmentStore có JSONL audit và reload, event stale có lý do trước/sau; serializer trả provenance/assessment.
+- Agent read/search/definition dùng SafeReader ở nhiều đường trước đây đọc trực tiếp.
+- Cache key thêm endpoint, tên file tạm có UUID tránh đụng tên giữa writer trong cùng process.
+- Có EditorHookRunner và tests cho debounce/snapshot/lock/no-progress.
+- Có test ghép evidence→assessment→patch→check_fix cùng nhánh stale và failure. Những test này hữu ích cho integration nội bộ.
+
+### H01 — P1: EditorHookRunner báo clean khi scan thất bại
+
+**Đã tái hiện:** `scan_fn` trả `ScanResult([], root, {'rule_error': 'synthetic failure'})`; `EditorHookRunner.run()` trả:
+
+```json
+{"status":"clean","rounds":1,"findings_count":0}
+```
+
+Lượt gọi lại, debounce=0 và file không đổi, trả `{"status":"skipped","reason":"unmodified"}`. Lỗi engine bị chuyển thành sạch rồi snapshot bị đánh dấu như đã xử lý thành công.
+
+**Nguyên nhân:** runner kiểm tra findings mà không kiểm tra status/degraded/coverage; rescan sau fix cũng có nhánh tương tự. Đồng thời callback có thể trả nhiều kiểu Any nên không có contract kết quả chắc chắn.
+
+**Sửa:** bắt buộc result contract; gate status/degraded/coverage trước mọi clean/fix/progress decision. Failure/incomplete phải trả trạng thái riêng, không cập nhật last-successful snapshot; cho phép retry cùng snapshot khi engine phục hồi. Scan exception và cancellation phải cleanup lock, trả lỗi có kiểm soát. Không dùng số findings giảm để khẳng định không regression.
+
+**Test cần bổ sung:** initial scan fail; rescan fail sau fix; partial/exception; fail rồi retry cùng snapshot thành công. Các ca đều không được trả clean hoặc gọi fix trên result không đủ coverage.
+
+### H02 — P1: lock hết 60 giây bị xóa dù owner vẫn đang hoạt động
+
+**Đã tái hiện:** giữ context `runner1.lock()`; đặt mtime file lock lùi 61 giây để mô phỏng tác vụ kéo dài; `runner2.lock()` vẫn acquire thành công khi runner1 chưa thoát. Không phải đo tác vụ thực chạy 61 giây; đây là fault injection thời gian.
+
+**Nguyên nhân:** lock chỉ xét tuổi file >60 giây, không kiểm tra owner còn sống hoặc lease/heartbeat. Owner cũ còn có thể unlink lock thuộc owner mới khi cleanup. Budget deep review của plan có thể dài hơn ngưỡng này.
+
+**Sửa:** dùng lock hệ điều hành hoặc lease có owner token/heartbeat và cơ chế xác nhận owner chết; release chỉ xóa lock do chính mình sở hữu. Chờ lock trong async không dùng blocking sleep trên event loop.
+
+**Test:** long-running live owner không bị chiếm khóa; crash owner có recovery; owner cũ không xóa lock mới; concurrent processes không cùng scan/fix một repo.
+
+### H03 — P1: regex guard có thể bị vượt qua, chưa đạt ReDoS-safe
+
+**Đã tái hiện:** `CodeTools.search('(a|aa)+$', 'app.py')` với file tạm chứa 45 ký tự `a` rồi `!`. Pattern không bị guard từ chối. Chạy trong subprocess riêng, đặt timeout 4 giây; subprocess không hoàn tất và bị subprocess.run kết thúc khi hết timeout. Không chạy pattern này vô hạn trong tiến trình agent/server.
+
+**Nguyên nhân:** regex kiểm tra nested quantifier chỉ chặn một số hình dạng. Ambiguous alternation cũng có thể gây backtracking rất lớn. Giới hạn pattern 200 ký tự, 100 files và bytes/file không giới hạn thời gian xử lý từng regex.
+
+**Sửa ưu tiên:** search mặc định là literal. Nếu giữ regex, dùng engine có bảo đảm/budget phù hợp hoặc worker process bị giới hạn thời gian và có thể terminate; timeout phải được trả như tool failure/incomplete. Không chỉ thêm một blacklist pattern khác. Timeout coroutine/to_thread không tự dừng CPU regex đang chạy.
+
+**Test:** regex guard cũ, ambiguous alternation, pattern bình thường và literal metacharacters. Giữ test độc lập bằng subprocess timeout để không treo suite.
+
+### R09 vẫn chưa nghiệm thu host/editor
+
+Tìm references EditorHookRunner trong src/tests chỉ thấy định nghĩa class và tests, chưa thấy CLI/host config gọi runner. HostAdapter chưa cài hook entrypoint thực thi runner này. Debounce hiện trả skipped ngay, không có lịch chạy phần edit cuối đợt; state snapshot/time chỉ trong instance nên cần thiết kế nếu host tạo process mới mỗi sự kiện.
+
+Doctor gọi trực tiếp hàm Python `capabilities()`, không khởi động MCP server, không initialize/list_tools qua transport. Tên thông báo “MCP handshake” mạnh hơn phép kiểm thực tế.
+
+**Cần làm:** nối một host thật tới entrypoint, trailing debounce/dirty queue, lock đúng, retry thất bại; test process lifecycle. Doctor phân biệt in-process capabilities smoke và transport handshake. Chưa kiểm tra tài liệu host trong lượt review này, nên chưa xác nhận schema cấu hình host.
+
+### R11: persistence mới chỉ bao phủ assessment/event, chưa toàn bộ audit evidence
+
+JSONL persistence có thật, nhưng `_scan_sessions`, snapshots và evidence records vẫn trong RAM. Các tool history vẫn yêu cầu scan_id trong `_scan_sessions`; restart làm scan_id cũ không truy xuất được trực tiếp. AssessmentStore mới ở scan tiếp theo có thể load assessment cũ, nhưng EvidenceStore mới không có evidence records cũ để validate/explain chúng.
+
+**Cần làm:** lưu/reload scan manifest, snapshot, evidence và assessment theo scan/root identity; phân biệt record không được nạp với stale do file đổi. Có test restart MCP rồi đọc history/evidence bằng scan_id cũ. Thêm chính sách retention và xử lý JSONL hỏng/ghi thất bại, không âm thầm báo đã lưu bền vững khi persistence lỗi.
+
+### R14: ba nhánh demo chưa chứng minh runtime/security behavior hay thực nghiệm
+
+`test_r14_end_to_end_python_demo_three_branches` tự tạo finding và `_scan_sessions`, gọi trực tiếp hàm MCP; rescan mock `ScanResult([], root, {})`. Nó không chạy `scan_changes`, Semgrep, MCP transport hoặc editor. Mẫu SQL cũng chưa tạo kết nối/cursor/input để thực thi test hành vi; có kiểm tra chuỗi patch xuất hiện nhưng chưa kiểm tra input hợp lệ và payload nguy hiểm thực sự.
+
+Đây là **integration test nội bộ có scanner giả lập**, chưa phải demo end-to-end trên host và không thay thế G6 evaluation. Commit này không thêm dataset/protocol/manifests/raw benchmark results hay dependency lock.
+
+**Nghiệm thu tiếp:** demo Python chạy được với input hợp lệ/bất hợp lệ đã rà, scanner/rules thật, MCP stdio client, transcript và artifact snapshot/assessment trước-sau. Chạy nhánh failure bằng fault injection được ghi rõ; giữ main benchmark theo protocol riêng.
+
+### R10/R12 còn giới hạn
+
+Serializer/UI có thêm trường nhưng chưa chứng minh migration/coverage UI hoàn chỉnh qua browser. Cache vẫn dùng chuỗi prompt version cố định và identity từ biến môi trường; chưa hash prompt thực/config/fallback identity/context dependency đầy đủ. Không đánh dấu R10/R12 hoàn tất chỉ vì test field tồn tại hoặc endpoint đổi làm key đổi.
+
+### Kết luận hành động
+
+Ưu tiên **H01 → H02 → H03**, rồi nối runner vào một host và thực hiện transport/restart/behavioral demo. Những lỗi R07 trước đây không bị mở lại trong review này. Chưa nghiệm thu G4/G5/G6/G7; G1 có false clean mới ở runner cần chặn trước.
+
+Review dùng dữ liệu tạm và mock/fault injection; không gọi model thật, không sửa mã nguồn. Chỉ cập nhật tài liệu này.
+
 ## Cập nhật mới nhất — 0938478 (11/09/2026)
 
 **84/84 test pass (10.31 giây, 1 warning). Xác nhận đóng các ca R07 đã tái hiện trong chuỗi review, bao gồm fallback khi thiếu baseline.** Các cập nhật bên dưới giữ lại làm lịch sử, không phải trạng thái hiện tại của các lỗi đã đóng.

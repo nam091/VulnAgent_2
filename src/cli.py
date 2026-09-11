@@ -174,6 +174,12 @@ def build_parser() -> argparse.ArgumentParser:
     check_cmd.add_argument("--before-release", action="store_true", help="Comprehensive pre-release scan")
     check_cmd.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+    hook_cmd = subparsers.add_parser("hook", help="Run editor hook lifecycle with debounce and lock")
+    hook_cmd.add_argument("target", nargs="?", default=".", help="Target directory (default: .)")
+    hook_cmd.add_argument("--files", nargs="*", default=None, help="Specific files changed")
+    hook_cmd.add_argument("--max-rounds", type=int, default=2, help="Max hook rounds (default: 2)")
+    hook_cmd.add_argument("--debounce", type=float, default=3.0, help="Debounce in seconds (default: 3.0)")
+
     return parser
 
 
@@ -751,6 +757,39 @@ async def _run_check(args: argparse.Namespace) -> int:
         return EXIT_CLEAN
 
 
+async def _run_hook(args: argparse.Namespace) -> int:
+    from integrations.host_adapter import EditorHookRunner
+
+    root = Path(args.target).resolve()
+    runner = EditorHookRunner(
+        root=root,
+        debounce_seconds=getattr(args, "debounce", 3.0),
+        max_rounds=getattr(args, "max_rounds", 2),
+    )
+    files = [Path(f).resolve() for f in args.files] if getattr(args, "files", None) else None
+
+    async def _scan():
+        options = ScanOptions(
+            target=str(root),
+            use_llm=False,
+            use_semgrep=True,
+            files=files,
+        )
+        return await Scanner(options).scan()
+
+    result = await runner.run(scan_fn=_scan, files=files)
+    status = result.get("status")
+    print(f"Hook status: {status}")
+    if status in ("clean", "skipped"):
+        return EXIT_CLEAN
+    elif status == "findings_detected":
+        return EXIT_FINDINGS
+    elif status in ("failed", "rescan_failed"):
+        print(f"[ERROR] Hook failed: {result.get('reason')}", file=sys.stderr)
+        return EXIT_ERROR
+    return EXIT_CLEAN
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """
     CLI entry point.
@@ -786,6 +825,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "init": _run_init,
         "doctor": _run_doctor,
         "check": _run_check,
+        "hook": _run_hook,
     }
     return asyncio.run(runners[args.command](args))
 

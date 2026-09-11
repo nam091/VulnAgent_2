@@ -12,8 +12,11 @@ defect this project exists to report.
 """
 
 import ast
+import json
 import logging
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -153,7 +156,12 @@ class CodeTools:
             return {"name": name, "found": False, "note": "no definition found in scope"}
         return {"name": name, "found": True, "definitions": results}
 
-    def search(self, pattern: str, path: Optional[str] = None) -> Dict[str, Any]:
+    def search(
+        self,
+        pattern: str,
+        path: Optional[str] = None,
+        literal: bool = False,
+    ) -> Dict[str, Any]:
         """
         Search the tree for a regular expression.
 
@@ -169,35 +177,101 @@ class CodeTools:
             raise ToolError("pattern must be a non-empty string")
         if len(pattern) > 200:
             raise ToolError("regular expression exceeds maximum length (200 characters)")
-        if re.search(r"\([^)]*[+*]\)[+*]", pattern):
-            raise ToolError("potentially catastrophic nested repetition in regular expression rejected")
 
-        try:
-            compiled = re.compile(pattern)
-        except re.error as e:
-            raise ToolError(f"invalid regular expression: {e}")
+        regex_chars = set(r"^$*+?{}[]\|()")
+        is_literal = literal or not any(c in regex_chars for c in pattern)
 
         targets = [self._resolve(path)] if path else self._python_files()
         targets = targets[:100]
-        matches = []
+        matches: List[Dict[str, Any]] = []
 
+        if is_literal:
+            for target in targets:
+                try:
+                    content = self.reader.read_file(self._relative(target))
+                    lines = content.splitlines()
+                except (OSError, PathEscapeError, FileTooLargeError):
+                    continue
+                for number, line in enumerate(lines, 1):
+                    if pattern in line:
+                        matches.append({
+                            "file": self._relative(target),
+                            "line": number,
+                            "text": line.strip()[:200],
+                        })
+                        if len(matches) >= MAX_MATCHES:
+                            return {"pattern": pattern, "matches": matches, "truncated": True}
+            return {"pattern": pattern, "matches": matches, "truncated": False}
+
+        # Static ReDoS screen: catastrophic nested quantifiers or ambiguous alternations
+        if (
+            re.search(r"\([^)]*[+*]\)\s*[+*{]", pattern)
+            or re.search(r"\((?:[^()]*[+*][^()]*|\([^()]+\)[+*]?)\)\s*[+*{]", pattern)
+        ):
+            raise ToolError("potentially catastrophic nested repetition in regular expression rejected")
+        if re.search(r"\([^)]*\|[^)]*\)\s*[+*{]", pattern):
+            raise ToolError("potentially catastrophic ambiguous alternation with repetition in regular expression rejected")
+
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            raise ToolError(f"invalid regular expression: {e}")
+
+        file_payload = []
         for target in targets:
             try:
                 content = self.reader.read_file(self._relative(target))
-                lines = content.splitlines()
+                file_payload.append({"file": self._relative(target), "lines": content.splitlines()})
             except (OSError, PathEscapeError, FileTooLargeError):
                 continue
-            for number, line in enumerate(lines, 1):
-                if compiled.search(line):
-                    matches.append({
-                        "file": self._relative(target),
-                        "line": number,
-                        "text": line.strip()[:200],
-                    })
-                    if len(matches) >= MAX_MATCHES:
-                        return {"pattern": pattern, "matches": matches, "truncated": True}
 
-        return {"pattern": pattern, "matches": matches, "truncated": False}
+        worker_script = (
+            "import sys, json, re\n"
+            "data = json.loads(sys.stdin.read())\n"
+            "try:\n"
+            "    compiled = re.compile(data['pattern'])\n"
+            "except Exception as e:\n"
+            "    print(json.dumps({'error': str(e)}))\n"
+            "    sys.exit(1)\n"
+            "matches = []\n"
+            "truncated = False\n"
+            "for item in data['targets']:\n"
+            "    for num, line in enumerate(item['lines'], 1):\n"
+            "        if compiled.search(line):\n"
+            "            matches.append({'file': item['file'], 'line': num, 'text': line.strip()[:200]})\n"
+            "            if len(matches) >= data.get('max_matches', 40):\n"
+            "                truncated = True\n"
+            "                break\n"
+            "    if truncated:\n"
+            "        break\n"
+            "print(json.dumps({'matches': matches, 'truncated': truncated}))\n"
+        )
+
+        input_data = json.dumps({
+            "pattern": pattern,
+            "targets": file_payload,
+            "max_matches": MAX_MATCHES,
+        })
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", worker_script],
+                input=input_data,
+                capture_output=True,
+                text=True,
+                timeout=1.5,
+            )
+        except subprocess.TimeoutExpired:
+            raise ToolError("regular expression search timed out after 1.5s (possible ReDoS pattern)")
+
+        if proc.returncode != 0:
+            raise ToolError(f"regex search failed: {proc.stderr.strip() or 'worker error'}")
+
+        try:
+            res = json.loads(proc.stdout)
+            return {"pattern": pattern, "matches": res.get("matches", []), "truncated": res.get("truncated", False)}
+        except Exception as e:
+            raise ToolError(f"failed to parse search result: {e}")
 
     def list_files(self) -> Dict[str, Any]:
         """
@@ -325,8 +399,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Python regular expression"},
+                    "pattern": {"type": "string", "description": "Python regular expression or literal string"},
                     "path": {"type": "string", "description": "Optional file to restrict the search to"},
+                    "literal": {"type": "boolean", "description": "If true, treat pattern as literal string (recommended)"},
                 },
                 "required": ["pattern"],
             },

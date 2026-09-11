@@ -6,8 +6,10 @@ import os
 import shutil
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+
 
 
 
@@ -132,12 +134,48 @@ class HostAdapter:
         }
 
 
+def _is_pid_alive(pid: int) -> bool:
+    """
+    Check whether a process with given PID is actively running on the system.
+    """
+    if pid <= 0:
+        return False
+    try:
+        import psutil
+        return psutil.pid_exists(pid)
+    except Exception:
+        pass
+
+    if sys.platform == "win32":
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        SYNCHRONIZE = 0x00100000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid)
+        if handle:
+            exit_code = ctypes.c_ulong()
+            if ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                STILL_ACTIVE = 259
+                alive = (exit_code.value == STILL_ACTIVE)
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return alive
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+
 class EditorHookRunner:
     """
     Orchestrates editor save/hook execution with:
       - Debounce mechanism (skips execution if triggered repeatedly within window)
       - Dirty snapshotting (skips when workspace/files have not changed)
-      - Process-safe repository lock (.vulnagent.lock)
+      - Process-safe repository lock (.vulnagent.lock) with owner liveness check and token ownership
+      - Strict failure gating (never reports clean when scan fails or coverage is degraded)
       - Maximum 2-round iteration limit (scan -> fix -> verify)
       - No-progress termination (aborts if findings do not decrease or IDs are unchanged)
     """
@@ -153,7 +191,32 @@ class EditorHookRunner:
         self.max_rounds = max_rounds
         self._last_run_time: float = 0.0
         self._last_snapshot: Dict[str, str] = {}
+        self._active_lock_token: Optional[str] = None
         self.lock_path = self.root / ".vulnagent.lock"
+        self._state_file = self.root / ".vulnagent-audit" / "runner_state.json"
+        self._load_state()
+
+    def _load_state(self) -> None:
+        if self._state_file.is_file():
+            try:
+                data = json.loads(self._state_file.read_text(encoding="utf-8"))
+                self._last_run_time = float(data.get("last_run_time", 0.0))
+                self._last_snapshot = dict(data.get("last_snapshot", {}))
+            except Exception:
+                pass
+
+    def _save_state(self) -> None:
+        try:
+            self._state_file.parent.mkdir(parents=True, exist_ok=True)
+            self._state_file.write_text(
+                json.dumps({
+                    "last_run_time": self._last_run_time,
+                    "last_snapshot": self._last_snapshot,
+                }),
+                encoding="utf-8"
+            )
+        except Exception:
+            pass
 
     def capture_snapshot(self, files: Optional[Sequence[Path]] = None) -> Dict[str, str]:
         """
@@ -182,29 +245,44 @@ class EditorHookRunner:
     def lock(self, timeout_seconds: float = 0.0):
         """
         Acquire a process-safe lock using .vulnagent.lock.
-        If held and not stale, raises PermissionError.
+        If held by an active process, raises PermissionError.
+        Only unlinks the lock file on release if this runner is still the token owner.
         """
         start = time.time()
+        token = uuid.uuid4().hex
         acquired = False
         while True:
             try:
                 fd = os.open(str(self.lock_path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(json.dumps({"pid": os.getpid(), "timestamp": time.time()}))
+                    f.write(json.dumps({"pid": os.getpid(), "token": token, "timestamp": time.time()}))
                 acquired = True
+                self._active_lock_token = token
                 break
             except FileExistsError:
+                owner_alive = False
                 try:
                     if self.lock_path.is_file():
-                        stat = self.lock_path.stat()
-                        if time.time() - stat.st_mtime > 60:
-                            self.lock_path.unlink(missing_ok=True)
-                            continue
-                except OSError:
+                        raw = self.lock_path.read_text(encoding="utf-8").strip()
+                        if raw:
+                            data = json.loads(raw)
+                            owner_pid = data.get("pid")
+                            if owner_pid and _is_pid_alive(int(owner_pid)):
+                                owner_alive = True
+                except (OSError, json.JSONDecodeError, ValueError):
                     pass
 
+                # If the owner process is confirmed dead or lock file corrupted, safe to clean up
+                if not owner_alive:
+                    try:
+                        self.lock_path.unlink(missing_ok=True)
+                        continue
+                    except OSError:
+                        pass
+
+                # If owner is active, cannot break lock
                 if time.time() - start >= timeout_seconds:
-                    raise PermissionError(f"Workspace repository is locked: {self.lock_path}")
+                    raise PermissionError(f"Workspace repository is locked by active process: {self.lock_path}")
                 time.sleep(0.05)
 
         try:
@@ -213,9 +291,42 @@ class EditorHookRunner:
             if acquired:
                 try:
                     if self.lock_path.is_file():
-                        self.lock_path.unlink(missing_ok=True)
+                        raw = self.lock_path.read_text(encoding="utf-8").strip()
+                        if raw:
+                            data = json.loads(raw)
+                            if data.get("token") == token:
+                                self.lock_path.unlink(missing_ok=True)
                 except OSError:
                     pass
+                self._active_lock_token = None
+
+    def _is_scan_failed_or_degraded(self, result: Any) -> Tuple[bool, str]:
+        """
+        Detect if scan outcome represents a failure, degraded coverage, or engine error.
+        """
+        if result is None:
+            return True, "Scan returned no result"
+        if getattr(result, "status", None) in ("failed", "error"):
+            return True, f"Scan failed with status '{result.status}'"
+        if getattr(result, "degraded", False):
+            return True, "Scan completed with degraded coverage"
+        if isinstance(result, dict):
+            if result.get("engine_failure"):
+                return True, "Engine failure reported"
+            if result.get("rule_error"):
+                return True, f"Rule error: {result['rule_error']}"
+            if result.get("status") in ("failed", "error") or result.get("degraded"):
+                reason = result.get("reason") or result.get("error") or f"Scan failed with status '{result.get('status')}'"
+                return True, reason
+        stats = getattr(result, "stats", None)
+        if isinstance(stats, dict):
+            if stats.get("rule_error"):
+                return True, f"Rule error: {stats['rule_error']}"
+            if stats.get("engine_failure"):
+                return True, "Engine failure detected in scan stats"
+        if hasattr(result, "engine_failure") and result.engine_failure:
+            return True, "Engine failure reported"
+        return False, ""
 
     async def run(
         self,
@@ -224,7 +335,7 @@ class EditorHookRunner:
         files: Optional[Sequence[Path]] = None,
     ) -> Dict[str, Any]:
         """
-        Run the editor hook workflow with debounce, lock, dirty snapshot, max 2 rounds, and no-progress termination.
+        Run the editor hook workflow with debounce, lock, dirty snapshot, max 2 rounds, and failure gating.
         """
         now = time.time()
         if now - self._last_run_time < self.debounce_seconds:
@@ -237,8 +348,20 @@ class EditorHookRunner:
         try:
             with self.lock(timeout_seconds=0.0):
                 round_num = 1
-                result = await scan_fn()
-                findings = getattr(result, "vulnerabilities", result)
+                try:
+                    result = await scan_fn()
+                except Exception as e:
+                    return {"status": "failed", "rounds": round_num, "reason": f"Scan execution failed: {e}"}
+
+                failed, reason = self._is_scan_failed_or_degraded(result)
+                if failed:
+                    # Do not update self._last_snapshot to allow retry on same snapshot once engine recovers
+                    return {"status": "failed", "rounds": round_num, "reason": reason}
+
+                if isinstance(result, dict):
+                    findings = result.get("vulnerabilities", result.get("findings", []))
+                else:
+                    findings = getattr(result, "vulnerabilities", result)
                 if not isinstance(findings, list):
                     findings = list(findings) if hasattr(findings, "__iter__") else []
 
@@ -251,11 +374,13 @@ class EditorHookRunner:
                 if not findings:
                     self._last_run_time = time.time()
                     self._last_snapshot = snapshot
+                    self._save_state()
                     return {"status": "clean", "rounds": round_num, "findings_count": 0}
 
                 if not fix_fn or self.max_rounds < 2:
                     self._last_run_time = time.time()
                     self._last_snapshot = snapshot
+                    self._save_state()
                     return {
                         "status": "findings_detected",
                         "rounds": round_num,
@@ -265,11 +390,25 @@ class EditorHookRunner:
 
                 # Round 1 -> Fix
                 round_num = 2
-                await fix_fn(result)
+                try:
+                    await fix_fn(result)
+                except Exception as e:
+                    return {"status": "fix_failed", "rounds": round_num, "reason": f"Fix execution failed: {e}"}
 
                 # Rescan
-                rescan_result = await scan_fn()
-                rescan_findings = getattr(rescan_result, "vulnerabilities", rescan_result)
+                try:
+                    rescan_result = await scan_fn()
+                except Exception as e:
+                    return {"status": "rescan_failed", "rounds": round_num, "reason": f"Rescan execution failed: {e}"}
+
+                rescan_failed, rescan_reason = self._is_scan_failed_or_degraded(rescan_result)
+                if rescan_failed:
+                    return {"status": "rescan_failed", "rounds": round_num, "reason": rescan_reason}
+
+                if isinstance(rescan_result, dict):
+                    rescan_findings = rescan_result.get("vulnerabilities", rescan_result.get("findings", []))
+                else:
+                    rescan_findings = getattr(rescan_result, "vulnerabilities", rescan_result)
                 if not isinstance(rescan_findings, list):
                     rescan_findings = list(rescan_findings) if hasattr(rescan_findings, "__iter__") else []
 
@@ -279,6 +418,7 @@ class EditorHookRunner:
                 if len(rescan_findings) >= len(findings) or rescan_ids == initial_ids:
                     self._last_run_time = time.time()
                     self._last_snapshot = self.capture_snapshot(files)
+                    self._save_state()
                     return {
                         "status": "no_progress",
                         "rounds": round_num,
@@ -291,6 +431,7 @@ class EditorHookRunner:
                 if not rescan_findings:
                     self._last_run_time = time.time()
                     self._last_snapshot = self.capture_snapshot(files)
+                    self._save_state()
                     return {
                         "status": "clean",
                         "rounds": round_num,
@@ -301,6 +442,7 @@ class EditorHookRunner:
                 # Partial progress after 2 rounds
                 self._last_run_time = time.time()
                 self._last_snapshot = self.capture_snapshot(files)
+                self._save_state()
                 return {
                     "status": "partial_progress",
                     "rounds": round_num,
@@ -311,4 +453,5 @@ class EditorHookRunner:
 
         except PermissionError:
             return {"status": "skipped", "reason": "locked"}
+
 

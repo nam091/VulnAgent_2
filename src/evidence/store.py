@@ -1,4 +1,6 @@
 import hashlib
+import json
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -12,13 +14,63 @@ class EvidenceStore:
     """
     Manages snapshots of working trees and evidence records.
     Ensures that assessments cite real, verifiable evidence from the exact snapshot analyzed.
+    Supports persistent JSONL audit trail in .vulnagent-audit/.
     """
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, storage_dir: Optional[Path] = None) -> None:
         self.root = Path(root).resolve() if root else Path.cwd().resolve()
+        self.storage_dir = Path(storage_dir).resolve() if storage_dir else (self.root / ".vulnagent-audit")
         self.reader = SafeReader(self.root)
         self._snapshots: Dict[str, SnapshotManifest] = {}
         self._evidence: Dict[str, EvidenceRecord] = {}
+        self._load_persisted()
+
+    def _snapshots_file(self) -> Path:
+        return self.storage_dir / "snapshots.jsonl"
+
+    def _evidence_file(self) -> Path:
+        return self.storage_dir / "evidence_records.jsonl"
+
+    def _load_persisted(self) -> None:
+        if not self.storage_dir.is_dir():
+            return
+        snaps_file = self._snapshots_file()
+        if snaps_file.is_file():
+            try:
+                for line in snaps_file.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    snap = SnapshotManifest.model_validate(json.loads(line))
+                    self._snapshots[snap.snapshot_id] = snap
+            except Exception as e:
+                logging.debug(f"Failed to load persisted snapshots: {e}")
+
+        ev_file = self._evidence_file()
+        if ev_file.is_file():
+            try:
+                for line in ev_file.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    rec = EvidenceRecord.model_validate(json.loads(line))
+                    self._evidence[rec.evidence_id] = rec
+            except Exception as e:
+                logging.debug(f"Failed to load persisted evidence: {e}")
+
+    def _persist_snapshot(self, snap: SnapshotManifest) -> None:
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            with self._snapshots_file().open("a", encoding="utf-8") as f:
+                f.write(snap.model_dump_json() + "\n")
+        except OSError as e:
+            logging.debug(f"Could not persist snapshot: {e}")
+
+    def _persist_evidence(self, rec: EvidenceRecord) -> None:
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            with self._evidence_file().open("a", encoding="utf-8") as f:
+                f.write(rec.model_dump_json() + "\n")
+        except OSError as e:
+            logging.debug(f"Could not persist evidence: {e}")
 
     def create_snapshot(self, root: Optional[Path] = None) -> SnapshotManifest:
         """
@@ -63,6 +115,7 @@ class EvidenceStore:
             files=file_hashes,
         )
         self._snapshots[snapshot_id] = manifest
+        self._persist_snapshot(manifest)
         return manifest
 
     def record_evidence(
@@ -163,6 +216,7 @@ class EvidenceStore:
             status=EvidenceStatus.VALID,
         )
         self._evidence[evidence_id] = record
+        self._persist_evidence(record)
         return record
 
     def _create_invalid_record(
@@ -191,6 +245,7 @@ class EvidenceStore:
             status=EvidenceStatus.INVALID,
         )
         self._evidence[evidence_id] = record
+        self._persist_evidence(record)
         return record
 
     def validate_evidence(

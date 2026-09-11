@@ -10,11 +10,14 @@ Run with:  python src/mcp_server.py
 """
 
 import asyncio
+import json
+import logging
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 
 # Allow execution as a plain script from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -479,6 +482,59 @@ async def suggest_fix(
 _scan_sessions: Dict[str, Dict[str, Any]] = {}
 
 
+def _persist_session(audit_dir: Path, session_data: Dict[str, Any]) -> None:
+    try:
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        sess_file = audit_dir / "sessions.jsonl"
+        with sess_file.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(session_data, ensure_ascii=False) + "\n")
+    except OSError as e:
+        logging.debug(f"Failed to persist session: {e}")
+
+
+def _get_session(scan_id: str, root_hint: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    session = _scan_sessions.get(scan_id)
+    if session:
+        return session
+
+    roots_to_check = [Path.cwd()]
+    if root_hint:
+        roots_to_check.insert(0, Path(root_hint).resolve())
+
+    for r in roots_to_check:
+        audit_dir = r / ".vulnagent-audit"
+        sess_file = audit_dir / "sessions.jsonl"
+        if sess_file.is_file():
+            try:
+                for line in sess_file.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    data = json.loads(line)
+                    if data.get("scan_id") == scan_id:
+                        sess_root = Path(data["root"]).resolve()
+                        ev_store = EvidenceStore(root=sess_root, storage_dir=audit_dir)
+                        ass_store = AssessmentStore(storage_dir=audit_dir)
+                        snap = ev_store.get_snapshot(data["snapshot_id"])
+                        findings_list = [Vulnerability.model_validate(v) for v in data.get("findings", [])]
+                        restored = {
+                            "root": sess_root,
+                            "snapshot": snap,
+                            "evidence_store": ev_store,
+                            "assessment_store": ass_store,
+                            "findings": {v.id: v for v in findings_list},
+                            "assessments": {},
+                            "changed_files": data.get("changed_files", []),
+                            "expanded_files": data.get("expanded_files", []),
+                            "created_at": data.get("created_at", time.time()),
+                        }
+                        _scan_sessions[scan_id] = restored
+                        return restored
+            except Exception as e:
+                logging.debug(f"Failed to restore session from {sess_file}: {e}")
+    return None
+
+
+
 @mcp.tool(
     description=(
         "Scan changed files in the working tree for security candidates. "
@@ -493,25 +549,41 @@ async def scan_changes(
 ) -> Dict[str, Any]:
     target_path = Path(target).resolve()
     root = target_path if target_path.is_dir() else target_path.parent
-    evidence_store = EvidenceStore(root)
+    audit_dir = root / ".vulnagent-audit"
+    evidence_store = EvidenceStore(root=root, storage_dir=audit_dir)
     snapshot = evidence_store.create_snapshot(root)
+    assessment_store = AssessmentStore(storage_dir=audit_dir)
     diff_analyzer = DiffScopeAnalyzer(root)
     changed_files = diff_analyzer.get_changed_files(base_ref=base_ref, include_untracked=include_untracked)
 
     scan_id = f"scan_{uuid.uuid4().hex[:12]}"
+    created_at = time.time()
     _scan_sessions[scan_id] = {
         "root": root,
         "snapshot": snapshot,
         "evidence_store": evidence_store,
+        "assessment_store": assessment_store,
         "scanner": None,
         "findings": {},
         "assessments": {},
         "changed_files": [],
         "expanded_files": [],
-        "created_at": time.time(),
+        "created_at": created_at,
     }
 
     if not changed_files:
+        _persist_session(
+            audit_dir,
+            {
+                "scan_id": scan_id,
+                "snapshot_id": snapshot.snapshot_id,
+                "root": str(root),
+                "changed_files": [],
+                "expanded_files": [],
+                "findings": [],
+                "created_at": created_at,
+            },
+        )
         return {
             "scan_id": scan_id,
             "snapshot_id": snapshot.snapshot_id,
@@ -538,10 +610,7 @@ async def scan_changes(
         if Path(v.location.file_path).as_posix().lstrip("./") in target_scope
     ]
 
-    audit_dir = root / ".vulnagent-audit"
-    assessment_store = AssessmentStore(storage_dir=audit_dir)
-    scan_id = f"scan_{uuid.uuid4().hex[:12]}"
-    _scan_sessions[scan_id] = {
+    session_data = {
         "root": root,
         "snapshot": snapshot,
         "evidence_store": evidence_store,
@@ -551,8 +620,22 @@ async def scan_changes(
         "assessments": {},
         "changed_files": changed_files,
         "expanded_files": expanded_files,
-        "created_at": time.time(),
+        "created_at": created_at,
     }
+    _scan_sessions[scan_id] = session_data
+
+    _persist_session(
+        audit_dir,
+        {
+            "scan_id": scan_id,
+            "snapshot_id": snapshot.snapshot_id,
+            "root": str(root),
+            "changed_files": [str(f) for f in changed_files],
+            "expanded_files": [str(f) for f in expanded_files],
+            "findings": [v.model_dump() for v in candidates],
+            "created_at": created_at,
+        },
+    )
 
     scanned_count = len([r for r in result.reports if r.status in ("completed", "partial")])
     coverage_info = {
@@ -588,7 +671,7 @@ async def get_finding_context(
     scan_id: str,
     finding_id: str
 ) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}. Run scan_changes first."}
 
@@ -650,7 +733,7 @@ async def read_evidence(
     start_line: int = 1,
     end_line: int = 0
 ) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}."}
 
@@ -703,7 +786,7 @@ async def submit_assessment(
     missing_context: List[str] = [],
     limitations: List[str] = [],
 ) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}."}
 
@@ -755,7 +838,7 @@ async def submit_assessment(
     description="Check for stale assessments in a scan session whose underlying source files have changed."
 )
 async def check_stale_assessments(scan_id: str) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}."}
 
@@ -783,7 +866,7 @@ async def check_stale_assessments(scan_id: str) -> Dict[str, Any]:
     description="Retrieve assessment history and audit trail for a finding or all findings in a scan."
 )
 async def get_assessment_history(scan_id: str, finding_id: Optional[str] = None) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}."}
 
@@ -817,7 +900,7 @@ async def check_fix(
     scan_id: str,
     finding_ids: List[str] = []
 ) -> Dict[str, Any]:
-    session = _scan_sessions.get(scan_id)
+    session = _get_session(scan_id)
     if not session:
         return {"error": f"Unknown scan_id: {scan_id}."}
 

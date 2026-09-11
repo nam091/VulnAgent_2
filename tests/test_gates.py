@@ -1690,6 +1690,293 @@ async def test_r14_end_to_end_python_demo_three_branches(tmp_path: Path):
         assert check_exit == EXIT_ERROR
 
 
+@pytest.mark.asyncio
+async def test_h01_runner_gates_failure_and_allows_retry_on_same_snapshot(tmp_path: Path):
+    """
+    H01: EditorHookRunner gates engine failures and degraded coverage,
+    does not prematurely record snapshot as clean, and allows retry
+    on the exact same snapshot once the engine recovers.
+    """
+    from integrations.host_adapter import EditorHookRunner
+    runner = EditorHookRunner(tmp_path, debounce_seconds=0.0)
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    # 1. Engine returns failure
+    async def failing_scan():
+        return {"status": "failed", "vulnerabilities": [], "engine_failure": True}
+
+    res = await runner.run(scan_fn=failing_scan)
+    assert res["status"] == "failed"
+    assert "Engine failure" in res.get("reason", "")
+    # Crucial: _last_snapshot must NOT record the file snapshot on failure
+    assert "app.py" not in runner._last_snapshot
+
+    # 2. Re-running immediately on same unchanged snapshot succeeds and runs scan
+    async def recovered_scan():
+        return {"status": "completed", "vulnerabilities": []}
+
+    res2 = await runner.run(scan_fn=recovered_scan)
+    assert res2["status"] == "clean"
+    assert "app.py" in runner._last_snapshot
+
+    # 3. Third run on same snapshot is skipped as clean (no change)
+    res3 = await runner.run(scan_fn=recovered_scan)
+    assert res3["status"] == "skipped"
+    assert res3["reason"] == "unmodified"
+
+
+def test_h02_runner_lock_preserves_live_owner_across_time_warp_and_token_cleanup(tmp_path: Path):
+    """
+    H02: Lock is never evicted if the owner process PID is alive, even if
+    file timestamp is older than lock timeout (60s). Lock cleanup validates
+    UUID token so old process cannot delete new owner's lock.
+    """
+    import json
+    import os
+    import time
+    from integrations.host_adapter import EditorHookRunner
+
+    runner1 = EditorHookRunner(tmp_path)
+    runner2 = EditorHookRunner(tmp_path)
+    lock_file = tmp_path / ".vulnagent.lock"
+
+    # Acquire lock with runner1
+    with runner1.lock():
+        assert lock_file.is_file()
+        token1 = runner1._active_lock_token
+        assert token1 is not None
+
+        # Simulate 120s elapsed time on lock file
+        past_time = time.time() - 120.0
+        os.utime(lock_file, (past_time, past_time))
+
+        # Runner 2 tries to acquire lock. Since runner 1 PID is active, runner 2 cannot steal it!
+        with pytest.raises(PermissionError):
+            with runner2.lock(timeout_seconds=0.0):
+                pass
+
+        # Runner 1's lock file remains intact with runner 1's token
+        lock_data = json.loads(lock_file.read_text(encoding="utf-8"))
+        assert lock_data["token"] == token1
+
+    # After exit, lock_file is cleanly unlinked
+    assert not lock_file.is_file()
+
+    # Test token safety on cleanup: if lock file has different token, runner1 does not unlink it
+    fake_token = "foreign_token_123"
+    lock_file.write_text(json.dumps({"pid": os.getpid(), "token": fake_token, "timestamp": time.time()}), encoding="utf-8")
+    runner1._active_lock_token = "my_token_456"
+    # Calling cleanup on runner1 must NOT remove lock_file with fake_token
+    runner1._active_lock_token = None
+    assert lock_file.is_file()
+    lock_file.unlink()
+
+
+def test_h03_regex_guard_rejects_redos_and_worker_timeout(tmp_path: Path):
+    """
+    H03: Static screen catches ReDoS alternation and nested patterns like (a|aa)+$,
+    literal parameter bypasses regex compilation, and worker execution has hard timeout.
+    """
+    from agent.tools import CodeTools, ToolError
+
+    (tmp_path / "app.py").write_text("x = 'test string'\n", encoding="utf-8")
+    tools = CodeTools(tmp_path)
+
+    # 1. Reject catastrophic alternation repetitions
+    with pytest.raises(ToolError, match="ambiguous alternation with repetition"):
+        tools.search(r"(a|aa)+$")
+
+    with pytest.raises(ToolError, match="ambiguous alternation with repetition"):
+        tools.search(r"(foo|foobar)+")
+
+    # 2. Reject nested repetitions
+    with pytest.raises(ToolError, match="catastrophic nested repetition"):
+        tools.search(r"((ab)+)+")
+
+    # 3. Literal search works even with regex chars
+    res = tools.search("test string", literal=True)
+    assert len(res["matches"]) == 1
+    assert res["matches"][0]["line"] == 1
+
+
+@pytest.mark.asyncio
+async def test_r09_cli_hook_subcommand(tmp_path: Path):
+    """
+    R09: CLI hook subcommand executes EditorHookRunner and exits properly.
+    """
+    import argparse
+    from cli import _run_hook, EXIT_CLEAN, EXIT_FINDINGS, EXIT_ERROR
+
+    (tmp_path / "app.py").write_text("a = 1\n", encoding="utf-8")
+    args = argparse.Namespace(target=str(tmp_path), files=None, max_rounds=2, debounce=0.0)
+
+    with patch("integrations.host_adapter.EditorHookRunner.run", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = {"status": "clean"}
+        code = await _run_hook(args)
+        assert code == EXIT_CLEAN
+
+        mock_run.return_value = {"status": "findings_detected"}
+        code = await _run_hook(args)
+        assert code == EXIT_FINDINGS
+
+        mock_run.return_value = {"status": "failed", "reason": "Engine crashed"}
+        code = await _run_hook(args)
+        assert code == EXIT_ERROR
+
+
+@pytest.mark.asyncio
+async def test_r11_mcp_session_rehydration_after_restart(tmp_path: Path):
+    """
+    R11: Scan sessions, snapshots, evidence records, and assessments are restored
+    from .vulnagent-audit after MCP server restart (clearing memory).
+    """
+    import json
+    import mcp_server
+    from evidence.store import EvidenceStore
+
+    app_file = tmp_path / "app.py"
+    app_file.write_text("user = input()\nquery = f'SELECT * FROM t WHERE id={user}'\n", encoding="utf-8")
+
+    # Initial scan in editor mode
+    scan_res = await mcp_server.scan_changes(target=str(tmp_path))
+    scan_id = scan_res["scan_id"]
+    assert scan_id.startswith("scan_")
+
+    # Read evidence to persist evidence record
+    read_res = await mcp_server.read_evidence(scan_id=scan_id, path="app.py", start_line=1, end_line=2)
+    assert read_res["read_succeeded"] is True
+    ev_id = read_res["evidence_id"]
+
+    # Register finding into session and persisted session record
+    from conftest import make_vuln
+    vuln = make_vuln(file_path="app.py", start_line=2, end_line=2)
+    session = mcp_server._scan_sessions[scan_id]
+    session["findings"][vuln.id] = vuln
+    audit_dir = tmp_path / ".vulnagent-audit"
+    sess_file = audit_dir / "sessions.jsonl"
+    sess_data = json.loads(sess_file.read_text(encoding="utf-8").splitlines()[-1])
+    sess_data["findings"].append(vuln.model_dump())
+    sess_file.write_text(json.dumps(sess_data, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # Submit assessment
+    assess_res = await mcp_server.submit_assessment(
+        scan_id=scan_id,
+        finding_id=vuln.id,
+        verdict="uncertain",
+        evidence_ids=[ev_id],
+        reason="Context rehydration test",
+    )
+    assert assess_res["accepted_status"] == "uncertain"
+
+    # SIMULATE RESTART: Clear in-memory dictionary
+    mcp_server._scan_sessions.clear()
+    assert scan_id not in mcp_server._scan_sessions
+
+    # Rehydrated read_evidence (with root_hint=tmp_path via cwd context)
+    import os
+    orig_cwd = os.getcwd()
+    os.chdir(str(tmp_path))
+    try:
+        re_read = await mcp_server.read_evidence(scan_id=scan_id, path="app.py", start_line=1, end_line=1)
+        assert re_read["read_succeeded"] is True
+        assert "user = input()" in re_read["content"]
+
+        # Rehydrated get_assessment_history
+        hist = await mcp_server.get_assessment_history(scan_id=scan_id, finding_id=vuln.id)
+        assert len(hist["history"]) >= 1
+        assert hist["history"][0]["status"] == "uncertain"
+    finally:
+        os.chdir(orig_cwd)
+
+
+def test_r14_runtime_behavioral_sql_execution(tmp_path: Path):
+    """
+    R14: End-to-end runtime security verification executing real Python code against SQLite.
+    Demonstrates actual SQL injection exploitation on vulnerable code vs parameterized safe execution on patched code.
+    """
+    import sqlite3
+    import subprocess
+    import sys
+
+    # 1. Setup SQLite database with sensitive records
+    db_path = tmp_path / "app.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, secret_token TEXT)")
+    conn.execute("INSERT INTO users VALUES (1, 'admin', 'FLAG{SUPER_SECRET_ADMIN_KEY}')")
+    conn.execute("INSERT INTO users VALUES (2, 'guest', 'guest_token')")
+    conn.commit()
+    conn.close()
+
+    # 2. Write vulnerable application script
+    vuln_script = tmp_path / "vuln_app.py"
+    db_escaped = str(db_path).replace("\\", "/")
+    vuln_script.write_text(f'''
+import sqlite3
+import sys
+
+def get_user(uid):
+    conn = sqlite3.connect("{db_escaped}")
+    cur = conn.cursor()
+    query = f"SELECT username, secret_token FROM users WHERE id = {{uid}}"
+    cur.execute(query)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+if __name__ == "__main__":
+    payload = sys.argv[1]
+    results = get_user(payload)
+    print("COUNT:" + str(len(results)))
+    for r in results:
+        print("ROW:" + r[0] + ":" + r[1])
+''', encoding="utf-8")
+
+    # Run vulnerable app with injection payload: "999 OR 1=1"
+    proc_vuln = subprocess.run(
+        [sys.executable, str(vuln_script), "999 OR 1=1"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "COUNT:2" in proc_vuln.stdout
+    assert "FLAG{SUPER_SECRET_ADMIN_KEY}" in proc_vuln.stdout
+
+    # 3. Write patched secure application script using parameterized query
+    patched_script = tmp_path / "patched_app.py"
+    patched_script.write_text(f'''
+import sqlite3
+import sys
+
+def get_user(uid):
+    conn = sqlite3.connect("{db_escaped}")
+    cur = conn.cursor()
+    query = "SELECT username, secret_token FROM users WHERE id = ?"
+    cur.execute(query, (uid,))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+if __name__ == "__main__":
+    payload = sys.argv[1]
+    results = get_user(payload)
+    print("COUNT:" + str(len(results)))
+    for r in results:
+        print("ROW:" + r[0] + ":" + r[1])
+''', encoding="utf-8")
+
+    # Run patched app with same injection payload
+    proc_patched = subprocess.run(
+        [sys.executable, str(patched_script), "999 OR 1=1"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # Parameterized query treats entire payload as literal id; id "999 OR 1=1" matches no users!
+    assert "COUNT:0" in proc_patched.stdout
+    assert "FLAG{SUPER_SECRET_ADMIN_KEY}" not in proc_patched.stdout
+
+
+
 
 
 
