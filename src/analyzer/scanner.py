@@ -53,6 +53,7 @@ class ScanOptions:
         progress: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_partial: Optional[Callable[[List[VulnerabilityReport]], None]] = None,
         files: Optional[List[str]] = None,
+        semgrep_configs: Optional[Tuple[str, ...]] = None,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -64,6 +65,7 @@ class ScanOptions:
         self.use_cache = use_cache
         self.cache_dir = cache_dir
         self.files = files
+        self.semgrep_configs = semgrep_configs
         # Adversarial verification. By default it runs only on LLM-only
         # findings, which is where the measured false positives are; findings
         # two independent engines already agreed on do not need a third
@@ -234,7 +236,8 @@ class Scanner:
     def __init__(self, options: ScanOptions) -> None:
         self.options = options
         self.analyzer = CodeAnalyzer(use_semgrep=False, use_llm=options.use_llm)  # rule tier is run here
-        self.semgrep = SemgrepRunner() if options.use_semgrep else None
+        semgrep_kw = {"configs": options.semgrep_configs} if options.semgrep_configs else {}
+        self.semgrep = SemgrepRunner(**semgrep_kw) if options.use_semgrep else None
         self._cache_dir: Optional[Path] = None
         # Set when the rule tier fails, so a hung or missing engine is
         # reported as a degraded scan rather than as a clean one.

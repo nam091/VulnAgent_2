@@ -179,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     hook_cmd.add_argument("--files", nargs="*", default=None, help="Specific files changed")
     hook_cmd.add_argument("--max-rounds", type=int, default=2, help="Max hook rounds (default: 2)")
     hook_cmd.add_argument("--debounce", type=float, default=3.0, help="Debounce in seconds (default: 3.0)")
+    hook_cmd.add_argument("--trailing", action="store_true", help="Wait out debounce window to guarantee final edit is analyzed")
 
     return parser
 
@@ -777,7 +778,11 @@ async def _run_hook(args: argparse.Namespace) -> int:
         )
         return await Scanner(options).scan()
 
-    result = await runner.run(scan_fn=_scan, files=files)
+    result = await runner.run(
+        scan_fn=_scan,
+        files=files,
+        trailing=getattr(args, "trailing", False)
+    )
     status = result.get("status")
     print(f"Hook status: {status}")
     if status in ("clean", "skipped"):

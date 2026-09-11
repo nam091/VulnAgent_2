@@ -1,5 +1,32 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — b10eea8 (11/09/2026)
+
+**103/103 test pass (50.87 giây, 1 warning), không có test skip được báo. Đã xác nhận integration sử dụng Semgrep thật và MCP stdio client/server thật trong môi trường review.** Giữ hướng Python + Semgrep theo quyết định của người dùng. Các phần dưới đây là lịch sử, không phải mọi nhận xét cũ đều còn mở.
+
+### Những gì đã xác minh được
+
+- Môi trường: Semgrep **1.165.0**, MCP Python package **1.23.3**.
+- `test_r14_real_semgrep_detector_and_rescan_e2e_integration`: gọi Scanner.scan với Semgrep bật, LLM tắt, không mock detector/rescan; engine phát hiện finding command injection, có report completed/non-degraded. Test gán suggestion fixture, chạy build_plan/apply_plan thật rồi rescan thật, không còn findings và status completed.
+- `test_r14_mcp_transport_handshake_and_stdio_e2e`: khởi động `python src/mcp_server.py` bằng stdio client; initialize, list_tools, capabilities và scan_changes được gọi qua protocol thật. Test pass, không chỉ import hàm trực tiếp.
+- Behavioral SQLite test đã đổi tên/mô tả cho đúng: finding và rescan giả lập, còn runtime valid/injection và patch pipeline thực thi thật.
+
+### Giới hạn của bằng chứng hiện tại
+
+1. Semgrep test xác minh detector→patch fixture→rescan trên một mẫu. Suggestion `shell=True`→`shell=False` được test gán sẵn, không phải output LLM. Test chưa chạy lệnh hợp lệ trước/sau; bỏ shell không tự chứng minh giữ nguyên chức năng hay mọi cách truyền command đều an toàn. Dùng nhãn regression fixture cho mẫu này, không tổng quát thành bộ sửa command injection đã được chứng minh an toàn.
+2. MCP transport test chỉ assert scan_id/snapshot_id/coverage tồn tại sau scan_changes. Một payload có coverage failed vẫn có thể đạt các assertions này. Cần assert status/degraded/file statuses/scope thực nếu muốn nghiệm thu scan thành công qua transport.
+3. Chưa chạy read_evidence→submit_assessment→sửa→check_fix→history và restart/cross-cwd restore qua cùng transport client. Những phần đó có tests nội bộ riêng; chưa coi chúng là một scenario transport hoàn chỉnh.
+4. Chưa demo hook được host editor tự kích hoạt hoặc xác minh trailing debounce/feedback trên host thật. CLI hook có entrypoint không đồng nghĩa editor integration đã nghiệm thu.
+5. Integration đang dùng rule packs mặc định `p/python`, `p/security-audit`, chưa thấy rules snapshot khóa trong test này. Để tái lập và tránh phụ thuộc rule registry thay đổi, cần lưu/pin rules và engine; tách integration marker/dependency hướng dẫn với unit tests offline.
+
+### Kết luận và bước tiếp theo
+
+**Đóng thiếu sót “chưa có test detector/rescan thật” và “chưa có test MCP stdio thật” của các lượt review trước trong phạm vi hai test mới.** Không phát hiện lỗi runtime làm hai test này thất bại trong phiên review. Không mở thêm lỗi P1 chỉ dựa trên giới hạn test nêu trên.
+
+Tiếp theo nên tăng assertions coverage của transport test, ghép một scenario đầy đủ qua stdio (gồm failure/stale), khóa môi trường/rules và thực hiện demo một host. Sau đó chuyển sang protocol/dataset/baseline/metrics theo G6. Chưa dùng 103 test pass để công bố độ chính xác detector hoặc toàn bộ G4–G7 đã đạt.
+
+Review chỉ cập nhật tài liệu; không sửa mã nguồn và không gọi model thật. Lượt này đã chạy Semgrep thật, MCP subprocess thật và các runtime SQLite tests trong suite.
+
 ## Cập nhật mới nhất — 918c2e8 (11/09/2026)
 
 **101/101 test pass (24.04 giây, 1 warning). Hai ca lỗi tái hiện ở lượt trước đã được chặn. Behavioral demo đã kiểm tra input hợp lệ trước/sau và áp dụng patch thật; khâu phát hiện/rescan vẫn giả lập nên chưa gọi là full scanner/host E2E.** Các phần bên dưới là lịch sử review.

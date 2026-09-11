@@ -7,6 +7,7 @@ as positional anchors for the LLM tier during fusion.
 
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -193,6 +194,9 @@ class SemgrepRunner:
             executable: Path to the semgrep binary (auto-detected if omitted)
         """
 
+        if configs == DEFAULT_CONFIGS and os.environ.get("VULNAGENT_SEMGREP_RULES"):
+            env_rules = os.environ["VULNAGENT_SEMGREP_RULES"]
+            configs = tuple(r.strip() for r in env_rules.split(",") if r.strip())
         self.configs = configs
         self.timeout = timeout
         self.executable = executable or shutil.which("semgrep")

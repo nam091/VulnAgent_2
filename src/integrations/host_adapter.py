@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import contextmanager
 import hashlib
 import json
@@ -131,6 +132,50 @@ class HostAdapter:
             "mcp_config": str(config_path),
             "instructions": str(instructions_path),
             "configured": True,
+        }
+
+    def configure_editor_save_hook(self, host: str = "cursor") -> Dict[str, Any]:
+        """
+        Configures an on-save hook in the editor workspace (.cursor or .vscode tasks).
+        Maps editor file change event to CLI runner with payload mapping and trailing debounce.
+        """
+        config_dir = self.root / (".cursor" if host == "cursor" else ".vscode")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        tasks_path = config_dir / "tasks.json"
+
+        tasks: Dict[str, Any] = {"version": "2.0.0", "tasks": []}
+        if tasks_path.is_file():
+            try:
+                tasks = json.loads(tasks_path.read_text(encoding="utf-8"))
+            except Exception:
+                tasks = {"version": "2.0.0", "tasks": []}
+
+        server_dir = str(Path(__file__).resolve().parents[1].as_posix())
+        hook_task = {
+            "label": "VulnAgent On-Save Security Check",
+            "type": "shell",
+            "command": f"{sys.executable} -m cli hook --target \"${{workspaceFolder}}\" --files \"${{file}}\" --trailing",
+            "group": "build",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "options": {
+                "env": {
+                    "PYTHONPATH": server_dir
+                }
+            }
+        }
+
+        existing_labels = {t.get("label") for t in tasks.get("tasks", []) if isinstance(t, dict)}
+        if "VulnAgent On-Save Security Check" not in existing_labels:
+            tasks.setdefault("tasks", []).append(hook_task)
+            tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+
+        return {
+            "tasks_config": str(tasks_path),
+            "hook_configured": True,
+            "host": host,
         }
 
 
@@ -356,17 +401,28 @@ class EditorHookRunner:
         scan_fn: Callable[[], Awaitable[Any]],
         fix_fn: Optional[Callable[[Any], Awaitable[Any]]] = None,
         files: Optional[Sequence[Path]] = None,
+        trailing: bool = False,
     ) -> Dict[str, Any]:
         """
         Run the editor hook workflow with debounce, lock, dirty snapshot, max 2 rounds, and failure gating.
+        When trailing=True, waits out remaining debounce interval so final save in a burst is not dropped.
         """
         now = time.time()
-        if now - self._last_run_time < self.debounce_seconds:
-            return {"status": "skipped", "reason": "debounced", "elapsed": round(now - self._last_run_time, 2)}
-
-        snapshot = self.capture_snapshot(files)
-        if snapshot and snapshot == self._last_snapshot:
-            return {"status": "skipped", "reason": "unmodified"}
+        elapsed = now - self._last_run_time
+        if elapsed < self.debounce_seconds:
+            if trailing:
+                remaining = self.debounce_seconds - elapsed
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                snapshot = self.capture_snapshot(files)
+                if snapshot and snapshot == self._last_snapshot:
+                    return {"status": "skipped", "reason": "unmodified"}
+            else:
+                return {"status": "skipped", "reason": "debounced", "elapsed": round(elapsed, 2)}
+        else:
+            snapshot = self.capture_snapshot(files)
+            if snapshot and snapshot == self._last_snapshot:
+                return {"status": "skipped", "reason": "unmodified"}
 
         try:
             with self.lock(timeout_seconds=0.0):

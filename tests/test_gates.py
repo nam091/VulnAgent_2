@@ -1403,6 +1403,47 @@ async def test_r09_editor_hook_runner_debounce_and_snapshot(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_r09_editor_hook_runner_trailing_debounce(tmp_path: Path):
+    """
+    R09: Trailing debounce guarantees final edit in a rapid burst is not dropped.
+    """
+    import json
+    from integrations.host_adapter import EditorHookRunner, HostAdapter
+
+    f = tmp_path / "app.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+
+    runner = EditorHookRunner(root=tmp_path, debounce_seconds=0.3, max_rounds=2)
+
+    scanned_values = []
+    async def dummy_scan():
+        text = f.read_text(encoding="utf-8")
+        scanned_values.append(text.strip())
+        return []
+
+    # Initial scan
+    res1 = await runner.run(scan_fn=dummy_scan, files=[f])
+    assert res1["status"] == "clean"
+    assert scanned_values == ["x = 1"]
+
+    # Rapid edit within debounce window with trailing=True
+    f.write_text("x = 99\n", encoding="utf-8")
+    res2 = await runner.run(scan_fn=dummy_scan, files=[f], trailing=True)
+    assert res2["status"] == "clean"
+    assert scanned_values == ["x = 1", "x = 99"]
+
+    # Test HostAdapter configure_editor_save_hook
+    adapter = HostAdapter(tmp_path)
+    res_hook = adapter.configure_editor_save_hook(host="cursor")
+    assert res_hook["hook_configured"] is True
+    tasks_file = tmp_path / ".cursor" / "tasks.json"
+    assert tasks_file.is_file()
+    tasks_content = json.loads(tasks_file.read_text(encoding="utf-8"))
+    labels = [t["label"] for t in tasks_content.get("tasks", [])]
+    assert "VulnAgent On-Save Security Check" in labels
+
+
+@pytest.mark.asyncio
 async def test_r09_editor_hook_runner_lock_and_no_progress(tmp_path: Path):
     """
     R09: EditorHookRunner respects process lock, caps at 2 rounds,
@@ -2215,6 +2256,7 @@ if __name__ == "__main__":
     assert "Alice" not in p_post_inj.stdout
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_r14_real_semgrep_detector_and_rescan_e2e_integration(tmp_path: Path):
     """
@@ -2273,14 +2315,23 @@ async def test_r14_real_semgrep_detector_and_rescan_e2e_integration(tmp_path: Pa
     assert len(rescan_res.vulnerabilities) == 0
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
     """
-    R14 Real MCP stdio transport client handshake & E2E tool execution:
+    R14 Real MCP stdio transport client handshake & E2E full lifecycle execution:
     1. Launches python src/mcp_server.py over real stdio transport.
     2. Performs protocol initialize() handshake and lists all registered tools.
     3. Calls 'capabilities' tool over transport: asserts schema version and editor mode.
-    4. Calls 'scan_changes' tool over transport with real working tree.
+    4. Calls 'scan_changes' with real detector: asserts completed coverage, degraded=False, candidate found.
+    5. Protocol failure tests: verifies unknown scan_id rejection and unverified verdict on fabricated evidence.
+    6. Calls 'get_finding_context' & 'read_evidence': gets authenticated evidence ID.
+    7. Calls 'submit_assessment': records supported verdict and audit trail.
+    8. Disk modification & stale detection: verifies check_stale_assessments flags modified files over stdio.
+    9. Syntax failure gate: verifies check_fix catches syntax errors over stdio.
+    10. Applies valid fix and calls 'check_fix': asserts clean=True and finding resolved.
+    11. Calls 'get_assessment_history': verifies audit trail over stdio.
+    12. Spawns brand new server subprocess (simulating restart): verifies cross-process & cross-cwd session restoration.
     """
     import json
     import sys
@@ -2294,7 +2345,12 @@ async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
         env=None,
     )
 
-    (tmp_path / "hello.py").write_text("print('test')\n", encoding="utf-8")
+    calc_py = tmp_path / "calculator.py"
+    calc_py.write_text(
+        "def evaluate_math(code_str: str):\n"
+        "    return eval(code_str)\n",
+        encoding="utf-8"
+    )
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -2319,13 +2375,133 @@ async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
             assert cap_data["schema_version"] == "2.0.0"
             assert cap_data["editor_mode"] is True
 
-            # 4. Call scan_changes over stdio
+            # 4. Call scan_changes over stdio (real detector & coverage check)
             scan_call = await session.call_tool("scan_changes", {"target": str(tmp_path)})
             assert scan_call.content and len(scan_call.content) > 0
             scan_out = json.loads(scan_call.content[0].text)
             assert "scan_id" in scan_out
             assert "snapshot_id" in scan_out
-            assert "coverage" in scan_out
+            scan_id = scan_out["scan_id"]
+
+            coverage = scan_out["coverage"]
+            assert coverage["status"] == "completed"
+            assert coverage["degraded"] is False
+            assert coverage["total_files"] >= 1
+            assert coverage["scanned_count"] >= 1
+            assert "calculator.py" in coverage["files_scanned"]
+            assert coverage["file_statuses"]["calculator.py"]["status"] == "completed"
+            assert len(scan_out["candidates"]) >= 1
+            fid = scan_out["candidates"][0]["id"]
+
+            # 5a. Protocol failure check: unknown scan_id rejection
+            bad_ev_call = await session.call_tool("read_evidence", {"scan_id": "nonexistent_scan_999", "path": "calculator.py"})
+            bad_ev_out = json.loads(bad_ev_call.content[0].text)
+            assert "error" in bad_ev_out or bad_ev_out.get("read_succeeded") is False
+
+            # 5b. Protocol failure check: fabricated evidence rejection in submit_assessment
+            fake_ass_call = await session.call_tool("submit_assessment", {
+                "scan_id": scan_id,
+                "finding_id": fid,
+                "verdict": "supported",
+                "evidence_ids": ["ev_fabricated_999"],
+            })
+            fake_ass_out = json.loads(fake_ass_call.content[0].text)
+            assert fake_ass_out["policy_verified"] is False
+            assert fake_ass_out["accepted_status"] == "uncertain"
+
+            # 6. Call get_finding_context over stdio
+            ctx_call = await session.call_tool("get_finding_context", {"scan_id": scan_id, "finding_id": fid})
+            ctx_out = json.loads(ctx_call.content[0].text)
+            assert "enclosing_scope" in ctx_out
+            assert "initial_evidence_id" in ctx_out
+
+            # 7. Call read_evidence over stdio
+            ev_call = await session.call_tool("read_evidence", {"scan_id": scan_id, "path": "calculator.py", "start_line": 1, "end_line": 2})
+            ev_out = json.loads(ev_call.content[0].text)
+            assert ev_out["read_succeeded"] is True
+            ev_id = ev_out["evidence_id"]
+
+            # 8. Call submit_assessment with verified evidence over stdio
+            ass_call = await session.call_tool("submit_assessment", {
+                "scan_id": scan_id,
+                "finding_id": fid,
+                "verdict": "supported",
+                "evidence_ids": [ev_id],
+                "taint_path": [
+                    {"kind": "source", "file": "calculator.py", "line": 1, "evidence_id": ev_id},
+                    {"kind": "sink", "file": "calculator.py", "line": 2, "evidence_id": ev_id}
+                ],
+                "reason": "Direct user input flow into eval",
+            })
+            ass_out = json.loads(ass_call.content[0].text)
+            assert ass_out["accepted_status"] == "supported"
+            assert ass_out["policy_verified"] is True
+
+            # 9a. Check stale assessments initially (should be 0 stale)
+            stale_init_call = await session.call_tool("check_stale_assessments", {"scan_id": scan_id})
+            stale_init_out = json.loads(stale_init_call.content[0].text)
+            assert stale_init_out["stale_count"] == 0
+
+            # 9b. Modify file on disk and verify check_stale_assessments flags it
+            calc_py.write_text(
+                "def evaluate_math(code_str: str):\n    return eval(code_str)  # edited on disk\n",
+                encoding="utf-8"
+            )
+            stale_post_call = await session.call_tool("check_stale_assessments", {"scan_id": scan_id})
+            stale_post_out = json.loads(stale_post_call.content[0].text)
+            assert stale_post_out["stale_count"] == 1
+            assert fid in stale_post_out["stale_finding_ids"]
+
+            # 9c. Syntax break check: check_fix rejects broken syntax
+            calc_py.write_text("def evaluate_broken_math(:\n", encoding="utf-8")
+            syn_call = await session.call_tool("check_fix", {"scan_id": scan_id, "finding_ids": [fid]})
+            syn_out = json.loads(syn_call.content[0].text)
+            assert syn_out["syntax_valid"] is False
+
+            # 10. Apply valid fix and call check_fix over stdio
+            calc_py.write_text(
+                "import ast\n\ndef evaluate_math(code_str: str):\n    return ast.literal_eval(code_str)\n",
+                encoding="utf-8"
+            )
+            fix_call = await session.call_tool("check_fix", {"scan_id": scan_id, "finding_ids": [fid]})
+            fix_out = json.loads(fix_call.content[0].text)
+            assert fix_out["syntax_valid"] is True
+            assert fix_out["clean"] is True
+            assert fid in fix_out["resolved_findings"]
+
+            # 11. Call get_assessment_history over stdio
+            hist_call = await session.call_tool("get_assessment_history", {"scan_id": scan_id, "finding_id": fid})
+            hist_out = json.loads(hist_call.content[0].text)
+            assert len(hist_out.get("history", [])) >= 1
+            statuses = [h["status"] for h in hist_out["history"]]
+            assert "supported" in statuses
+            assert "stale" in statuses
+
+    # 12. Re-open in fresh server process (restart persistence & cross-cwd restore over stdio)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session2:
+            await session2.initialize()
+            re_hist = await session2.call_tool("get_assessment_history", {"scan_id": scan_id, "finding_id": fid})
+            re_out = json.loads(re_hist.content[0].text)
+            assert len(re_out.get("history", [])) >= 1
+            re_statuses = [h["status"] for h in re_out["history"]]
+            assert "supported" in re_statuses
+
+            # Modified file on disk: read_evidence across restart detects modification and rejects
+            re_ev = await session2.call_tool("read_evidence", {"scan_id": scan_id, "path": "calculator.py", "start_line": 1, "end_line": 3})
+            re_ev_out = json.loads(re_ev.content[0].text)
+            assert re_ev_out["read_succeeded"] is False
+            assert re_ev_out["status"] == "invalid"
+
+            # Restore original file: read_evidence succeeds across restart
+            calc_py.write_text(
+                "def evaluate_math(code_str: str):\n"
+                "    return eval(code_str)\n",
+                encoding="utf-8"
+            )
+            re_ev_valid = await session2.call_tool("read_evidence", {"scan_id": scan_id, "path": "calculator.py", "start_line": 1, "end_line": 2})
+            re_ev_valid_out = json.loads(re_ev_valid.content[0].text)
+            assert re_ev_valid_out["read_succeeded"] is True
 
 
 

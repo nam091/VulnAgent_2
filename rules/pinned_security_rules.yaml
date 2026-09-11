@@ -1,0 +1,20 @@
+rules:
+  - id: python-insecure-eval
+    patterns:
+      - pattern: eval(...)
+    message: "Detected use of eval"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-94: Code Injection"
+      confidence: HIGH
+
+  - id: python-insecure-subprocess-shell
+    patterns:
+      - pattern: subprocess.call(..., shell=True, ...)
+    message: "Detected subprocess execution with shell=True"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH
