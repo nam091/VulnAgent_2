@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -230,18 +231,27 @@ def _compute_dir_hash(p: Path) -> str:
     return h.hexdigest()
 
 
-def _get_git_info() -> Dict[str, Any]:
+def _get_git_info(repo_path: Optional[Path] = None) -> Dict[str, Any]:
+    target_repo = (repo_path or ROOT).resolve()
     try:
         commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True, cwd=str(target_repo)
         ).strip()
         status_output = subprocess.check_output(
-            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, text=True
+            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, text=True, cwd=str(target_repo)
         ).strip()
         is_dirty = len(status_output) > 0
-        return {"commit": commit, "dirty": is_dirty}
+        return {"commit": commit, "dirty": is_dirty, "repo_root": str(target_repo)}
     except Exception:
-        return {"commit": "unknown", "dirty": None}
+        return {"commit": "unknown", "dirty": None, "repo_root": str(target_repo)}
+
+
+def _get_tool_version(cmd: List[str]) -> Optional[str]:
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True).strip()
+        return out.splitlines()[0] if out else None
+    except Exception:
+        return None
 
 
 def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
@@ -522,6 +532,7 @@ async def run_vulnagent(
     concurrency: int = 5,
     configuration_name: str = "VulnAgent",
     use_cache: bool = True,
+    semgrep_configs: Optional[Tuple[str, ...]] = None,
 ) -> RunRecord:
     """
     Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
@@ -530,6 +541,7 @@ async def run_vulnagent(
         target=str(samples_dir),
         use_llm=use_llm,
         use_semgrep=use_semgrep,
+        semgrep_configs=semgrep_configs,
         concurrency=concurrency,
         use_cache=use_cache,
         verify=verify,
@@ -576,13 +588,17 @@ async def run_vulnagent(
         }
         for v in findings
     ]
+    hits = result.stats.get("cache_hits", 0)
+    misses = result.stats.get("cache_misses", 0)
     coverage = {
         "files_scanned": result.stats.get("files_scanned", len(result.reports)),
         "files_requested": result.stats.get("files_requested", 0),
         "total_seconds": result.stats.get("total_seconds", elapsed),
-        "cache_hits": result.stats.get("cache_hits", 0),
-        "cache_misses": result.stats.get("cache_misses", 0),
-        "cache_mode": "warm" if use_cache else "cold",
+        "cache_hits": hits,
+        "cache_misses": misses,
+        "cache_policy": "enabled" if use_cache else "disabled",
+        "cache_state": "warmed" if (use_cache and hits > 0) else ("cold" if use_cache else "disabled"),
+        "cache_mode": "warm" if (use_cache and hits > 0) else ("cold" if use_cache else "disabled"),
         "rule_tier_seconds": result.stats.get("rule_tier_seconds", 0.0),
         "llm_tier_seconds": result.stats.get("llm_tier_seconds", 0.0),
     }
@@ -791,6 +807,7 @@ async def main() -> int:
     )
     parser.add_argument("--json", help="Write full results to a JSON file")
     parser.add_argument("--no-bandit", action="store_true", help="Skip the Bandit baseline")
+    parser.add_argument("--rules", default=None, help="Semgrep rules configuration (file, dir, or pack, comma-separated)")
     parser.add_argument("--exact-cwe", action="store_true", help="Require exact CWE number match (no equivalence classes)")
     parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
     parser.add_argument("--no-cache", action="store_true", help="Disable analyzer caching to measure cold latency and model variance")
@@ -798,6 +815,17 @@ async def main() -> int:
     args = parser.parse_args()
 
     use_cache = not (args.no_cache or args.cold)
+
+    # Resolve effective Semgrep rules before scan execution
+    if args.rules:
+        effective_configs = tuple(r.strip() for r in args.rules.split(",") if r.strip())
+    elif os.environ.get("VULNAGENT_SEMGREP_RULES"):
+        effective_configs = tuple(r.strip() for r in os.environ["VULNAGENT_SEMGREP_RULES"].split(",") if r.strip())
+    elif (ROOT / "rules" / "pinned_security_rules.yaml").is_file():
+        effective_configs = (str(ROOT / "rules" / "pinned_security_rules.yaml"),)
+    else:
+        effective_configs = ("p/python", "p/security-audit")
+
     dataset_dir = Path(args.dataset)
     samples_dir = dataset_dir / "samples"
     labels, meta = load_dataset(dataset_dir)
@@ -813,7 +841,8 @@ async def main() -> int:
         print(f"          finding is a false positive")
     print(f"Matching: {meta['match_mode']}-level"
           + (f" (+/-{LINE_TOLERANCE} lines)" if meta["match_mode"] == "line" else ""))
-    print(f"Cache   : {'warm' if use_cache else 'cold (disabled)'}")
+    print(f"Rules   : {', '.join(effective_configs)}")
+    print(f"Cache   : {'enabled' if use_cache else 'disabled (--cold/--no-cache)'}")
     if meta["partial_labels"]:
         print("          ground truth is PARTIAL, so precision and F1 are not")
         print("          measurable here - an unmatched detection may well be a")
@@ -832,7 +861,12 @@ async def main() -> int:
         name, kwargs = CONFIGURATIONS[key]
         print(f"running {name}...")
         record = await run_vulnagent(
-            samples_dir, concurrency=args.concurrency, configuration_name=name, use_cache=use_cache, **kwargs
+            samples_dir,
+            concurrency=args.concurrency,
+            configuration_name=name,
+            use_cache=use_cache,
+            semgrep_configs=effective_configs,
+            **kwargs,
         )
         metrics = match(
             record.detections,
@@ -921,15 +955,66 @@ async def main() -> int:
             print()
 
     if args.json:
-        rules_path = ROOT / "rules" / "pinned_security_rules.yaml"
         labels_path = dataset_dir / "labels.json"
+
+        # Compute effective rules metadata
+        rule_entries = []
+        primary_path = None
+        primary_sha256 = None
+        for cfg in effective_configs:
+            p = Path(cfg)
+            if not p.is_absolute():
+                if (ROOT / p).exists():
+                    p = (ROOT / p).resolve()
+                elif p.exists():
+                    p = p.resolve()
+            if p.is_file():
+                h = _compute_sha256(p)
+                try:
+                    rel_path = str(p.relative_to(ROOT))
+                except ValueError:
+                    rel_path = str(p)
+                rule_entries.append({"type": "file", "path": rel_path, "sha256": h})
+                if primary_sha256 is None:
+                    primary_sha256 = h
+                    primary_path = rel_path
+            elif p.is_dir():
+                h = _compute_dir_hash(p)
+                try:
+                    rel_path = str(p.relative_to(ROOT))
+                except ValueError:
+                    rel_path = str(p)
+                rule_entries.append({"type": "directory", "path": rel_path, "sha256": h})
+                if primary_sha256 is None:
+                    primary_sha256 = h
+                    primary_path = rel_path
+            else:
+                rule_entries.append({"type": "registry", "pack": cfg, "sha256": None})
+                if primary_path is None:
+                    primary_path = cfg
+
+        aggregate_hits = sum(
+            m.coverage.get("cache_hits", 0) for m in results
+            if getattr(m, "coverage", None) and isinstance(m.coverage, dict)
+        )
+        aggregate_misses = sum(
+            m.coverage.get("cache_misses", 0) for m in results
+            if getattr(m, "coverage", None) and isinstance(m.coverage, dict)
+        )
+        cache_policy = "enabled" if use_cache else "disabled"
+        cache_state = "warmed" if (use_cache and aggregate_hits > 0) else ("cold" if use_cache else "disabled")
+
         manifest_payload = {
             "version": "1.0",
             "environment": {
                 "platform": platform.platform(),
                 "python_version": sys.version.split()[0],
                 "executable": sys.executable,
-                "git": _get_git_info(),
+                "git": _get_git_info(ROOT),
+                "engines": {
+                    "semgrep": _get_tool_version(["semgrep", "--version"]),
+                    "bandit": _get_tool_version(["bandit", "--version"]),
+                },
             },
             "dataset": {
                 "name": meta["name"],
@@ -940,15 +1025,22 @@ async def main() -> int:
                 "partial_labels": meta["partial_labels"],
                 "labels_sha256": _compute_sha256(labels_path),
                 "samples_sha256": _compute_dir_hash(samples_dir),
+                "git": _get_git_info(dataset_dir),
             },
             "rules": {
-                "path": str(rules_path.relative_to(ROOT)) if rules_path.exists() else None,
-                "sha256": _compute_sha256(rules_path) if rules_path.exists() else None,
+                "configs": list(effective_configs),
+                "path": primary_path or ", ".join(effective_configs),
+                "sha256": primary_sha256,
+                "entries": rule_entries,
             },
             "protocol": {
                 "line_tolerance": LINE_TOLERANCE,
                 "exact_cwe": args.exact_cwe,
-                "cache_mode": "warm" if use_cache else "cold",
+                "cache_policy": cache_policy,
+                "cache_state": cache_state,
+                "cache_mode": "warm" if (use_cache and aggregate_hits > 0) else ("cold" if use_cache else "disabled"),
+                "cache_hits": aggregate_hits,
+                "cache_misses": aggregate_misses,
                 "concurrency": args.concurrency,
                 "timestamp": time.time(),
                 "iso_timestamp": datetime.now().isoformat(),

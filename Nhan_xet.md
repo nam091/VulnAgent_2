@@ -1,5 +1,45 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review manifest/cold-cache và runbook — cdd757c (13/09/2026)
+
+**Có thêm artifact metadata và runbook, nhưng chưa thể nghiệm thu tính tái lập hoặc demo editor theo tài liệu mới.** Review source, chạy thử CLI eval/Semgrep thật trên dataset tạm, thử hai lệnh trong runbook và chạy suite. Các kết luận đóng G602–G604 trước đó vẫn giữ nguyên.
+
+### Đã làm được
+
+- --cold/--no-cache được truyền xuống ScanOptions.use_cache=False; đường cache của analyzer trả None khi tắt nên không đọc/ghi cache phân tích qua đường này. Không gọi model thật trong review để đo variance/latency.
+- Output JSON bổ sung hash labels/samples, platform/Python, raw findings, cache counters, timing và protocol. Đây là bước chuẩn bị pilot có ích, nhưng metadata phải phản ánh cấu hình thực chạy.
+
+### M01 — P1: Manifest rules không phản ánh rules thực thi
+
+main luôn hash ROOT/rules/pinned_security_rules.yaml. Scanner lại dùng config mặc định p/python,p/security-audit hoặc VULNAGENT_SEMGREP_RULES. Probe chạy eval CLI thật với --only semgrep --cold, dataset tạm và env trỏ custom_rules.yaml (bản rules local có thêm comment): run completed/exit 0, nhưng manifest.rules.sha256 khác hash của rules thực dùng và path vẫn chỉ pinned_security_rules.yaml. Lần chạy mặc định cũng chưa được ép dùng file pinned.
+
+Sửa: chốt config hiệu lực trước scan và truyền cùng đối tượng config cho Scanner và manifest; lưu danh sách rules thực cùng hash/version tương ứng từng engine, không gán hash file fixture chưa chạy. Nếu dùng registry phải snapshot/pin rules thực cho thí nghiệm tái lập. Ghi engine versions, model/provider/prompt/policy/config cần thiết (không ghi secrets). Hash input/config trước chạy và đối chiếu sau chạy nếu có thay đổi, tránh mô tả snapshot cuối như input đã phân tích.
+
+Trong cùng probe gọi script tuyệt đối từ cwd tạm, environment.git trả commit=unknown vì _get_git_info chạy Git ở cwd. Sửa Git provenance để truy vấn ROOT của VulnAgent, phân biệt riêng revision dataset/target. Regression cần rules override khác hash và chạy từ cwd khác, assert manifest khớp cấu hình thực và commit công cụ.
+
+### D01 — P1: Runbook chưa chạy được theo lệnh và expected output
+
+- `python -m cli.editor_integration configure --editor vscode --workspace .` không có module tương ứng; probe exit 1. CLI hiện có init/doctor/hook, không có package cli.editor_integration. Cần viết đúng luồng cấu hình mà code hỗ trợ, chọn một host để nghiệm thu trước; không suy ra có VS Code configure CLI nếu chưa triển khai.
+- `python src/cli.py history --limit 5` bị parser từ chối, exit 2, vì không có subcommand history. Nếu cần history dùng public MCP tool theo đúng session/scan_id và ghi rõ transport, hoặc bổ sung CLI trước khi hướng dẫn.
+- Rules pinned hiện chỉ có eval và subprocess.call(shell=True). Mẫu examples/vulnerable_app.py dùng subprocess.check_output và các sink SQL/XSS/path traversal; không thể kỳ vọng bốn CWE ghi trong runbook từ bộ rules này. Runbook cũng chưa có bước nối rules env/config vào process editor. Chọn mẫu khớp rules và kiểm tra thực engine output, hoặc khóa rules đủ bao phủ mẫu rồi ghi cấu hình hiệu lực.
+- _run_hook hiện in Hook status, không triển khai editor diagnostics/resolved_findings như expected output mô tả. Log/state của runner nằm .vulnagent-audit, không phải .vulnagent-jobs. Ví dụ command trong runbook thiếu --trailing và explicit target so với luồng cần thử. Không dùng trạng thái scanner thay cho bằng chứng diagnostics được cập nhật trên host.
+
+Sửa runbook theo flow thực có: môi trường/dependency cụ thể, lệnh đã smoke, rules/mẫu phù hợp, target và trailing rõ, output/log đúng contract. Sau đó thực hiện save/fix/rescan trên editor thật và lưu bằng chứng. Review này không thao tác editor, không sửa file mẫu thật và không chạy server ứng dụng.
+
+### M02 — P2: Nhãn warm chưa chứng minh cache đã được làm nóng
+
+Code đặt cache_mode=warm chỉ từ use_cache=True. Lần chạy đầu trên cache rỗng cũng được ghi warm. --cold hiện là cache disabled, không phải khởi tạo cache rỗng rồi ghi cache để lần tiếp theo đo warm. Điều này có thể dùng làm protocol no-cache, nhưng phải đặt tên/diễn giải chính xác.
+
+Sửa: phân biệt cache_enabled/disabled với trạng thái workload cold/warmed; ghi cache namespace, prewarm procedure và hit/miss thực. Nếu đo cold→warm, dùng cache trống riêng cho lượt đầu có ghi, rồi chạy cùng input/config cho lượt warm và kiểm tra hits. Nếu chỉ so no-cache với cache-enabled thì ghi đúng hai chế độ đó. Không mở rộng kết luận thành toàn bộ cache Semgrep/model/OS đều cold từ một flag analyzer.
+
+### Kiểm thử và bước tiếp theo
+
+- `python -m pytest tests -q -ra`: **113 passed, 1 warning, 97.82 giây**, không có skip được báo.
+- Probe CLI eval với Semgrep thật, rules override và cwd tạm: completed/exit 0 nhưng manifest sai rules hash và git commit unknown như M01.
+- Hai lệnh runbook không tồn tại đã được chạy để xác minh lỗi parser/module; không có thao tác configure thành công hoặc thay đổi cấu hình editor thật.
+
+Ưu tiên M01 và D01 trước pilot/demo; hoàn thiện M02 trước so latency cold/warm. Manifest/runbook hiện là bản chuẩn bị, chưa phải bằng chứng G6/G7 đã đạt. Review chỉ cập nhật tài liệu, không sửa code và không ghi đè kết quả benchmark của người dùng.
+
 ## Review G602–G604 — e6fccae (13/09/2026)
 
 **Bản sửa xử lý các ca G602–G604 còn mở ở lượt review 9518656.** Kết luận đóng bên dưới giới hạn ở những lỗi cụ thể đã báo; không đồng nghĩa toàn bộ G6/G7 đã nghiệm thu. Các phần dưới là lịch sử.

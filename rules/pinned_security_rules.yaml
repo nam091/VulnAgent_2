@@ -11,10 +11,49 @@ rules:
 
   - id: python-insecure-subprocess-shell
     patterns:
-      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern-either:
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.check_output(..., shell=True, ...)
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
     message: "Detected subprocess execution with shell=True"
     languages: [python]
     severity: ERROR
     metadata:
       cwe: "CWE-78: OS Command Injection"
       confidence: HIGH
+
+  - id: python-sql-injection
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute(f"...")
+          - pattern: $CURSOR.execute(f'...')
+          - pattern: $CURSOR.execute($X + $Y)
+          - pattern: $CURSOR.execute($X % $Y)
+          - pattern: $CURSOR.execute($X.format(...))
+    message: "Detected potential SQL injection"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      confidence: HIGH
+
+  - id: python-flask-render-template-string
+    patterns:
+      - pattern: render_template_string(...)
+    message: "Detected render_template_string which can lead to XSS or template injection"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-79: Cross-Site Scripting"
+      confidence: HIGH
+
+  - id: python-path-traversal-open
+    patterns:
+      - pattern: open($PATH, ...)
+    message: "Detected file open with potentially untrusted path"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-22: Path Traversal"
+      confidence: MEDIUM

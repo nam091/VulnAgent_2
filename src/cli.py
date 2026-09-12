@@ -167,9 +167,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("mcp", help="Run the MCP server on stdio")
 
     init_cmd = subparsers.add_parser("init", help="Initialize VulnAgent in current workspace")
-    init_cmd.add_argument("--host", choices=("cursor", "claude", "auto"), default="auto", help="Target editor host (default: auto)")
+    init_cmd.add_argument("--host", "--editor", dest="host", choices=("cursor", "vscode", "claude", "auto"), default="auto", help="Target editor host (default: auto)")
 
     subparsers.add_parser("doctor", help="Check local environment, dependencies and tools")
+
+    hist_cmd = subparsers.add_parser("history", help="View audit trail and hook/scan history")
+    hist_cmd.add_argument("--limit", type=int, default=10, help="Maximum entries to show (default: 10)")
+    hist_cmd.add_argument("--target", default=".", help="Target workspace root (default: .)")
 
     check_cmd = subparsers.add_parser("check", help="Run quick check on changes or security gate")
     check_cmd.add_argument("target", nargs="?", default=".", help="Target directory (default: .)")
@@ -181,6 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     hook_cmd.add_argument("target", nargs="?", default=None, help="Target directory (default: .)")
     hook_cmd.add_argument("--target", dest="target_opt", default=None, help="Target directory option")
     hook_cmd.add_argument("--files", nargs="*", default=None, help="Specific files changed")
+    hook_cmd.add_argument("--rules", default=None, help="Semgrep rules configuration (file, dir, or pack string)")
     hook_cmd.add_argument("--max-rounds", type=int, default=2, help="Max hook rounds (default: 2)")
     hook_cmd.add_argument("--debounce", type=float, default=3.0, help="Debounce in seconds (default: 3.0)")
     hook_cmd.add_argument("--trailing", action="store_true", help="Wait out debounce window to guarantee final edit is analyzed")
@@ -615,6 +620,11 @@ async def _run_init(args: argparse.Namespace) -> int:
         print(f"  MCP configuration: {res['mcp_config']}")
         print(f"  Security rules:    {res['rules_file']}")
         print(f"  On-save hook:      {res_hook['tasks_config']}")
+    elif host == "vscode":
+        res_hook = adapter.configure_editor_save_hook(host="vscode")
+        print(f"VulnAgent initialized for VS Code.")
+        print(f"  On-save tasks:     {res_hook['tasks_config']}")
+        print(f"  On-save settings:  {res_hook['settings_config']}")
     elif host == "claude":
         res = adapter.configure_claude_code()
         print(f"VulnAgent initialized for Claude Code.")
@@ -782,6 +792,57 @@ async def _run_check(args: argparse.Namespace) -> int:
         return EXIT_CLEAN
 
 
+async def _run_history(args: argparse.Namespace) -> int:
+    """
+    View scan and hook audit trail.
+    """
+    root = Path(args.target).resolve()
+    audit_dir = root / ".vulnagent-audit"
+    audit_file = audit_dir / "audit.jsonl"
+    runner_file = audit_dir / "runner_state.json"
+
+    found = False
+    if audit_file.is_file():
+        found = True
+        try:
+            lines = audit_file.read_text(encoding="utf-8").strip().splitlines()
+            entries = []
+            for line in lines:
+                line = line.strip()
+                if line:
+                    try:
+                        entries.append(json.loads(line))
+                    except Exception:
+                        pass
+            print(f"VulnAgent Audit Trail ({len(entries)} entries):")
+            for entry in entries[-args.limit:]:
+                ts = entry.get("timestamp", "")
+                event = entry.get("event") or entry.get("action") or entry.get("type", "record")
+                status = entry.get("status", "")
+                details = entry.get("details") or entry.get("finding_id") or ""
+                print(f"  [{ts}] {str(event).upper():<16} status={status:<10} {details}")
+        except Exception as e:
+            print(f"  Error reading audit trail: {e}")
+
+    if runner_file.is_file():
+        found = True
+        try:
+            from datetime import datetime
+            runner_state = json.loads(runner_file.read_text(encoding="utf-8"))
+            last_run = runner_state.get("last_run_time")
+            last_dt = datetime.fromtimestamp(last_run).isoformat() if last_run else "never"
+            snap_count = len(runner_state.get("last_snapshot", {}))
+            print(f"\nRunner State (.vulnagent-audit/runner_state.json):")
+            print(f"  Last on-save run: {last_dt}")
+            print(f"  Tracked files:    {snap_count}")
+        except Exception:
+            pass
+
+    if not found:
+        print(f"No audit records found in {audit_dir}.")
+    return EXIT_CLEAN
+
+
 async def _run_hook(args: argparse.Namespace) -> int:
     from integrations.host_adapter import EditorHookRunner
 
@@ -794,14 +855,22 @@ async def _run_hook(args: argparse.Namespace) -> int:
     )
     files = [Path(f).resolve() for f in args.files] if getattr(args, "files", None) else None
 
+    rules_arg = getattr(args, "rules", None)
+    semgrep_configs = tuple(r.strip() for r in rules_arg.split(",") if r.strip()) if rules_arg else None
+
+    last_scan_result = None
+
     async def _scan():
+        nonlocal last_scan_result
         options = ScanOptions(
             target=str(root),
             use_llm=False,
             use_semgrep=True,
+            semgrep_configs=semgrep_configs,
             files=files,
         )
-        return await Scanner(options).scan()
+        last_scan_result = await Scanner(options).scan()
+        return last_scan_result
 
     result = await runner.run(
         scan_fn=_scan,
@@ -810,10 +879,16 @@ async def _run_hook(args: argparse.Namespace) -> int:
     )
     status = result.get("status")
     print(f"Hook status: {status}")
-    if status in ("clean", "skipped"):
-        return EXIT_CLEAN
-    elif status == "findings_detected":
+    if status == "findings_detected":
+        if last_scan_result and getattr(last_scan_result, "vulnerabilities", None):
+            for v in last_scan_result.vulnerabilities:
+                v_type = v.type.value if hasattr(v.type, "value") else str(v.type)
+                cwe = f" (CWE-{v.cwe_id})" if getattr(v, "cwe_id", None) else ""
+                file_loc = f"{v.location.file_path}:{v.location.start_line}" if v.location else "unknown"
+                print(f"  - [{v.severity.value}] {v_type}{cwe} at {file_loc}")
         return EXIT_FINDINGS
+    elif status in ("clean", "skipped"):
+        return EXIT_CLEAN
     elif status in ("failed", "rescan_failed"):
         print(f"[ERROR] Hook failed: {result.get('reason')}", file=sys.stderr)
         return EXIT_ERROR
@@ -854,6 +929,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "baseline": _run_baseline,
         "init": _run_init,
         "doctor": _run_doctor,
+        "history": _run_history,
         "check": _run_check,
         "hook": _run_hook,
     }

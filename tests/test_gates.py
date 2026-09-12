@@ -3133,6 +3133,181 @@ def test_g604_protocol_and_false_positive_breakdown(tmp_path: Path):
     assert m.fp_on_clean == 1
 
 
+def test_m01_manifest_rules_and_git_provenance_from_arbitrary_cwd(tmp_path: Path):
+    """
+    Test M01:
+    1. _get_git_info queries ROOT of VulnAgent when called from arbitrary cwd.
+    2. When rules override (CLI --rules or VULNAGENT_SEMGREP_RULES) is used,
+       manifest.rules.sha256 and manifest.rules.path reflect the actual rules used,
+       not the default pinned_security_rules.yaml.
+    3. Git provenance in environment and dataset are captured properly.
+    """
+    import hashlib
+    import json
+    import subprocess
+    import sys
+    from eval.run_eval import ROOT, _get_git_info
+
+    # 1. Test _get_git_info from outside cwd
+    other_cwd = tmp_path / "somewhere_outside"
+    other_cwd.mkdir()
+
+    git_info = _get_git_info(ROOT)
+    assert git_info["commit"] != "unknown"
+    assert len(git_info["commit"]) == 40
+    assert git_info["repo_root"] == str(ROOT.resolve())
+
+    # 2. Test CLI execution from other_cwd with rules override
+    custom_rules_file = tmp_path / "custom_security_rules.yaml"
+    custom_rules_content = (
+        "rules:\n"
+        "  - id: custom-test-rule\n"
+        "    patterns:\n"
+        "      - pattern: eval(...)\n"
+        "    message: 'Custom rule test'\n"
+        "    languages: [python]\n"
+        "    severity: ERROR\n"
+        "    metadata:\n"
+        "      cwe: 'CWE-94: Code Injection'\n"
+    )
+    custom_rules_file.write_bytes(custom_rules_content.encode("utf-8"))
+    expected_rule_hash = hashlib.sha256(custom_rules_file.read_bytes()).hexdigest()
+
+    # Setup small dataset
+    ds_dir = tmp_path / "dataset"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "target.py").write_text("x = eval('1+1')\n", encoding="utf-8")
+    labels_content = {
+        "schema_version": 1,
+        "name": "m01_test_dataset",
+        "match_mode": "line",
+        "partial_labels": False,
+        "labels": [
+            {"file": "target.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}
+        ]
+    }
+    (ds_dir / "labels.json").write_text(json.dumps(labels_content), encoding="utf-8")
+
+    out_json = tmp_path / "eval_out.json"
+
+    # Run eval CLI from other_cwd with custom rules override
+    cmd = [
+        sys.executable,
+        str(ROOT / "eval" / "run_eval.py"),
+        "--dataset", str(ds_dir),
+        "--only", "semgrep",
+        "--no-bandit",
+        "--rules", str(custom_rules_file),
+        "--cold",
+        "--json", str(out_json),
+    ]
+    proc = subprocess.run(cmd, cwd=str(other_cwd), capture_output=True, text=True, encoding="utf-8")
+    assert proc.returncode == 0, f"eval failed: {proc.stderr}\nStdout: {proc.stdout}"
+    assert out_json.is_file()
+
+    data = json.loads(out_json.read_text(encoding="utf-8"))
+    assert data["environment"]["git"]["commit"] == git_info["commit"]
+    assert data["rules"]["sha256"] == expected_rule_hash
+    assert data["rules"]["path"] == str(custom_rules_file)
+    assert data["protocol"]["cache_policy"] == "disabled"
+    assert data["protocol"]["cache_state"] == "disabled"
+    assert "semgrep" in data["environment"]["engines"]
+
+
+def test_d01_cli_history_init_and_doctor(tmp_path: Path):
+    """
+    Test D01:
+    1. python src/cli.py history --limit 5 exits with code 0 without parser error.
+    2. python src/cli.py init --host vscode configures .vscode settings and tasks.
+    3. python src/cli.py doctor runs successfully.
+    """
+    import subprocess
+    import sys
+    from eval.run_eval import ROOT
+
+    # 1. history subcommand
+    res_hist = subprocess.run(
+        [sys.executable, str(ROOT / "src" / "cli.py"), "history", "--limit", "5"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+    )
+    assert res_hist.returncode == 0
+    assert "No audit records found" in res_hist.stdout or "Audit Trail" in res_hist.stdout
+
+    # 2. init --host vscode in tmp_path
+    res_init = subprocess.run(
+        [sys.executable, str(ROOT / "src" / "cli.py"), "init", "--host", "vscode"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert res_init.returncode == 0
+    assert (tmp_path / ".vscode" / "tasks.json").is_file()
+    assert (tmp_path / ".vscode" / "settings.json").is_file()
+
+    # 3. doctor in ROOT
+    res_doc = subprocess.run(
+        [sys.executable, str(ROOT / "src" / "cli.py"), "doctor"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+    )
+    assert res_doc.returncode == 0
+
+
+def test_m02_cache_state_distinction(tmp_path: Path):
+    """
+    Test M02:
+    Manifest protocol differentiates cache_policy (enabled/disabled)
+    from cache_state (cold vs warmed) based on actual cache hit count.
+    """
+    import json
+    import subprocess
+    import sys
+    from eval.run_eval import ROOT
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "app.py").write_text("eval('1')\n", encoding="utf-8")
+    (ds_dir / "labels.json").write_text(json.dumps({
+        "name": "cache_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    # Run cold (cache disabled)
+    out_cold = tmp_path / "cold.json"
+    subprocess.run([
+        sys.executable, str(ROOT / "eval" / "run_eval.py"),
+        "--dataset", str(ds_dir), "--only", "semgrep", "--no-bandit",
+        "--cold", "--json", str(out_cold)
+    ], cwd=str(tmp_path), capture_output=True, check=True)
+
+    cold_data = json.loads(out_cold.read_text(encoding="utf-8"))
+    assert cold_data["protocol"]["cache_policy"] == "disabled"
+    assert cold_data["protocol"]["cache_state"] == "disabled"
+    assert cold_data["protocol"]["cache_hits"] == 0
+
+    # Run with cache enabled
+    out_cached = tmp_path / "cached.json"
+    subprocess.run([
+        sys.executable, str(ROOT / "eval" / "run_eval.py"),
+        "--dataset", str(ds_dir), "--only", "semgrep", "--no-bandit",
+        "--json", str(out_cached)
+    ], cwd=str(tmp_path), capture_output=True, check=True)
+
+    cached_data = json.loads(out_cached.read_text(encoding="utf-8"))
+    assert cached_data["protocol"]["cache_policy"] == "enabled"
+    if cached_data["protocol"]["cache_hits"] > 0:
+        assert cached_data["protocol"]["cache_state"] == "warmed"
+    else:
+        assert cached_data["protocol"]["cache_state"] == "cold"
+
+
 
 
 

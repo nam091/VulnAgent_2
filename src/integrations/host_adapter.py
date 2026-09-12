@@ -211,10 +211,12 @@ class HostAdapter:
 
     def detect_host(self) -> str:
         """
-        Detect whether workspace is configured for Cursor or Claude Code.
+        Detect whether workspace is configured for Cursor, VSCode or Claude Code.
         """
         if (self.root / ".cursor").exists() or (self.root / ".cursorrules").exists():
             return "cursor"
+        if (self.root / ".vscode").exists():
+            return "vscode"
         if (self.root / ".claude").exists():
             return "claude"
         return "cursor"  # default target for MVP
