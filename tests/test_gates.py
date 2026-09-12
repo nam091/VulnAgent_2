@@ -2835,6 +2835,215 @@ async def test_r14_mcp_transport_handshake_and_stdio_e2e(tmp_path: Path):
             assert re_ev_valid_out["read_succeeded"] is True
 
 
+# ---------------------------------------------------------------------------
+# G6 / G7 Benchmark and Evaluation Harness Regressions (G601 - G604)
+# ---------------------------------------------------------------------------
+
+def test_g601_bipartite_matching_permutation_invariance():
+    """
+    Test G601: Matching must be invariant under permutations of detections and labels,
+    solving the bipartite matching problem to maximize matched cardinality (TP)
+    rather than greedily claiming sub-optimal matches.
+    """
+    from eval.run_eval import Detection, Label, match
+
+    labels = [
+        Label(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+        Label(file="app.py", line=14, cwe="CWE-89", type="SQL_INJECTION"),
+    ]
+
+    # Two detections within tolerance (+-3 lines):
+    # det at 12 can match 10 (dist 2) or 14 (dist 2)
+    # det at 8 can only match 10 (dist 2), NOT 14 (dist 6)
+    # Greedy with [12, 8] would claim 10 for 12, leaving 8 unmatched (TP=1, FP=1, FN=1).
+    # Optimal bipartite matching pairs 8->10 and 12->14 (TP=2, FP=0, FN=0).
+    det_a = Detection(file="app.py", line=12, cwe="CWE-89", type="SQL_INJECTION")
+    det_b = Detection(file="app.py", line=8, cwe="CWE-89", type="SQL_INJECTION")
+
+    # Order 1: [12, 8]
+    m1 = match([det_a, det_b], labels, "order1", match_mode="line")
+    assert m1.true_positives == 2
+    assert m1.false_positives == 0
+    assert m1.false_negatives == 0
+    assert m1.f1 == 1.0
+
+    # Order 2: [8, 12]
+    m2 = match([det_b, det_a], labels, "order2", match_mode="line")
+    assert m2.true_positives == 2
+    assert m2.false_positives == 0
+    assert m2.false_negatives == 0
+    assert m2.f1 == 1.0
+
+    # Reversed labels order
+    labels_rev = [labels[1], labels[0]]
+    m3 = match([det_a, det_b], labels_rev, "rev_labels", match_mode="line")
+    assert m3.true_positives == 2
+    assert m3.false_positives == 0
+    assert m3.false_negatives == 0
+    assert m3.f1 == 1.0
+
+
+def test_g602_execution_status_and_baseline_preservation():
+    """
+    Test G602: Loss of execution status and dropping empty baselines.
+    1. Failed or degraded scanner runs retain status, degraded flag, and errors.
+    2. Empty baseline (e.g. Bandit with 0 findings) is preserved in results table,
+       not silently dropped.
+    """
+    import subprocess
+    from unittest.mock import patch
+    from eval.run_eval import Label, match, render_table, run_bandit
+
+    labels = [
+        Label(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+        Label(file="app.py", line=20, cwe="CWE-79", type="XSS"),
+    ]
+
+    # 1. Failed scanner run
+    m_failed = match(
+        detections=[],
+        labels=labels,
+        name="VulnAgent (failed)",
+        run_status="failed",
+        degraded=True,
+        errors=["Engine failure reported in scan stats"],
+    )
+    assert m_failed.status == "failed"
+    assert m_failed.degraded is True
+    assert "Engine failure reported in scan stats" in m_failed.errors
+    table_failed = render_table([m_failed])
+    assert "failed" in table_failed
+    assert "---" in table_failed  # metrics suppressed on failure
+
+    # 2. Empty Bandit baseline: tool exits 0 with 0 findings
+    fake_completed = subprocess.CompletedProcess(
+        args=["bandit"],
+        returncode=0,
+        stdout=json.dumps({"results": []}),
+        stderr="",
+    )
+    with patch("shutil.which", return_value="C:\\dummy\\bandit.exe"), \
+         patch("subprocess.run", return_value=fake_completed):
+        record = run_bandit(Path("dummy_dir"))
+        assert record.status == "completed"
+        assert record.detections == []
+
+        m_bandit = match(
+            record.detections,
+            labels,
+            record.configuration,
+            run_status=record.status,
+            degraded=record.degraded,
+            errors=record.errors,
+        )
+        assert m_bandit.name == "Bandit (baseline)"
+        assert m_bandit.status == "completed"
+        assert m_bandit.true_positives == 0
+        assert m_bandit.false_negatives == 2
+        table_bandit = render_table([m_bandit])
+        assert "Bandit (baseline)" in table_bandit
+        assert "completed" in table_bandit
+
+
+def test_g603_relative_path_preserves_subdirectory_identity(tmp_path: Path):
+    """
+    Test G603: Files with the same basename in different subdirectories
+    must preserve their relative paths and not collide or match across projects.
+    """
+    from eval.run_eval import Label, match, _to_detection
+    from conftest import make_vuln
+
+    proj_a = tmp_path / "project_a"
+    proj_b = tmp_path / "project_b"
+    proj_a.mkdir()
+    proj_b.mkdir()
+
+    file_a = proj_a / "app.py"
+    file_b = proj_b / "app.py"
+    file_a.write_text("user = input()\n", encoding="utf-8")
+    file_b.write_text("path = input()\n", encoding="utf-8")
+
+    # Labels distinguish project directories
+    labels = [
+        Label(file="project_a/app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+        Label(file="project_b/app.py", line=20, cwe="CWE-22", type="PATH_TRAVERSAL"),
+    ]
+
+    v_a = make_vuln(file_path=str(file_a), start_line=10, cwe_id="CWE-89")
+    v_b = make_vuln(file_path=str(file_b), start_line=20, cwe_id="CWE-22")
+
+    det_a = _to_detection(v_a, tmp_path)
+    det_b = _to_detection(v_b, tmp_path)
+
+    # Relative paths must be preserved, not reduced to basename "app.py"
+    assert det_a.file == "project_a/app.py"
+    assert det_b.file == "project_b/app.py"
+
+    # Matching correctly matches both without cross-talk
+    metrics = match([det_a, det_b], labels, "multi_project", match_mode="line")
+    assert metrics.true_positives == 2
+    assert metrics.false_positives == 0
+    assert metrics.false_negatives == 0
+    assert metrics.f1 == 1.0
+
+
+def test_g604_protocol_and_false_positive_breakdown():
+    """
+    Test G604:
+    1. Dataset labels synchronization (labels.json XSS line 25, SecurityEval partial_labels).
+    2. False positive categorization into clean_files, duplicates, wrong_line, wrong_type.
+    """
+    from eval.run_eval import Detection, Label, match
+
+    # 1. Verify ground-truth labels files
+    labels_file = Path("eval/dataset/labels.json")
+    if labels_file.exists():
+        data = json.loads(labels_file.read_text(encoding="utf-8"))
+        xss_entries = [
+            e for e in data.get("labels", [])
+            if e.get("file") == "vulnerable_app.py" and "CROSS_SITE_SCRIPTING" in e.get("type", "")
+        ]
+        assert len(xss_entries) == 1
+        assert xss_entries[0]["line"] == 25, "XSS label should point to render_template_string sink on line 25"
+
+    se_file = Path("eval/datasets/securityeval/labels.json")
+    if se_file.exists():
+        se_data = json.loads(se_file.read_text(encoding="utf-8"))
+        assert se_data.get("partial_labels") is True or se_data.get("metadata", {}).get("partial_labels") is True
+
+    # 2. Verify FP categorization
+    labels = [
+        Label(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+    ]
+    detections = [
+        # Match (TP)
+        Detection(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+        # Duplicate detection for same label
+        Detection(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
+        # Wrong CWE on same target line
+        Detection(file="app.py", line=11, cwe="CWE-79", type="XSS"),
+        # Far from label (> 3 lines away)
+        Detection(file="app.py", line=50, cwe="CWE-89", type="SQL_INJECTION"),
+        # Detection on known-clean file
+        Detection(file="clean.py", line=15, cwe="CWE-89", type="SQL_INJECTION"),
+    ]
+
+    m = match(
+        detections=detections,
+        labels=labels,
+        name="test_fp_breakdown",
+        match_mode="line",
+        clean_files={"clean.py"},
+    )
+    assert m.true_positives == 1
+    assert m.false_positives == 4
+    assert m.fp_duplicate == 1
+    assert m.fp_wrong_type == 1
+    assert m.fp_wrong_line == 1
+    assert m.fp_on_clean == 1
+
+
+
 
 
 

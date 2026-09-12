@@ -15,7 +15,7 @@
     },
     {
       "file": "vulnerable_app.py",
-      "line": 21,
+      "line": 25,
       "cwe": "79",
       "type": "CROSS_SITE_SCRIPTING",
       "note": "user input embedded in a template string then render_template_string"

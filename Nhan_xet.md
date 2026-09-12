@@ -1,5 +1,32 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review demo và harness G6/G7 — HEAD f4b4aaa (12/09/2026)
+
+**Có bộ mẫu và harness smoke, nhưng chưa đủ để nghiệm thu G6/G7 hoặc công bố kết quả đánh giá.** Workspace sạch trước review; HEAD f4b4aaa chỉ cập nhật tài liệu so với 206fe33. Không thấy commit code mới cho ba file người dùng nêu; review dựa trên eval/run_eval.py, eval/dataset/labels.json, eval/dataset/samples/vulnerable_app.py và examples/vulnerable_app.py đang có. Đã hỏi người dùng về commit/đường dẫn kịch bản mới nếu có.
+
+### Findings cần sửa trước chạy thí nghiệm chính
+
+**G601 — P1: Matching phụ thuộc thứ tự findings (`eval/run_eval.py:255`).** Probe cùng file/CWE, labels ở dòng 10 và 14, detections ở 12 và 8, tolerance=3: thứ tự [12,8] cho TP=1/FP=1/FN=1, F1=0.5; đảo thành [8,12] cho TP=2/FP=0/FN=0, F1=1.0. Greedy claim nhãn đầu tiên bỏ lỡ matching đầy đủ. Sửa bằng matching một-một tối đa trên tập cạnh hợp lệ; chốt tie-break theo khoảng cách/anchor và ID ổn định. Regression phải bất biến khi đảo detections/labels, gồm hai sink sát nhau. Chỉ sort đầu vào giúp lặp lại nhưng chưa giải quyết việc mất matching hợp lệ.
+
+**G602 — P1: Mất trạng thái chạy và loại bỏ baseline rỗng.** run_vulnagent chỉ trả findings/time (`run_eval.py:354–360`), bỏ status/degraded/coverage/errors. Probe scanner trả failed=True theo status='failed', degraded=True và findings=[] vẫn được match thành bảng metric thông thường (TP=0, FN=2, F1=0), không có dấu vết failure. run_bandit trả [] cho thiếu engine/lỗi parse; main còn bỏ hẳn dòng Bandit khi detections rỗng (dòng 512), kể cả engine chạy thành công nhưng không phát hiện gì. Sửa: RunRecord có status, coverage, errors, elapsed và detections; giữ mọi configuration đã chọn trong output, phân biệt completed-empty/failed/skipped. Chốt và báo riêng tỷ lệ hoàn tất, policy xử lý failed/incomplete; exit code phản ánh lỗi thực thi. Regression cho engine failed, degraded, thiếu executable, JSON lỗi và completed-zero-finding.
+
+**G603 — P1: Mất định danh file khi mở rộng dataset (`run_eval.py:316,394`).** Cả VulnAgent và Bandit lấy basename. Probe project_a/app.py và project_b/app.py đều thành app.py: có thể ghép nhầm nhãn hoặc bỏ lỡ nhãn dùng đường dẫn tương đối. Sửa: chuẩn hóa đường dẫn tương đối samples_dir cho cả labels/detections, giữ thư mục, kiểm tra nằm trong dataset; validate labels trỏ file tồn tại. Regression hai file cùng basename ở hai project.
+
+**G604 — P2: Protocol/labels chưa thống nhất với phép đo.** labels.json nói nhãn là sink nhưng XSS ghi dòng 21 (tạo template), render_template_string ở dòng 25, ngoài tolerance ±3. Rà/chốt sink trước đo. SecurityEval metadata nói recall-only nhưng không đặt partial_labels; main chỉ in cảnh báo còn match vẫn tính precision/F1 khi partial_labels=False. Sửa policy vào dữ liệu và output, để precision/F1 null khi không có ground truth đủ. Không tự coi mọi file không có label là known-clean; truyền clean_files rõ ràng vào matcher. fp_wrong_type hiện còn gom cả duplicate/wrong-line cùng file và có thể âm với partial labels; cần phân nhóm theo lý do thật.
+
+### Những gì còn thiếu để gọi là G6/G7
+
+- Bộ mặc định có 11 nhãn, phù hợp smoke/regression theo plan. Mẫu chứa comments tiết lộ đáp án như SQL Injection vulnerability; trước chạy model chính cần input trung tính, mapping labels riêng, split theo family/project, hash/manifest và nhãn đã rà. Không dùng số lượng mẫu đơn thuần để bảo đảm ý nghĩa thống kê.
+- JSON output mới có metrics tổng hợp và missed/spurious; chưa lưu đủ raw findings/assessment/status/coverage, hash dataset/rules, engine/model/prompt/config, exact-CWE mode và thông tin cache để tái lập. use_cache=True cố định cũng chưa phân biệt cold/warm. Bổ sung manifest/protocol và các chỉ số verification/uncertain/citation/budget mà mục 10 của plan yêu cầu. Đây là yêu cầu trước thí nghiệm chính, không cần gọi model thật để kiểm thử harness.
+- Trong các Markdown được tìm thấy chưa có kịch bản thao tác editor mới. Có vulnerable_app.py không thay thế demo save: cần ghi host/version/dependency/đường cấu hình, bước init, save, expected feedback, save khi scan đang chạy, sửa rồi rescan và log kết quả. Chưa mở editor hoặc chạy app server trong review này.
+- G7 cần tài liệu khớp hành vi, dependency/version, lệnh cài mới và artifacts chạy lại được. README eval hiện chưa thể coi là protocol G6/G7 hoàn chỉnh. Các kết luận đóng E05 trước đó vẫn giữ nguyên.
+
+### Phạm vi kiểm chứng và bước tiếp theo
+
+Đã đọc source/labels/plan và chạy ba probe cục bộ: order-dependent matching, failed-run scoring và basename collision. Probe failure dùng scanner giả lập để kiểm tra harness, không phải kết quả benchmark Semgrep/LLM. Không chạy lại suite 109 tests vì không sửa code và không tìm thấy tests matcher eval trong tests; không công bố lần chạy 109 mới. Không gọi model, không chạy benchmark registry hay ghi đè kết quả thí nghiệm.
+
+Ưu tiên G601–G603, chuẩn hóa G604, rồi chạy một smoke Semgrep với rules/config được ghi rõ và xuất manifest/raw results; sau đó mới khóa protocol và chạy thí nghiệm chính. Nếu có kịch bản hoặc harness mới chưa nằm trong HEAD này, cần review đúng bản đó trước khi dùng kết luận để nghiệm thu. Lượt này chỉ cập nhật Nhan_xet.md.
+
 ## Cập nhật mới nhất — 206fe33 (12/09/2026)
 
 **Có thể đóng E05 trong phạm vi các ca lỗi đã ghi nhận và tái hiện ở các lượt trước.** Nhánh suy đoán quyền sở hữu từ `python -m cli hook --files/--target` đã được bỏ. Các mục E05 mở ở phần lịch sử bên dưới được thay thế bởi kết luận này.

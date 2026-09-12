@@ -11,9 +11,11 @@ that the hybrid beats either tier alone can be checked rather than asserted.
 import argparse
 import asyncio
 import json
+import logging
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -117,12 +119,32 @@ class Detection:
 
 
 @dataclass
+class RunRecord:
+    """
+    Direct execution result of an engine configuration, retaining status, coverage, and errors.
+    """
+    configuration: str
+    status: str  # "completed", "failed", "degraded", "skipped"
+    detections: List[Detection] = field(default_factory=list)
+    elapsed: float = 0.0
+    degraded: bool = False
+    coverage: Dict[str, Any] = field(default_factory=dict)
+    errors: List[str] = field(default_factory=list)
+    raw_findings: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class Metrics:
     """
     Confusion-matrix counts and the scores derived from them.
     """
 
     name: str
+    status: str = "completed"
+    degraded: bool = False
+    errors: List[str] = field(default_factory=list)
+    coverage: Dict[str, Any] = field(default_factory=dict)
+    raw_findings: List[Dict[str, Any]] = field(default_factory=list)
     true_positives: int = 0
     false_positives: int = 0
     false_negatives: int = 0
@@ -130,46 +152,58 @@ class Metrics:
     partial: bool = False
     unmatched: int = 0
     fp_on_clean: int = 0
+    fp_duplicate: int = 0
+    fp_wrong_line: int = 0
     fp_wrong_type: int = 0
     missed: List[str] = field(default_factory=list)
     spurious: List[str] = field(default_factory=list)
 
     @property
     def precision(self) -> float:
-        if self.partial:
-            return float("nan")   # not measurable against partial ground truth
+        if self.partial or self.status not in ("completed", "degraded"):
+            return float("nan")   # not measurable against partial ground truth or failed run
         denominator = self.true_positives + self.false_positives
         return self.true_positives / denominator if denominator else 0.0
 
     @property
     def recall(self) -> float:
+        if self.status not in ("completed", "degraded"):
+            return float("nan")
         denominator = self.true_positives + self.false_negatives
         return self.true_positives / denominator if denominator else 0.0
 
     @property
     def f1(self) -> float:
-        if self.partial:
+        if self.partial or self.status not in ("completed", "degraded"):
             return float("nan")   # follows precision
         if not (self.precision + self.recall):
             return 0.0
         return 2 * self.precision * self.recall / (self.precision + self.recall)
 
     def as_dict(self) -> Dict[str, Any]:
+        is_ok = self.status in ("completed", "degraded")
         return {
             "name": self.name,
-            "tp": self.true_positives,
-            "fp": self.false_positives,
-            "fn": self.false_negatives,
-            "precision": None if self.partial else round(self.precision, 4),
-            "recall": round(self.recall, 4),
-            "f1": None if self.partial else round(self.f1, 4),
+            "status": self.status,
+            "degraded": self.degraded,
+            "errors": self.errors,
+            "tp": self.true_positives if is_ok else None,
+            "fp": self.false_positives if (is_ok and not self.partial) else None,
+            "fn": self.false_negatives if is_ok else None,
+            "precision": None if (self.partial or not is_ok) else round(self.precision, 4),
+            "recall": round(self.recall, 4) if is_ok else None,
+            "f1": None if (self.partial or not is_ok) else round(self.f1, 4),
             "unmatched": self.unmatched,
             "fp_on_clean_files": self.fp_on_clean,
+            "fp_duplicate_sink": self.fp_duplicate,
+            "fp_wrong_line_tolerance": self.fp_wrong_line,
             "fp_wrong_type_right_file": self.fp_wrong_type,
             "partial_ground_truth": self.partial,
             "seconds": round(self.seconds, 2),
+            "coverage": self.coverage,
             "missed": self.missed,
             "spurious": self.spurious,
+            "raw_findings": self.raw_findings,
         }
 
 
@@ -194,10 +228,16 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
         raise SystemExit(2)
 
     payload = json.loads(labels_file.read_text(encoding="utf-8"))
+    samples_dir = dataset_dir / "samples"
     labels = []
     for entry in payload.get("labels", []):
+        rel_file = Path(entry["file"]).as_posix()
+        if samples_dir.is_dir():
+            target_file = (samples_dir / rel_file).resolve()
+            if not target_file.is_file():
+                print(f"warning: label references non-existent sample {rel_file}", file=sys.stderr)
         labels.append(Label(
-            file=entry["file"],
+            file=rel_file,
             line=int(entry.get("line", 0)),
             cwe=str(entry["cwe"]).replace("CWE-", "").strip(),
             type=entry.get("type", ""),
@@ -207,18 +247,103 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
     meta = {
         "name": payload.get("name", dataset_dir.name),
         "source": payload.get("source", ""),
-        # "line" requires the detection to land near the annotated sink.
-        # "file" only requires the right CWE somewhere in the file, for
-        # corpora that label a sample without annotating a line.
         "match_mode": payload.get("match_mode", "line"),
-        "clean_files": payload.get("clean_files", []),
-        # A corpus that labels only some of its real defects cannot measure
-        # precision: an unmatched detection may be a genuine finding that
-        # nobody wrote a label for. Scoring those as false positives would
-        # punish an engine for being more thorough than the ground truth.
+        "clean_files": [Path(f).as_posix() for f in payload.get("clean_files", [])],
         "partial_labels": bool(payload.get("partial_labels", False)),
     }
     return labels, meta
+
+
+def _min_cost_max_bipartite_matching(
+    detections: Sequence[Detection],
+    labels: Sequence[Label],
+    match_mode: str = "line",
+    exact_cwe: bool = False,
+    tolerance: int = LINE_TOLERANCE,
+) -> List[Tuple[int, int]]:
+    """
+    Find maximum-cardinality one-to-one matching between detections and labels,
+    minimizing total line distance as secondary objective with deterministic tie-breaking.
+    Guarantees invariance to permutation of detections or labels.
+    """
+    n_d = len(detections)
+    n_l = len(labels)
+    if n_d == 0 or n_l == 0:
+        return []
+
+    adj: Dict[Any, List[List[Any]]] = {}
+
+    def add_edge(u: Any, v: Any, cap: int, cost: int) -> None:
+        if u not in adj:
+            adj[u] = []
+        if v not in adj:
+            adj[v] = []
+        forward = [v, cap, cost, len(adj[v])]
+        backward = [u, 0, -cost, len(adj[u])]
+        adj[u].append(forward)
+        adj[v].append(backward)
+
+    for i in range(n_d):
+        add_edge("s", ("d", i), 1, 0)
+    for j in range(n_l):
+        add_edge(("l", j), "t", 1, 0)
+
+    has_candidate_edge = False
+    for i, d in enumerate(detections):
+        for j, l in enumerate(labels):
+            if d.file != l.file:
+                continue
+            if not cwe_matches(d.cwe, l.cwe, exact=exact_cwe):
+                continue
+            dist = abs(d.line - l.line) if match_mode == "line" else 0
+            if match_mode == "line" and dist > tolerance:
+                continue
+            cost = dist * 100000 + i * 100 + j
+            add_edge(("d", i), ("l", j), 1, cost)
+            has_candidate_edge = True
+
+    if not has_candidate_edge:
+        return []
+
+    while True:
+        dist_map: Dict[Any, float] = {node: float("inf") for node in adj}
+        parent: Dict[Any, Optional[Tuple[Any, int]]] = {node: None for node in adj}
+        dist_map["s"] = 0.0
+        in_queue = set(["s"])
+        queue = ["s"]
+
+        while queue:
+            u = queue.pop(0)
+            in_queue.remove(u)
+            for edge_idx, (v, cap, cost, rev_idx) in enumerate(adj[u]):
+                if cap > 0 and dist_map[u] + cost < dist_map[v]:
+                    dist_map[v] = dist_map[u] + cost
+                    parent[v] = (u, edge_idx)
+                    if v not in in_queue:
+                        queue.append(v)
+                        in_queue.add(v)
+
+        if dist_map.get("t", float("inf")) == float("inf"):
+            break
+
+        curr = "t"
+        while curr != "s":
+            assert parent[curr] is not None
+            p, edge_idx = parent[curr]
+            edge = adj[p][edge_idx]
+            rev_idx = edge[3]
+            edge[1] -= 1
+            adj[curr][rev_idx][1] += 1
+            curr = p
+
+    matches = []
+    for i in range(n_d):
+        d_node = ("d", i)
+        if d_node in adj:
+            for v, cap, cost, rev_idx in adj[d_node]:
+                if isinstance(v, tuple) and v[0] == "l" and cap == 0:
+                    matches.append((i, v[1]))
+    return matches
 
 
 def match(
@@ -227,97 +352,109 @@ def match(
     name: str,
     match_mode: str = "line",
     partial_labels: bool = False,
-    exact_cwe: bool = False
+    exact_cwe: bool = False,
+    clean_files: Optional[Sequence[str]] = None,
+    run_status: str = "completed",
+    degraded: bool = False,
+    errors: Optional[List[str]] = None,
+    coverage: Optional[Dict[str, Any]] = None,
+    raw_findings: Optional[List[Dict[str, Any]]] = None,
 ) -> Metrics:
     """
-    Score detections against ground truth.
-
-    Each label may be satisfied by at most one detection, and each detection
-    may satisfy at most one label, so neither duplicate findings nor a single
-    catch-all finding can inflate the score.
-
-    Args:
-        detections: Findings from one engine
-        labels: Ground-truth labels
-        name: Configuration name for the report
-        match_mode: "line" or "file"
-        partial_labels: Whether ground truth is incomplete
-        exact_cwe: Require exact CWE number without equivalence mapping
-
-    Returns:
-        Metrics: Scored result
+    Score detections against ground truth using max bipartite matching.
     """
+    metrics = Metrics(
+        name=name,
+        status=run_status,
+        degraded=degraded,
+        errors=list(errors or []),
+        coverage=dict(coverage or {}),
+        raw_findings=list(raw_findings or []),
+    )
 
-    metrics = Metrics(name=name)
-    claimed_labels: Set[int] = set()
-    matched_detections: Set[int] = set()
+    if run_status not in ("completed", "degraded"):
+        metrics.missed = [f"{l.file}:{l.line} {l.type or 'CWE-' + l.cwe}" for l in labels]
+        return metrics
 
-    for d_index, detection in enumerate(detections):
-        for l_index, label in enumerate(labels):
-            if l_index in claimed_labels:
-                continue
-            if detection.file != label.file:
-                continue
-            # File-mode corpora label the sample, not the sink line.
-            if match_mode == "line" and abs(detection.line - label.line) > LINE_TOLERANCE:
-                continue
-            # CWE is the interoperable key; type names differ per engine.
-            if not cwe_matches(detection.cwe, label.cwe, exact=exact_cwe):
-                continue
-            claimed_labels.add(l_index)
-            matched_detections.add(d_index)
-            break
+    clean_set = set(clean_files or [])
+    matched_pairs = _min_cost_max_bipartite_matching(
+        detections=detections,
+        labels=labels,
+        match_mode=match_mode,
+        exact_cwe=exact_cwe,
+        tolerance=LINE_TOLERANCE,
+    )
+
+    claimed_labels = {l_idx for _, l_idx in matched_pairs}
+    matched_detections = {d_idx for d_idx, _ in matched_pairs}
 
     metrics.true_positives = len(claimed_labels)
     metrics.false_negatives = len(labels) - len(claimed_labels)
     metrics.partial = partial_labels
-    # With partial ground truth an unmatched detection is unclassifiable, not
-    # wrong, so it is counted separately and kept out of precision.
-    unmatched = len(detections) - len(matched_detections)
+
+    unmatched_d_indices = [i for i in range(len(detections)) if i not in matched_detections]
     if partial_labels:
         metrics.false_positives = 0
-        metrics.unmatched = unmatched
+        metrics.unmatched = len(unmatched_d_indices)
     else:
-        metrics.false_positives = unmatched
+        metrics.false_positives = len(unmatched_d_indices)
 
     metrics.missed = [
         f"{l.file}:{l.line} {l.type or 'CWE-' + l.cwe}"
         for i, l in enumerate(labels) if i not in claimed_labels
     ]
-    # Two different failures hide in the false-positive column. A finding in
-    # a file known to be clean is simply wrong. A finding in a vulnerable
-    # file under the wrong CWE found the right place and mislabelled it,
-    # which is a far milder error and worth separating.
-    labelled_files = {l.file for l in labels}
-    metrics.fp_on_clean = sum(
-        1 for i, d in enumerate(detections)
-        if i not in matched_detections and d.file not in labelled_files
-    )
-    metrics.fp_wrong_type = metrics.false_positives - metrics.fp_on_clean
     metrics.spurious = [
-        f"{d.file}:{d.line} {d.type or 'CWE-' + d.cwe}"
-        for i, d in enumerate(detections) if i not in matched_detections
+        f"{detections[i].file}:{detections[i].line} {detections[i].type or 'CWE-' + detections[i].cwe}"
+        for i in unmatched_d_indices
     ]
+
+    if not partial_labels:
+        fp_clean = 0
+        fp_dup = 0
+        fp_line = 0
+        fp_type = 0
+        for i in unmatched_d_indices:
+            d = detections[i]
+            if d.file in clean_set:
+                fp_clean += 1
+            else:
+                matching_cwe_labels = [l for l in labels if l.file == d.file and cwe_matches(d.cwe, l.cwe, exact=exact_cwe)]
+                if matching_cwe_labels:
+                    if any(abs(d.line - l.line) <= LINE_TOLERANCE for l in matching_cwe_labels):
+                        fp_dup += 1
+                    else:
+                        fp_line += 1
+                else:
+                    fp_type += 1
+        metrics.fp_on_clean = fp_clean
+        metrics.fp_duplicate = fp_dup
+        metrics.fp_wrong_line = fp_line
+        metrics.fp_wrong_type = fp_type
+
     return metrics
 
 
-def _to_detection(vuln: Vulnerability) -> Detection:
+def _to_detection(vuln: Vulnerability, samples_dir: Path) -> Detection:
     """
-    Convert a VulnAgent finding into a comparable detection.
-
-    Args:
-        vuln: The finding
-
-    Returns:
-        Detection: Normalised form
+    Convert a VulnAgent finding into a comparable detection preserving relative path.
     """
+    file_path = vuln.location.file_path
+    p = Path(file_path)
+    if not p.is_absolute():
+        p = (samples_dir / p).resolve()
+    else:
+        p = p.resolve()
+    try:
+        rel_file = p.relative_to(samples_dir.resolve()).as_posix()
+    except ValueError:
+        rel_file = p.as_posix()
 
     return Detection(
-        file=Path(vuln.location.file_path).name,
+        file=rel_file,
         line=vuln.location.start_line,
         cwe=str(vuln.cwe_id).replace("CWE-", "").strip(),
-        type=vuln.type.value,
-        source=vuln.source.value,
+        type=vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type),
+        source=vuln.source.value if hasattr(vuln.source, "value") else str(vuln.source),
     )
 
 
@@ -328,20 +465,12 @@ async def run_vulnagent(
     confirmed_only: bool = False,
     verify: bool = False,
     verify_all: bool = False,
-    concurrency: int = 5
-) -> Tuple[List[Detection], float]:
+    concurrency: int = 5,
+    configuration_name: str = "VulnAgent",
+) -> RunRecord:
     """
-    Run one VulnAgent configuration over the dataset.
-
-    Args:
-        use_llm: Enable the LLM tier
-        use_semgrep: Enable the rule tier
-        confirmed_only: Keep only findings both tiers agreed on
-
-    Returns:
-        Tuple[List[Detection], float]: Detections and elapsed seconds
+    Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
     """
-
     options = ScanOptions(
         target=str(samples_dir),
         use_llm=use_llm,
@@ -351,29 +480,77 @@ async def run_vulnagent(
         verify=verify,
         verify_all=verify_all,
     )
-    result = await Scanner(options).scan()
+    started = time.perf_counter()
+    try:
+        result = await Scanner(options).scan()
+    except Exception as e:
+        elapsed = time.perf_counter() - started
+        return RunRecord(
+            configuration=configuration_name,
+            status="failed",
+            elapsed=elapsed,
+            errors=[f"Scanner exception: {e}"]
+        )
+
+    elapsed = time.perf_counter() - started
+    status = getattr(result, "status", "completed")
+    degraded = bool(getattr(result, "degraded", False))
+    errors = []
+    if result.stats.get("engine_failure"):
+        errors.append("Engine failure reported in scan stats")
+    if result.stats.get("rule_error"):
+        errors.append(f"Rule error: {result.stats['rule_error']}")
+    if result.stats.get("global_errors"):
+        errors.extend(result.stats["global_errors"])
+
+    if status in ("failed", "error") or (result.stats.get("engine_failure") and not result.vulnerabilities):
+        status = "failed"
+    elif degraded or status in ("partial", "incomplete"):
+        status = "degraded"
 
     findings = result.vulnerabilities
     if confirmed_only:
         findings = [v for v in findings if v.source == FindingSource.CONFIRMED]
 
-    return [_to_detection(v) for v in findings], result.stats.get("total_seconds", 0.0)
+    detections = [_to_detection(v, samples_dir) for v in findings]
+    raw_findings = [
+        v.to_dict() if hasattr(v, "to_dict") else {
+            "cwe": v.cwe_id,
+            "file": v.location.file_path,
+            "line": v.location.start_line
+        }
+        for v in findings
+    ]
+    coverage = {
+        "files_scanned": result.stats.get("files_scanned", len(result.reports)),
+        "files_requested": result.stats.get("files_requested", 0),
+        "total_seconds": result.stats.get("total_seconds", elapsed),
+    }
+
+    return RunRecord(
+        configuration=configuration_name,
+        status=status,
+        detections=detections,
+        elapsed=elapsed,
+        degraded=degraded,
+        coverage=coverage,
+        errors=errors,
+        raw_findings=raw_findings,
+    )
 
 
-def run_bandit(samples_dir: Path) -> Tuple[List[Detection], float]:
+def run_bandit(samples_dir: Path) -> RunRecord:
     """
-    Run Bandit as an external baseline.
-
-    Returns:
-        Tuple[List[Detection], float]: Detections and elapsed seconds
+    Run Bandit as an external baseline, returning a structured RunRecord.
     """
-
     executable = shutil.which("bandit")
     if not executable:
-        print("  bandit not installed; skipping (pip install bandit)")
-        return [], 0.0
+        return RunRecord(
+            configuration="Bandit (baseline)",
+            status="skipped",
+            errors=["bandit not installed (pip install bandit)"],
+        )
 
-    import time
     started = time.perf_counter()
     proc = subprocess.run(
         [executable, "-r", str(samples_dir), "-f", "json", "-q"],
@@ -381,47 +558,81 @@ def run_bandit(samples_dir: Path) -> Tuple[List[Detection], float]:
     )
     elapsed = time.perf_counter() - started
 
+    if proc.returncode not in (0, 1):
+        return RunRecord(
+            configuration="Bandit (baseline)",
+            status="failed",
+            elapsed=elapsed,
+            errors=[f"Bandit exited with code {proc.returncode}: {proc.stderr.strip()}"],
+        )
+
     try:
         payload = json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError:
-        print("  bandit produced unparseable output; skipping")
-        return [], elapsed
+    except json.JSONDecodeError as e:
+        return RunRecord(
+            configuration="Bandit (baseline)",
+            status="failed",
+            elapsed=elapsed,
+            errors=[f"Bandit produced unparseable JSON: {e}"],
+        )
 
     detections = []
     for item in payload.get("results", []):
+        filename = item.get("filename", "")
+        p = Path(filename)
+        if not p.is_absolute():
+            p = (samples_dir / p).resolve()
+        else:
+            p = p.resolve()
+        try:
+            rel_file = p.relative_to(samples_dir.resolve()).as_posix()
+        except ValueError:
+            rel_file = p.as_posix()
         cwe = item.get("issue_cwe", {}) or {}
         detections.append(Detection(
-            file=Path(item.get("filename", "")).name,
+            file=rel_file,
             line=int(item.get("line_number", 0)),
             cwe=str(cwe.get("id", "")).strip(),
             type=item.get("test_name", ""),
             source="bandit",
         ))
-    return detections, elapsed
+
+    return RunRecord(
+        configuration="Bandit (baseline)",
+        status="completed",
+        detections=detections,
+        elapsed=elapsed,
+        coverage={"files_scanned": len(list(samples_dir.rglob("*.py")))},
+        raw_findings=payload.get("results", []),
+    )
 
 
 def render_table(results: List[Metrics]) -> str:
     """
-    Format the comparison table.
-
-    Args:
-        results: Scored configurations
-
-    Returns:
-        str: A fixed-width table
+    Format the comparison table, distinguishing completed, degraded, and failed runs.
     """
-
     header = (
-        f"{'configuration':<22} {'TP':>4} {'FP':>4} {'FN':>4} "
+        f"{'configuration':<24} {'status':<10} {'TP':>4} {'FP':>4} {'FN':>4} "
         f"{'precision':>10} {'recall':>8} {'F1':>7} {'sec':>7}"
     )
     lines = [header, "-" * len(header)]
     for metrics in results:
+        status_str = metrics.status
+        if metrics.degraded and metrics.status == "completed":
+            status_str = "degraded"
+
+        if metrics.status not in ("completed", "degraded"):
+            lines.append(
+                f"{metrics.name:<24} {status_str:<10} {'---':>4} {'---':>4} "
+                f"{'---':>4} {'---':>10} {'---':>8} {'---':>7} {metrics.seconds:>7.1f}"
+            )
+            continue
+
         fp = "  n/a" if metrics.partial else f"{metrics.false_positives:>4}"
         precision = "       n/a" if metrics.partial else f"{metrics.precision:>10.3f}"
         f1 = "    n/a" if metrics.partial else f"{metrics.f1:>7.3f}"
         lines.append(
-            f"{metrics.name:<22} {metrics.true_positives:>4} {fp} "
+            f"{metrics.name:<24} {status_str:<10} {metrics.true_positives:>4} {fp} "
             f"{metrics.false_negatives:>4} {precision} "
             f"{metrics.recall:>8.3f} {f1} {metrics.seconds:>7.1f}"
         )
@@ -433,9 +644,6 @@ CONFIGURATIONS = {
     "confirmed": ("VulnAgent (confirmed)", dict(use_llm=True, use_semgrep=True, confirmed_only=True)),
     "semgrep": ("Semgrep only", dict(use_llm=False, use_semgrep=True)),
     "llm": ("LLM only", dict(use_llm=True, use_semgrep=False)),
-    # The agentic configurations. "verified" is the question the thesis
-    # actually asks: does letting the model investigate and try to refute its
-    # own findings fix the precision problem that single-shot prompting has?
     "verified": ("VulnAgent (agent-verified)", dict(use_llm=True, use_semgrep=True, verify=True)),
     "llm-verified": ("LLM only + agent verify", dict(use_llm=True, use_semgrep=False, verify=True, verify_all=True)),
 }
@@ -443,12 +651,8 @@ CONFIGURATIONS = {
 
 async def main() -> int:
     """
-    Run the evaluation.
-
-    Returns:
-        int: Process exit code
+    Run the evaluation across all selected configurations.
     """
-
     parser = argparse.ArgumentParser(description="Evaluate VulnAgent against labelled data.")
     parser.add_argument(
         "--dataset", default=str(DEFAULT_DATASET),
@@ -483,9 +687,6 @@ async def main() -> int:
         print("          ground truth is PARTIAL, so precision and F1 are not")
         print("          measurable here - an unmatched detection may well be a")
         print("          real defect nobody labelled. This run measures RECALL.")
-    # Precision is only meaningful when the corpus contains code that is
-    # known to be safe. Saying otherwise on a corpus that has 778 such files
-    # would throw away the one measurement it exists to provide.
     if meta["match_mode"] == "file" and not clean and not meta["partial_labels"]:
         print("          no file is known to be clean, so an unmatched detection")
         print("          cannot be judged: this run measures RECALL only.")
@@ -499,39 +700,77 @@ async def main() -> int:
             continue
         name, kwargs = CONFIGURATIONS[key]
         print(f"running {name}...")
-        detections, seconds = await run_vulnagent(
-            samples_dir, concurrency=args.concurrency, **kwargs
+        record = await run_vulnagent(
+            samples_dir, concurrency=args.concurrency, configuration_name=name, **kwargs
         )
-        metrics = match(detections, labels, name, meta["match_mode"], meta["partial_labels"], exact_cwe=args.exact_cwe)
-        metrics.seconds = seconds
+        metrics = match(
+            record.detections,
+            labels,
+            name,
+            match_mode=meta["match_mode"],
+            partial_labels=meta["partial_labels"],
+            exact_cwe=args.exact_cwe,
+            clean_files=clean,
+            run_status=record.status,
+            degraded=record.degraded,
+            errors=record.errors,
+            coverage=record.coverage,
+            raw_findings=record.raw_findings,
+        )
+        metrics.seconds = record.elapsed
         results.append(metrics)
 
     if not args.no_bandit and (not args.only or "bandit" in selected):
         print("running Bandit...")
-        detections, seconds = run_bandit(samples_dir)
-        if detections:
-            metrics = match(detections, labels, "Bandit (baseline)", meta["match_mode"], meta["partial_labels"], exact_cwe=args.exact_cwe)
-            metrics.seconds = seconds
-            results.append(metrics)
+        record = run_bandit(samples_dir)
+        metrics = match(
+            record.detections,
+            labels,
+            "Bandit (baseline)",
+            match_mode=meta["match_mode"],
+            partial_labels=meta["partial_labels"],
+            exact_cwe=args.exact_cwe,
+            clean_files=clean,
+            run_status=record.status,
+            degraded=record.degraded,
+            errors=record.errors,
+            coverage=record.coverage,
+            raw_findings=record.raw_findings,
+        )
+        metrics.seconds = record.elapsed
+        results.append(metrics)
 
     print()
     print(render_table(results))
     print()
 
+    # Report errors if any
+    has_failures = False
+    for metrics in results:
+        if metrics.status not in ("completed", "degraded"):
+            has_failures = True
+        if metrics.errors:
+            print(f"[{metrics.name}] Errors / Warnings:")
+            for err in metrics.errors:
+                print(f"  - {err}")
+            print()
+
     if clean:
-        print("False positives split:")
+        print("False positives breakdown:")
         for metrics in results:
-            if metrics.partial:
+            if metrics.partial or metrics.status not in ("completed", "degraded"):
                 continue
-            print(f"  {metrics.name:<22} {metrics.fp_on_clean:>4} in clean files"
-                  f"   {metrics.fp_wrong_type:>4} right file, wrong CWE")
+            print(f"  {metrics.name:<24} "
+                  f"clean_files: {metrics.fp_on_clean:>2} | "
+                  f"duplicates: {metrics.fp_duplicate:>2} | "
+                  f"wrong_line: {metrics.fp_wrong_line:>2} | "
+                  f"wrong_type: {metrics.fp_wrong_type:>2}")
         print()
 
-    # In file-mode the false-positive column is not interpretable, since a
-    # sample can legitimately contain defects beyond the one it is labelled
-    # for. Only the misses are worth listing.
     show_spurious = meta["match_mode"] == "line" and not meta["partial_labels"]
     for metrics in results:
+        if metrics.status not in ("completed", "degraded"):
+            continue
         if metrics.missed:
             print(f"{metrics.name} missed {len(metrics.missed)}:")
             for item in metrics.missed[:20]:
@@ -555,8 +794,13 @@ async def main() -> int:
                         "match_mode": meta["match_mode"],
                         "labels": len(labels),
                         "files": len(files),
+                        "partial_labels": meta["partial_labels"],
                     },
                     "line_tolerance": LINE_TOLERANCE,
+                    "manifest": {
+                        "timestamp": time.time(),
+                        "exact_cwe": args.exact_cwe,
+                    },
                     "results": [m.as_dict() for m in results],
                 },
                 indent=2, ensure_ascii=False
@@ -572,7 +816,7 @@ async def main() -> int:
             "reaches roughly 50-100 labelled vulnerabilities."
         )
 
-    return 0
+    return 1 if has_failures else 0
 
 
 if __name__ == "__main__":
