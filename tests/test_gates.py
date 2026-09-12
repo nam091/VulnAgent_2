@@ -2844,6 +2844,7 @@ def test_g601_bipartite_matching_permutation_invariance():
     Test G601: Matching must be invariant under permutations of detections and labels,
     solving the bipartite matching problem to maximize matched cardinality (TP)
     rather than greedily claiming sub-optimal matches.
+    Tie-breaking must use stable content signatures rather than array indices.
     """
     from eval.run_eval import Detection, Label, match
 
@@ -2883,13 +2884,16 @@ def test_g601_bipartite_matching_permutation_invariance():
     assert m3.f1 == 1.0
 
 
-def test_g602_execution_status_and_baseline_preservation():
+def test_g602_execution_status_and_baseline_preservation(tmp_path: Path):
     """
     Test G602: Loss of execution status and dropping empty baselines.
     1. Failed or degraded scanner runs retain status, degraded flag, and errors.
     2. Empty baseline (e.g. Bandit with 0 findings) is preserved in results table,
        not silently dropped.
+    3. Bandit syntax errors on files produce degraded/failed status with actual
+       error reasons and coverage counts, not clean completed runs.
     """
+    import shutil
     import subprocess
     from unittest.mock import patch
     from eval.run_eval import Label, match, render_table, run_bandit
@@ -2919,7 +2923,7 @@ def test_g602_execution_status_and_baseline_preservation():
     fake_completed = subprocess.CompletedProcess(
         args=["bandit"],
         returncode=0,
-        stdout=json.dumps({"results": []}),
+        stdout=json.dumps({"results": [], "errors": [], "metrics": {}}),
         stderr="",
     )
     with patch("shutil.which", return_value="C:\\dummy\\bandit.exe"), \
@@ -2944,13 +2948,40 @@ def test_g602_execution_status_and_baseline_preservation():
         assert "Bandit (baseline)" in table_bandit
         assert "completed" in table_bandit
 
+    # 3. Real Bandit test with syntax error file
+    broken_file = tmp_path / "broken.py"
+    broken_file.write_text("def broken(:\n", encoding="utf-8")
+    rec_broken = run_bandit(tmp_path)
+    # If bandit is installed, check that syntax error is properly captured as failed
+    if shutil.which("bandit"):
+        assert rec_broken.status in ("failed", "degraded")
+        assert rec_broken.degraded is True
+        assert len(rec_broken.errors) >= 1
+        assert rec_broken.coverage["files_scanned"] == 0
+        assert rec_broken.coverage["files_failed"] == 1
+        assert rec_broken.coverage["completion_rate"] == 0.0
+
+        # Add a valid clean file and verify degraded status
+        clean_file = tmp_path / "clean.py"
+        clean_file.write_text("x = 1\n", encoding="utf-8")
+        rec_mixed = run_bandit(tmp_path)
+        assert rec_mixed.status == "degraded"
+        assert rec_mixed.degraded is True
+        assert rec_mixed.coverage["files_scanned"] == 1
+        assert rec_mixed.coverage["files_failed"] == 1
+        assert rec_mixed.coverage["completion_rate"] == 0.5
+
 
 def test_g603_relative_path_preserves_subdirectory_identity(tmp_path: Path):
     """
     Test G603: Files with the same basename in different subdirectories
     must preserve their relative paths and not collide or match across projects.
+    Bandit must output identical relative paths whether invoked via absolute
+    or relative directory paths without doubling prefixes.
     """
-    from eval.run_eval import Label, match, _to_detection
+    import os
+    import shutil
+    from eval.run_eval import Label, match, _to_detection, run_bandit
     from conftest import make_vuln
 
     proj_a = tmp_path / "project_a"
@@ -2960,10 +2991,10 @@ def test_g603_relative_path_preserves_subdirectory_identity(tmp_path: Path):
 
     file_a = proj_a / "app.py"
     file_b = proj_b / "app.py"
-    file_a.write_text("user = input()\n", encoding="utf-8")
-    file_b.write_text("path = input()\n", encoding="utf-8")
+    file_a.write_text("import subprocess\nsubprocess.call('ls', shell=True)\n", encoding="utf-8")
+    file_b.write_text("import subprocess\nsubprocess.call('dir', shell=True)\n", encoding="utf-8")
 
-    # Labels distinguish project directories
+    # 1. Labels distinguish project directories
     labels = [
         Label(file="project_a/app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
         Label(file="project_b/app.py", line=20, cwe="CWE-22", type="PATH_TRAVERSAL"),
@@ -2979,21 +3010,53 @@ def test_g603_relative_path_preserves_subdirectory_identity(tmp_path: Path):
     assert det_a.file == "project_a/app.py"
     assert det_b.file == "project_b/app.py"
 
-    # Matching correctly matches both without cross-talk
     metrics = match([det_a, det_b], labels, "multi_project", match_mode="line")
     assert metrics.true_positives == 2
     assert metrics.false_positives == 0
     assert metrics.false_negatives == 0
     assert metrics.f1 == 1.0
 
+    # 2. Real Bandit test: compare absolute vs relative input path
+    if shutil.which("bandit"):
+        local_test_dir = Path("eval/.test_g603_relpath")
+        if local_test_dir.exists():
+            shutil.rmtree(local_test_dir, ignore_errors=True)
+        try:
+            (local_test_dir / "project_a").mkdir(parents=True, exist_ok=True)
+            (local_test_dir / "project_b").mkdir(parents=True, exist_ok=True)
+            (local_test_dir / "project_a" / "app.py").write_text("import subprocess\nsubprocess.call('ls', shell=True)\n", encoding="utf-8")
+            (local_test_dir / "project_b" / "app.py").write_text("import subprocess\nsubprocess.call('dir', shell=True)\n", encoding="utf-8")
 
-def test_g604_protocol_and_false_positive_breakdown():
+            # Absolute invocation
+            rec_abs = run_bandit(local_test_dir.resolve())
+            assert rec_abs.status == "completed"
+            files_abs = {d.file for d in rec_abs.detections}
+            assert "project_a/app.py" in files_abs
+            assert "project_b/app.py" in files_abs
+
+            # Relative invocation (relative to current working directory)
+            rel_dir = Path(os.path.relpath(local_test_dir, Path.cwd()))
+            rec_rel = run_bandit(rel_dir)
+            assert rec_rel.status == "completed"
+            files_rel = {d.file for d in rec_rel.detections}
+            assert files_rel == files_abs
+            assert "project_a/app.py" in files_rel
+            assert "project_b/app.py" in files_rel
+        finally:
+            if local_test_dir.exists():
+                shutil.rmtree(local_test_dir, ignore_errors=True)
+
+
+def test_g604_protocol_and_false_positive_breakdown(tmp_path: Path):
     """
     Test G604:
-    1. Dataset labels synchronization (labels.json XSS line 25, SecurityEval partial_labels).
-    2. False positive categorization into clean_files, duplicates, wrong_line, wrong_type.
+    1. Dataset labels synchronization (labels.json XSS line 25).
+    2. SecurityEval generator reproduces partial_labels=True and match produces null precision/F1.
+    3. False positive categorization into clean_files, duplicates, wrong_line, wrong_type.
     """
-    from eval.run_eval import Detection, Label, match
+    import math
+    from eval.run_eval import Detection, Label, match, load_dataset
+    from eval.prepare_securityeval import build
 
     # 1. Verify ground-truth labels files
     labels_file = Path("eval/dataset/labels.json")
@@ -3006,12 +3069,39 @@ def test_g604_protocol_and_false_positive_breakdown():
         assert len(xss_entries) == 1
         assert xss_entries[0]["line"] == 25, "XSS label should point to render_template_string sink on line 25"
 
-    se_file = Path("eval/datasets/securityeval/labels.json")
-    if se_file.exists():
-        se_data = json.loads(se_file.read_text(encoding="utf-8"))
-        assert se_data.get("partial_labels") is True or se_data.get("metadata", {}).get("partial_labels") is True
+    # 2. Reproduce SecurityEval generation via script and verify partial_labels=True
+    source_dir = tmp_path / "securityeval_source"
+    source_dir.mkdir()
+    jsonl_file = source_dir / "dataset.jsonl"
+    entry = {
+        "ID": "CWE-020_author_1",
+        "Insecure_code": "def parse_input(data):\n    return data\n",
+        "Prompt": "import re\ndef parse_input(data):\n"
+    }
+    jsonl_file.write_text(json.dumps(entry) + "\n", encoding="utf-8")
 
-    # 2. Verify FP categorization
+    out_dir = tmp_path / "securityeval_out"
+    summary = build(source_dir, out_dir)
+    assert summary["written"] == 1
+
+    se_labels, se_meta = load_dataset(out_dir)
+    assert se_meta["partial_labels"] is True
+    assert len(se_labels) == 1
+    assert se_labels[0].cwe == "20"
+
+    # Match against SecurityEval: recall is measured, precision and F1 are null in JSON as_dict()
+    se_det = Detection(file="CWE-020_author_1.py", line=1, cwe="20", type="")
+    se_metrics = match([se_det], se_labels, "SecurityEval_test", match_mode=se_meta["match_mode"], partial_labels=se_meta["partial_labels"])
+    assert se_metrics.true_positives == 1
+    assert math.isnan(se_metrics.precision)
+    assert math.isnan(se_metrics.f1)
+    assert se_metrics.partial is True
+    # In serialized JSON output, precision and F1 must be None (null)
+    assert se_metrics.as_dict()["precision"] is None
+    assert se_metrics.as_dict()["f1"] is None
+    assert se_metrics.as_dict()["fp"] is None
+
+    # 3. Verify FP categorization
     labels = [
         Label(file="app.py", line=10, cwe="CWE-89", type="SQL_INJECTION"),
     ]

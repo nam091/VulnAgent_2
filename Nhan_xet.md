@@ -1,5 +1,42 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review G601–G604 — 9518656 (12/09/2026)
+
+**G601 đã sửa ca sai TP/F1; G602–G604 có cải thiện nhưng chưa đóng hoàn toàn.** Review source mới và chạy probe Bandit thật trên thư mục tạm. Không chạy model hoặc benchmark chính. Các mục phía dưới là lịch sử.
+
+### Đã sửa
+
+- Matching dùng maximum-cardinality bipartite matching, xử lý ca labels 10/14 và detections 12/8; regression đảo findings/labels kiểm tra TP=2, F1=1.0. Lưu ý tie-break hiện dùng chỉ số i/j đầu vào, chưa bảo đảm cùng danh tính cặp ghép khi có nhiều phương án bằng nhau; phân biệt bất biến tổng TP với bất biến cặp ghép.
+- RunRecord giữ status/errors/raw findings; bảng giữ cả baseline rỗng và failed/skipped; metrics failed bị bỏ trống thay vì chấm như completed.
+- VulnAgent giữ relative path có thư mục trong ca regression hai project cùng basename. Nhãn XSS mặc định đã chuyển từ dòng 21 sang sink dòng 25. FP breakdown đã tách các nhóm trong ca line-level đầy đủ nhãn.
+
+### G603 — P1 còn ở Bandit: đường dẫn tương đối bị ghép hai lần
+
+`eval/run_eval.py:584` nối samples_dir vào mọi filename tương đối do Bandit trả. Khi chạy `run_bandit(Path('tmp...'))`, Bandit đã trả `tmp.../app.py` tương đối cwd; adapter biến thành đường dẫn dưới `tmp.../tmp.../app.py`, rồi detection.file còn `tmp.../app.py` thay vì `app.py`.
+
+Probe engine thật: repo tạm tương đối có app.py dùng subprocess.call; RunRecord completed nhưng cả hai detections đều có prefix tên thư mục tạm trong file identity. Nhãn app.py sẽ không match. Nhánh `--dataset eval/dataset` cũng có thể đi qua kiểu input tương đối này; regression hiện chỉ kiểm tra conversion của VulnAgent, chưa kiểm tra output Bandit thật.
+
+Sửa: resolve samples_dir tuyệt đối trước khi truyền vào Bandit, rồi chuẩn hóa filename theo contract/cwd của subprocess; chỉ nhận file trong dataset và trả relative path một lần. Regression chạy cùng dataset qua absolute/relative input, assert cùng detections/path/metrics, thêm hai thư mục có cùng basename.
+
+### G602 — P1 còn ở Bandit: bỏ qua lỗi từng file và báo coverage sai
+
+`run_bandit` kiểm tra returncode/JSON nhưng không đọc payload.errors, rồi luôn trả completed; files_scanned đếm file trên đĩa thay vì file thực sự phân tích. Probe Bandit thật với broken.py chứa `def broken(:`: harness trả **completed, errors=[], files_scanned=1**. Đây là ca lỗi cú pháp bị biến thành lượt completed rỗng.
+
+Sửa: lưu payload.errors, file statuses và coverage thực tế; lỗi parse phải failed/degraded theo policy, không completed. Bắt cả lỗi khởi chạy subprocess và kiểm tra schema output. Regression cần Bandit thật hoặc payload chuẩn có errors + results=[]; xác minh JSON/table/exit code không thể hiện lượt đó là thành công hoàn chỉnh. Với degraded, tài liệu cần chốt rõ metrics có tính trên toàn bộ tập hay không và báo tỷ lệ hoàn tất; không dùng degraded như completed không điều kiện.
+
+### G604 — P2: thay đổi SecurityEval chưa tái lập qua repository
+
+eval/datasets/securityeval/labels.json bị gitignore, không có trong git ls-files của commit. eval/prepare_securityeval.py vẫn không sinh partial_labels=True. Khi sinh mới corpus, loader mặc định False; main chỉ in lời nhắc recall-only, vẫn truyền False vào match nên precision/F1 vẫn có thể được tính. Test kiểm tra file nếu tồn tại nên có thể bỏ qua kiểm tra này trên checkout sạch.
+
+Sửa script prepare để sinh partial_labels=True đúng protocol; test tạo corpus fixture bằng script rồi load metadata và assert precision/F1=null. Không phụ thuộc dataset ignored tồn tại trên máy tác giả. Giữ test nhãn XSS tracked đã sửa. Các yêu cầu validate label nằm trong dataset/file tồn tại hiện mới cảnh báo; cần hoàn thiện trước chạy tập chính.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **113 passed, 1 warning, 94.15 giây**, không có skip được báo.
+- Hai probe Bandit thật ngoài suite tái hiện sai relative path và false-completed trên file syntax error như mô tả trên.
+
+Không coi bốn regression pass là đã bao phủ các adapter engine thực tế. Ưu tiên hai nhánh Bandit và metadata generator, rồi chạy smoke có manifest/raw artifacts trước khi khóa protocol G6. Timestamp/exact_cwe trong manifest là bước đầu; các hash/version/config/cold-warm và nghiệm thu editor/G7 vẫn theo checklist trước. Review chỉ cập nhật tài liệu; probe dùng thư mục tạm và không để lại thay đổi code/dataset.
+
 ## Review demo và harness G6/G7 — HEAD f4b4aaa (12/09/2026)
 
 **Có bộ mẫu và harness smoke, nhưng chưa đủ để nghiệm thu G6/G7 hoặc công bố kết quả đánh giá.** Workspace sạch trước review; HEAD f4b4aaa chỉ cập nhật tài liệu so với 206fe33. Không thấy commit code mới cho ba file người dùng nêu; review dựa trên eval/run_eval.py, eval/dataset/labels.json, eval/dataset/samples/vulnerable_app.py và examples/vulnerable_app.py đang có. Đã hỏi người dùng về commit/đường dẫn kịch bản mới nếu có.

@@ -10,6 +10,7 @@ that the hybrid beats either tier alone can be checked rather than asserted.
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import shutil
@@ -229,11 +230,17 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
 
     payload = json.loads(labels_file.read_text(encoding="utf-8"))
     samples_dir = dataset_dir / "samples"
+    abs_samples = samples_dir.resolve() if samples_dir.exists() else None
     labels = []
     for entry in payload.get("labels", []):
         rel_file = Path(entry["file"]).as_posix()
-        if samples_dir.is_dir():
-            target_file = (samples_dir / rel_file).resolve()
+        if abs_samples and abs_samples.is_dir():
+            target_file = (abs_samples / rel_file).resolve()
+            try:
+                target_file.relative_to(abs_samples)
+            except ValueError:
+                print(f"error: label references sample outside dataset: {rel_file}", file=sys.stderr)
+                raise SystemExit(2)
             if not target_file.is_file():
                 print(f"warning: label references non-existent sample {rel_file}", file=sys.stderr)
         labels.append(Label(
@@ -244,12 +251,16 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
             note=entry.get("note", "")
         ))
 
+    partial = bool(payload.get("partial_labels", False))
+    if "partial_labels" not in payload and payload.get("match_mode") == "file" and not payload.get("clean_files"):
+        partial = True
+
     meta = {
         "name": payload.get("name", dataset_dir.name),
         "source": payload.get("source", ""),
         "match_mode": payload.get("match_mode", "line"),
         "clean_files": [Path(f).as_posix() for f in payload.get("clean_files", [])],
-        "partial_labels": bool(payload.get("partial_labels", False)),
+        "partial_labels": partial,
     }
     return labels, meta
 
@@ -288,6 +299,13 @@ def _min_cost_max_bipartite_matching(
     for j in range(n_l):
         add_edge(("l", j), "t", 1, 0)
 
+    def _stable_tie_break(d: Detection, l: Label) -> int:
+        d_sig = f"{d.file}:{d.line}:{d.cwe}:{d.type}:{d.source}"
+        l_sig = f"{l.file}:{l.line}:{l.cwe}:{l.type}:{l.note}"
+        h1 = int(hashlib.md5(d_sig.encode("utf-8")).hexdigest()[:8], 16) % 10000
+        h2 = int(hashlib.md5(l_sig.encode("utf-8")).hexdigest()[:8], 16) % 10000
+        return h1 * 10000 + h2
+
     has_candidate_edge = False
     for i, d in enumerate(detections):
         for j, l in enumerate(labels):
@@ -298,7 +316,7 @@ def _min_cost_max_bipartite_matching(
             dist = abs(d.line - l.line) if match_mode == "line" else 0
             if match_mode == "line" and dist > tolerance:
                 continue
-            cost = dist * 100000 + i * 100 + j
+            cost = dist * 100000000 + _stable_tie_break(d, l)
             add_edge(("d", i), ("l", j), 1, cost)
             has_candidate_edge = True
 
@@ -551,11 +569,26 @@ def run_bandit(samples_dir: Path) -> RunRecord:
             errors=["bandit not installed (pip install bandit)"],
         )
 
+    abs_samples_dir = samples_dir.resolve()
+    all_py_files = list(abs_samples_dir.rglob("*.py"))
+    total_files = len(all_py_files)
+
     started = time.perf_counter()
-    proc = subprocess.run(
-        [executable, "-r", str(samples_dir), "-f", "json", "-q"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace"
-    )
+    try:
+        proc = subprocess.run(
+            [executable, "-r", str(abs_samples_dir), "-f", "json", "-q"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+    except Exception as e:
+        elapsed = time.perf_counter() - started
+        return RunRecord(
+            configuration="Bandit (baseline)",
+            status="failed",
+            elapsed=elapsed,
+            errors=[f"Failed to execute Bandit subprocess: {e}"],
+            coverage={"files_requested": total_files, "files_scanned": 0, "completion_rate": 0.0},
+        )
+
     elapsed = time.perf_counter() - started
 
     if proc.returncode not in (0, 1):
@@ -563,7 +596,8 @@ def run_bandit(samples_dir: Path) -> RunRecord:
             configuration="Bandit (baseline)",
             status="failed",
             elapsed=elapsed,
-            errors=[f"Bandit exited with code {proc.returncode}: {proc.stderr.strip()}"],
+            errors=[f"Bandit exited with error code {proc.returncode}: {proc.stderr.strip()}"],
+            coverage={"files_requested": total_files, "files_scanned": 0, "completion_rate": 0.0},
         )
 
     try:
@@ -574,20 +608,61 @@ def run_bandit(samples_dir: Path) -> RunRecord:
             status="failed",
             elapsed=elapsed,
             errors=[f"Bandit produced unparseable JSON: {e}"],
+            coverage={"files_requested": total_files, "files_scanned": 0, "completion_rate": 0.0},
         )
+
+    if not isinstance(payload, dict) or "results" not in payload:
+        return RunRecord(
+            configuration="Bandit (baseline)",
+            status="failed",
+            elapsed=elapsed,
+            errors=["Bandit JSON output missing expected 'results' list schema"],
+            coverage={"files_requested": total_files, "files_scanned": 0, "completion_rate": 0.0},
+        )
+
+    # Check for per-file errors (e.g. syntax errors or parser failures)
+    raw_errors = payload.get("errors", [])
+    error_messages = []
+    error_files = set()
+    for err in raw_errors:
+        fn = err.get("filename", "unknown")
+        reason = err.get("reason", "unknown error")
+        error_messages.append(f"{fn}: {reason}")
+        error_files.add(fn)
+
+    successfully_scanned = max(0, total_files - len(error_files))
+    completion_rate = (successfully_scanned / total_files) if total_files > 0 else 1.0
+
+    # Determine execution status based on error presence and scanned files
+    if error_messages:
+        if successfully_scanned == 0 and total_files > 0:
+            status = "failed"
+            degraded = True
+        else:
+            status = "degraded"
+            degraded = True
+    else:
+        status = "completed"
+        degraded = False
 
     detections = []
     for item in payload.get("results", []):
         filename = item.get("filename", "")
         p = Path(filename)
         if not p.is_absolute():
-            p = (samples_dir / p).resolve()
+            if (abs_samples_dir / p).exists():
+                p = (abs_samples_dir / p).resolve()
+            else:
+                p = p.resolve()
         else:
             p = p.resolve()
+
         try:
-            rel_file = p.relative_to(samples_dir.resolve()).as_posix()
+            rel_file = p.relative_to(abs_samples_dir).as_posix()
         except ValueError:
-            rel_file = p.as_posix()
+            # Result is outside the evaluated samples directory
+            continue
+
         cwe = item.get("issue_cwe", {}) or {}
         detections.append(Detection(
             file=rel_file,
@@ -599,10 +674,17 @@ def run_bandit(samples_dir: Path) -> RunRecord:
 
     return RunRecord(
         configuration="Bandit (baseline)",
-        status="completed",
+        status=status,
         detections=detections,
         elapsed=elapsed,
-        coverage={"files_scanned": len(list(samples_dir.rglob("*.py")))},
+        degraded=degraded,
+        coverage={
+            "files_requested": total_files,
+            "files_scanned": successfully_scanned,
+            "files_failed": len(error_files),
+            "completion_rate": completion_rate,
+        },
+        errors=error_messages,
         raw_findings=payload.get("results", []),
     )
 
@@ -747,10 +829,15 @@ async def main() -> int:
     # Report errors if any
     has_failures = False
     for metrics in results:
-        if metrics.status not in ("completed", "degraded"):
+        if metrics.status != "completed" or metrics.degraded:
             has_failures = True
-        if metrics.errors:
-            print(f"[{metrics.name}] Errors / Warnings:")
+        if metrics.errors or metrics.degraded:
+            print(f"[{metrics.name}] Status: {metrics.status} (degraded={metrics.degraded})")
+            if metrics.coverage:
+                scanned = metrics.coverage.get("files_scanned", 0)
+                req = metrics.coverage.get("files_requested", 0)
+                rate = metrics.coverage.get("completion_rate", 0.0) * 100
+                print(f"  Coverage: {scanned}/{req} files scanned ({rate:.1f}% completion)")
             for err in metrics.errors:
                 print(f"  - {err}")
             print()

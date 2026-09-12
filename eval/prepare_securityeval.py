@@ -150,6 +150,7 @@ def build(source: Path, out: Path, include_prompt: bool = True) -> Dict:
             "requires the hand-labelled dataset, which includes clean files."
         ),
         "clean_files": [],
+        "partial_labels": True,
         "labels": labels,
     }
 
