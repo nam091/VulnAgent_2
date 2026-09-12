@@ -1,5 +1,30 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — bfb7163 (12/09/2026)
+
+**Tokenizer sửa được lỗi thay đổi chuỗi; E05 còn mở ở nhánh nhận diện command legacy.** Review chỉ tập trung thay đổi mới và hai ca E05 trước đó. Các phần dưới là lịch sử.
+
+### Đã xác minh
+
+- `_clean_jsonc` tách string literal khỏi dấu phẩy cấu trúc. Probe round-trip giữ nguyên `a,}`, `b,]`, URL, quote và backslash. Regression mới kiểm tra thêm comment markers và trailing comma trong list.
+- Command `python tools/cli.py lint` và command echo nhắc chữ VulnAgent được giữ nguyên. Entry mới có ID ổn định; fixture migration và cấu hình lặp lại đã được bổ sung.
+- Không thay đổi kết luận đã đóng lỗi launcher E02 và hard budget E06 của lượt trước.
+
+### E05 — P1: legacy pattern vẫn xóa nhầm command của dự án khác
+
+Trong `_is_vulnagent_save_command`, regex legacy khớp đường dẫn bất kỳ kết thúc `/src/cli.py` rồi tới `hook`; không xác minh đường dẫn đó thuộc VulnAgent. Probe trên settings tạm có ba commands: `python tools/cli.py lint`, `python C:/OtherProject/src/cli.py hook --check`, và `echo keep-me vulnagent`. Sau configure, command thứ hai bị xóa; hai command còn lại được giữ. Đây vẫn là lỗi mất cấu hình do suy đoán quyền sở hữu từ tên file/subcommand.
+
+Sửa: ưu tiên ID sở hữu rõ ràng. Với entry chưa có ID, chỉ tự migrate khi executable/launcher và cấu trúc lệnh khớp bản cài VulnAgent đã biết; không coi mọi src/cli.py hook là VulnAgent. Nếu không xác minh được launcher cũ thì giữ command và báo migration chưa xác định, thay vì xóa. Nhánh current_launcher cũng nên parse lời gọi thực tế thay vì chỉ kiểm tra launcher xuất hiện ở đâu đó trong text và có chữ hook.
+
+Nghiệm thu: giữ nguyên command ở đường dẫn dự án khác, command echo chỉ in đường dẫn launcher, và command tools/cli.py; chỉ thay entry ID của VulnAgent hoặc launcher đã xác minh. Chạy configure hai lần, assert từng command người dùng còn nguyên và không nhân đôi entry do VulnAgent sở hữu. Không cần thay tokenizer thêm để xử lý finding này.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **109 passed, 1 warning, 62.41 giây**; không có skip được báo.
+- Probe ngoài suite xác nhận string round-trip và hai command cũ được giữ, nhưng command của OtherProject bị xóa. Chỉ dùng thư mục tạm.
+
+Chưa đóng toàn bộ E05 vì probe trên còn lỗi. Giữ nguyên hướng Python + Semgrep; sau khi thu hẹp migration, tiếp tục nghiệm thu trigger on-save trên editor thật và G6/G7 theo plan. Lượt này chỉ cập nhật Nhan_xet.md, không sửa code/cấu hình thật và không gọi model.
+
 ## Cập nhật mới nhất — 325ada9 (12/09/2026)
 
 **Review E02, E05, E06: launcher đã sửa; hard budget đã có; E05 chưa đóng hoàn toàn. 108/108 tests pass.** Các phần phía dưới là lịch sử review.

@@ -1620,6 +1620,14 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
         '      },\n'
         '      {\n'
         '        "match": "\\\\.py$",\n'
+        '        "cmd": "python C:/OtherProject/src/cli.py hook --check",\n'
+        '      },\n'
+        '      {\n'
+        '        "match": ".*",\n'
+        '        "cmd": "echo \\"Using F:/Projects/VulnAgent/src/cli.py hook\\"",\n'
+        '      },\n'
+        '      {\n'
+        '        "match": "\\\\.py$",\n'
         '        "cmd": "python -m cli hook --target \\"${workspaceFolder}\\" --files \\"${file}\\" --trailing",\n'
         '      },\n'
         '    ],\n'
@@ -1668,14 +1676,16 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     assert settings_data["emeraldwalk.runonsave"]["autoClearConsole"] is True
 
     cmds = settings_data["emeraldwalk.runonsave"]["commands"]
-    # User commands must ALL be preserved
+    # User commands must ALL be preserved (including other projects and echo commands)
     assert any(c.get("cmd") == "eslint ${file}" for c in cmds)
     assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds)
     assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds)
+    assert any(c.get("cmd") == "python C:/OtherProject/src/cli.py hook --check" for c in cmds)
+    assert any("Using F:/Projects/VulnAgent/src/cli.py hook" in c.get("cmd", "") for c in cmds)
     # Legacy hook command replaced by current hook command
     assert not any(c.get("cmd") == 'python -m cli hook --target "${workspaceFolder}" --files "${file}" --trailing' for c in cmds)
     assert any(c.get("id") == "vulnagent-on-save" for c in cmds)
-    assert len(cmds) == 4
+    assert len(cmds) == 6
 
     # Check tasks.json preserved user build task
     tasks_data = json.loads((config_dir / "tasks.json").read_text(encoding="utf-8"))
@@ -1688,10 +1698,12 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     assert res2["hook_configured"] is True
     settings_data2 = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
     cmds2 = settings_data2["emeraldwalk.runonsave"]["commands"]
-    assert len(cmds2) == 4
+    assert len(cmds2) == 6
     assert any(c.get("cmd") == "eslint ${file}" for c in cmds2)
     assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds2)
     assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds2)
+    assert any(c.get("cmd") == "python C:/OtherProject/src/cli.py hook --check" for c in cmds2)
+    assert any("Using F:/Projects/VulnAgent/src/cli.py hook" in c.get("cmd", "") for c in cmds2)
 
 
 def test_r09_parse_jsonc_preserves_complex_strings():

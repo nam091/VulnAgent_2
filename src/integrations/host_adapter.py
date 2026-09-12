@@ -120,14 +120,26 @@ def _parse_jsonc(text: str) -> Dict[str, Any]:
     return json.loads(cleaned)
 
 
+def _split_cmd_tokens(cmd: str) -> List[str]:
+    import shlex
+    try:
+        raw = shlex.split(cmd, posix=False)
+        return [t.strip('"\'') for t in raw]
+    except Exception:
+        return [t.strip('"\'') for t in cmd.split()]
+
+
 def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
     """
-    Check if a command entry in emeraldwalk.runonsave['commands'] belongs to VulnAgent,
-    avoiding false positives on user commands like 'python tools/cli.py lint' or 'echo vulnagent'.
+    Check if a command entry in emeraldwalk.runonsave['commands'] belongs to VulnAgent.
+    Prioritizes stable IDs, verifies actual launcher paths against this VulnAgent install,
+    and only migrates legacy commands with verified structure; preserves unverified commands
+    and commands belonging to other projects.
     """
     if not isinstance(item, dict):
         return False
-    # 1. Check stable identifier
+
+    # 1. Explicit stable identifier
     if item.get("id") == "vulnagent-on-save" or item.get("name") == "VulnAgent On-Save Security Check":
         return True
 
@@ -135,21 +147,59 @@ def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
     if not cmd:
         return False
 
-    # 2. Check if current launcher is explicitly invoked with 'hook'
-    if current_launcher and current_launcher in cmd:
-        import re
-        if re.search(r'\bhook\b', cmd):
-            return True
+    tokens = _split_cmd_tokens(cmd)
+    if not tokens:
+        return False
 
-    # 3. Known legacy VulnAgent command patterns for migration
-    import re
-    legacy_patterns = [
-        r'^(?:python\d*(?:\.exe)?|sys\.executable|"[^"]*python[^"]*")\s+-m\s+cli\s+hook\b',
-        r'(?:^|\s)["\']?[^"\']*?[/\\]src[/\\]cli\.py["\']?\s+hook\b',
-    ]
-    for pattern in legacy_patterns:
-        if re.search(pattern, cmd, re.IGNORECASE):
-            return True
+    exe_name = Path(tokens[0]).name.lower()
+
+    cur_launcher_path = None
+    if current_launcher:
+        try:
+            cur_launcher_path = Path(current_launcher).resolve()
+        except Exception:
+            pass
+
+    script_arg = None
+    remaining_args: List[str] = []
+
+    is_python_exe = exe_name in ("python", "python.exe", "python3", "python3.exe", "py", "py.exe") or "python" in exe_name
+
+    if is_python_exe and len(tokens) > 1:
+        # Check for legacy invocation: python -m cli hook ...
+        idx = 1
+        # Skip optional python interpreter flags (-u, -B, -O, etc.)
+        while idx < len(tokens) and tokens[idx].startswith("-") and tokens[idx] not in ("-m", "-c"):
+            if tokens[idx] in ("-W", "-X") and idx + 1 < len(tokens):
+                idx += 2
+            else:
+                idx += 1
+
+        if idx + 2 < len(tokens) and tokens[idx] == "-m" and tokens[idx + 1].lower() == "cli" and tokens[idx + 2].lower() == "hook":
+            # Only migrate if arguments contain VulnAgent save-hook parameters
+            cmd_lower = cmd.lower()
+            if "${workspacefolder}" in cmd_lower or "--target" in tokens[idx + 3:] or "--files" in tokens[idx + 3:]:
+                return True
+
+        if idx < len(tokens) and not tokens[idx].startswith("-"):
+            script_arg = tokens[idx]
+            remaining_args = tokens[idx + 1:]
+    else:
+        # Direct launcher execution: e.g. /path/to/src/cli.py hook ...
+        if exe_name == "cli.py":
+            script_arg = tokens[0]
+            remaining_args = tokens[1:]
+
+    # Verify that the invoked script resolves to THIS VulnAgent's launcher
+    if script_arg and cur_launcher_path:
+        try:
+            target_path = Path(script_arg).resolve()
+            # On Windows, path comparison should be case-insensitive
+            if target_path == cur_launcher_path or str(target_path).lower() == str(cur_launcher_path).lower():
+                if remaining_args and remaining_args[0].lower() == "hook":
+                    return True
+        except Exception:
+            pass
 
     return False
 
