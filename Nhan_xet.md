@@ -1,5 +1,28 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review G602–G604 — e6fccae (13/09/2026)
+
+**Bản sửa xử lý các ca G602–G604 còn mở ở lượt review 9518656.** Kết luận đóng bên dưới giới hạn ở những lỗi cụ thể đã báo; không đồng nghĩa toàn bộ G6/G7 đã nghiệm thu. Các phần dưới là lịch sử.
+
+### Bằng chứng kiểm chứng
+
+- **G602 — status/coverage Bandit:** đã đọc payload.errors, phân biệt failed/degraded, giữ lỗi và số file thất bại; lỗi subprocess/schema cơ bản có RunRecord failed. Probe ngoài suite chạy CLI eval với Bandit thật và xuất JSON: một file hợp lệ cho exit 0, completed, coverage 1/1; đổi file thành lỗi cú pháp cho exit 1, failed, coverage 0/1, files_failed=1, completion_rate=0, precision=null và lỗi AST được lưu. Đây là kiểm tra xuyên qua adapter → metrics → JSON → exit code.
+- **G603 — relative path Bandit:** samples_dir được resolve tuyệt đối trước khi gọi engine; đường dẫn findings được chuyển về tương đối dataset. Regression mới chạy Bandit thật qua absolute và relative input, kiểm tra cùng tập project_a/app.py và project_b/app.py, không ghép prefix hai lần. Engine Bandit có mặt trong môi trường review nên nhánh kiểm tra này được thực thi.
+- **G604 — metadata tái lập:** prepare_securityeval.build sinh partial_labels=True trong labels.json; test dựng source fixture, gọi build rồi load_dataset và match, assert precision/F1/FP là null. Không còn phụ thuộc bản labels ignored trên máy tác giả để nghiệm thu ca này. Nhãn XSS sink dòng 25 vẫn được kiểm tra trong suite.
+
+### Kiểm thử
+
+- `python -m pytest tests -q -ra`: **113 passed, 1 warning, 113.08 giây**, không có skip được báo.
+- Probe CLI eval/Bandit thật ngoài suite đạt hai trường hợp completed và syntax-failed như mô tả trên.
+
+### Kết luận và bước tiếp theo
+
+Có thể đóng ba lỗi cụ thể: Bandit false-completed khi syntax error, relative-path doubling, và SecurityEval metadata chưa tái lập. Không phát hiện lại các lỗi này trong lượt review; không mở thêm finding từ giới hạn test đơn thuần.
+
+Harness đã phù hợp hơn để chuyển sang pilot. Trước chạy thí nghiệm chính, vẫn cần khóa protocol/nhãn/splits, manifest hash/version/config, raw artifacts, policy degraded/uncertain và cold/warm theo plan. Demo on-save trên host thật và cài mới G7 vẫn là nghiệm thu riêng, chưa được thực hiện ở lượt này. Không dùng 113 tests để tuyên bố độ chính xác detector hoặc hoàn tất toàn bộ đồ án.
+
+Review chỉ cập nhật Nhan_xet.md; probe CLI dùng dataset/output trong thư mục tạm, không ghi đè kết quả thí nghiệm của người dùng và không gọi model.
+
 ## Review G601–G604 — 9518656 (12/09/2026)
 
 **G601 đã sửa ca sai TP/F1; G602–G604 có cải thiện nhưng chưa đóng hoàn toàn.** Review source mới và chạy probe Bandit thật trên thư mục tạm. Không chạy model hoặc benchmark chính. Các mục phía dưới là lịch sử.

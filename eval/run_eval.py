@@ -13,11 +13,13 @@ import asyncio
 import hashlib
 import json
 import logging
+import platform
 import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -206,6 +208,40 @@ class Metrics:
             "spurious": self.spurious,
             "raw_findings": self.raw_findings,
         }
+
+
+def _compute_sha256(p: Path) -> str:
+    if not p.is_file():
+        return ""
+    h = hashlib.sha256()
+    h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+def _compute_dir_hash(p: Path) -> str:
+    if not p.is_dir():
+        return ""
+    h = hashlib.sha256()
+    for f in sorted(p.rglob("*")):
+        if f.is_file():
+            rel = f.relative_to(p).as_posix()
+            h.update(rel.encode("utf-8"))
+            h.update(f.read_bytes())
+    return h.hexdigest()
+
+
+def _get_git_info() -> Dict[str, Any]:
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+        ).strip()
+        status_output = subprocess.check_output(
+            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, text=True
+        ).strip()
+        is_dirty = len(status_output) > 0
+        return {"commit": commit, "dirty": is_dirty}
+    except Exception:
+        return {"commit": "unknown", "dirty": None}
 
 
 def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
@@ -485,6 +521,7 @@ async def run_vulnagent(
     verify_all: bool = False,
     concurrency: int = 5,
     configuration_name: str = "VulnAgent",
+    use_cache: bool = True,
 ) -> RunRecord:
     """
     Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
@@ -494,7 +531,7 @@ async def run_vulnagent(
         use_llm=use_llm,
         use_semgrep=use_semgrep,
         concurrency=concurrency,
-        use_cache=True,
+        use_cache=use_cache,
         verify=verify,
         verify_all=verify_all,
     )
@@ -543,7 +580,15 @@ async def run_vulnagent(
         "files_scanned": result.stats.get("files_scanned", len(result.reports)),
         "files_requested": result.stats.get("files_requested", 0),
         "total_seconds": result.stats.get("total_seconds", elapsed),
+        "cache_hits": result.stats.get("cache_hits", 0),
+        "cache_misses": result.stats.get("cache_misses", 0),
+        "cache_mode": "warm" if use_cache else "cold",
+        "rule_tier_seconds": result.stats.get("rule_tier_seconds", 0.0),
+        "llm_tier_seconds": result.stats.get("llm_tier_seconds", 0.0),
     }
+    for k in ("verify_seconds", "verify_uncertain", "verify_refuted", "verify_supported"):
+        if k in result.stats:
+            coverage[k] = result.stats[k]
 
     return RunRecord(
         configuration=configuration_name,
@@ -748,8 +793,11 @@ async def main() -> int:
     parser.add_argument("--no-bandit", action="store_true", help="Skip the Bandit baseline")
     parser.add_argument("--exact-cwe", action="store_true", help="Require exact CWE number match (no equivalence classes)")
     parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
+    parser.add_argument("--no-cache", action="store_true", help="Disable analyzer caching to measure cold latency and model variance")
+    parser.add_argument("--cold", action="store_true", help="Alias for --no-cache")
     args = parser.parse_args()
 
+    use_cache = not (args.no_cache or args.cold)
     dataset_dir = Path(args.dataset)
     samples_dir = dataset_dir / "samples"
     labels, meta = load_dataset(dataset_dir)
@@ -765,6 +813,7 @@ async def main() -> int:
         print(f"          finding is a false positive")
     print(f"Matching: {meta['match_mode']}-level"
           + (f" (+/-{LINE_TOLERANCE} lines)" if meta["match_mode"] == "line" else ""))
+    print(f"Cache   : {'warm' if use_cache else 'cold (disabled)'}")
     if meta["partial_labels"]:
         print("          ground truth is PARTIAL, so precision and F1 are not")
         print("          measurable here - an unmatched detection may well be a")
@@ -783,7 +832,7 @@ async def main() -> int:
         name, kwargs = CONFIGURATIONS[key]
         print(f"running {name}...")
         record = await run_vulnagent(
-            samples_dir, concurrency=args.concurrency, configuration_name=name, **kwargs
+            samples_dir, concurrency=args.concurrency, configuration_name=name, use_cache=use_cache, **kwargs
         )
         metrics = match(
             record.detections,
@@ -872,26 +921,42 @@ async def main() -> int:
             print()
 
     if args.json:
+        rules_path = ROOT / "rules" / "pinned_security_rules.yaml"
+        labels_path = dataset_dir / "labels.json"
+        manifest_payload = {
+            "version": "1.0",
+            "environment": {
+                "platform": platform.platform(),
+                "python_version": sys.version.split()[0],
+                "executable": sys.executable,
+                "git": _get_git_info(),
+            },
+            "dataset": {
+                "name": meta["name"],
+                "source": meta["source"],
+                "match_mode": meta["match_mode"],
+                "labels": len(labels),
+                "files": len(files),
+                "partial_labels": meta["partial_labels"],
+                "labels_sha256": _compute_sha256(labels_path),
+                "samples_sha256": _compute_dir_hash(samples_dir),
+            },
+            "rules": {
+                "path": str(rules_path.relative_to(ROOT)) if rules_path.exists() else None,
+                "sha256": _compute_sha256(rules_path) if rules_path.exists() else None,
+            },
+            "protocol": {
+                "line_tolerance": LINE_TOLERANCE,
+                "exact_cwe": args.exact_cwe,
+                "cache_mode": "warm" if use_cache else "cold",
+                "concurrency": args.concurrency,
+                "timestamp": time.time(),
+                "iso_timestamp": datetime.now().isoformat(),
+            },
+            "results": [m.as_dict() for m in results],
+        }
         Path(args.json).write_text(
-            json.dumps(
-                {
-                    "dataset": {
-                        "name": meta["name"],
-                        "source": meta["source"],
-                        "match_mode": meta["match_mode"],
-                        "labels": len(labels),
-                        "files": len(files),
-                        "partial_labels": meta["partial_labels"],
-                    },
-                    "line_tolerance": LINE_TOLERANCE,
-                    "manifest": {
-                        "timestamp": time.time(),
-                        "exact_cwe": args.exact_cwe,
-                    },
-                    "results": [m.as_dict() for m in results],
-                },
-                indent=2, ensure_ascii=False
-            ),
+            json.dumps(manifest_payload, indent=2, ensure_ascii=False),
             encoding="utf-8"
         )
         print(f"wrote {args.json}")
