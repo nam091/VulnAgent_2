@@ -1,5 +1,28 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — 206fe33 (12/09/2026)
+
+**Có thể đóng E05 trong phạm vi các ca lỗi đã ghi nhận và tái hiện ở các lượt trước.** Nhánh suy đoán quyền sở hữu từ `python -m cli hook --files/--target` đã được bỏ. Các mục E05 mở ở phần lịch sử bên dưới được thay thế bởi kết luận này.
+
+### Bằng chứng kiểm tra lại
+
+- Probe tạo repo tạm với cli.py riêng; chạy `python -m cli hook --files app.py` từ repo đó, không có PYTHONPATH: exit 0, output OTHER_PROJECT_CLI. Sau configure, command này được giữ nguyên.
+- Cùng probe giữ nguyên command launcher tuyệt đối của OtherProject và `python tools/cli.py lint`. Chạy configure hai lần: cả ba command người dùng vẫn còn nguyên, entry ID vulnagent-on-save chỉ có một, lệnh cũ có ID được thay bằng launcher hiện tại.
+- Regression đã đổi kỳ vọng đúng: command module chưa xác minh được giữ, entry có ID được cập nhật. Các ca JSONC/string, tasks/settings và git-hook của E05 vẫn nằm trong suite.
+
+### Kiểm thử
+
+- `python -m pytest tests -q -ra`: **109 passed, 1 warning, 117.46 giây**, không có skip được báo.
+- Probe E05 ngoài suite đạt các kiểm tra bảo toàn command và cập nhật idempotent như mô tả trên.
+
+### Trạng thái so với plan
+
+Không phát hiện lại các lỗi E05 đã báo trong phạm vi review này; không mở thêm finding chỉ từ giới hạn kiểm thử. Giữ kết luận E02 launcher độc lập và E06 ngân sách fix đã sửa. Đây là nghiệm thu các lỗi cụ thể, chưa phải khẳng định mọi trường hợp shell/migration hay toàn bộ plan đã hoàn tất.
+
+Bước tiếp theo là demo trigger on-save trên một editor thật: save tự gọi hook, phản hồi kết quả, save liên tiếp và save trong lúc scan; kiểm tra riêng contention dài/đa file còn được ghi ở E03. Sau đó nghiệm thu G6/G7 bằng protocol, dataset, baseline, raw results và quy trình cài mới. Không cần tiếp tục mở rộng migration để chuyển sang các bước này.
+
+Review chỉ cập nhật Nhan_xet.md; các probe dùng thư mục tạm, không sửa code/cấu hình thật và không gọi model.
+
 ## Cập nhật mới nhất — dead210 (12/09/2026)
 
 **Ca launcher tuyệt đối khác dự án đã sửa; E05 còn mở ở fallback `python -m cli`.** Không mở rộng phạm vi review: đây vẫn là yêu cầu bảo toàn command chưa xác minh được quyền sở hữu. Các phần phía dưới là lịch sử.
