@@ -1,5 +1,31 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Cập nhật mới nhất — dead210 (12/09/2026)
+
+**Ca launcher tuyệt đối khác dự án đã sửa; E05 còn mở ở fallback `python -m cli`.** Không mở rộng phạm vi review: đây vẫn là yêu cầu bảo toàn command chưa xác minh được quyền sở hữu. Các phần phía dưới là lịch sử.
+
+### Đã xác minh
+
+- Command `python C:/OtherProject/src/cli.py hook --check` không còn bị nhận là VulnAgent. Regression mới kiểm tra giữ command này và command echo chỉ nhắc launcher, kể cả sau configure hai lần.
+- Nhánh script dùng token và đối chiếu đường dẫn với launcher hiện tại, tốt hơn regex tên file trước đó. Giữ nguyên kết luận tokenizer, launcher độc lập và fix budget ở các lượt trước.
+
+### E05 — P1: fallback module vẫn xóa command của dự án khác
+
+Trong `_is_vulnagent_save_command`, nhánh `-m cli hook` trả True khi thấy workspaceFolder, --target hoặc --files; nhánh này trả về trước phần kiểm tra đường dẫn launcher. Các tham số đó không chứng minh module cli thuộc VulnAgent.
+
+Probe tái hiện đầy đủ: tạo repo tạm có cli.py riêng in `OTHER_PROJECT_CLI`, cấu hình command `python -m cli hook --files app.py`. Chạy Python hiện tại với cùng args từ repo tạm, không có PYTHONPATH: exit 0, output OTHER_PROJECT_CLI. Sau configure_editor_save_hook, command biến mất khỏi settings. Như vậy không chỉ là trường hợp giả định trùng tên: module thực thi đã được kiểm tra là module khác.
+
+**Cách sửa gọn nhất:** bỏ tự nhận quyền sở hữu cho entry không có ID dùng `-m cli`, giữ nguyên command này. Chỉ tự thay entry có ID VulnAgent hoặc lời gọi script đã xác minh đường dẫn. Nếu muốn migrate module cũ tự động, phải có bằng chứng bổ sung về bản cài/môi trường thực thi; không thay bằng thêm heuristic tên flag. Không import/chạy module không rõ nguồn chỉ để kiểm tra trong init.
+
+Regression hiện tại đang yêu cầu xóa command `python -m cli hook --target ...` không có ID; cần đổi kỳ vọng sang giữ entry chưa xác minh, hoặc bổ sung bằng chứng sở hữu cho fixture đó. Thêm repo có cli.py riêng như probe, assert command còn nguyên sau hai lần configure và hook ID mới không bị nhân đôi.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **109 passed, 1 warning, 53.75 giây**, không có skip được báo.
+- Probe ngoài suite: launcher tuyệt đối khác dự án được giữ; command module cli riêng vẫn bị xóa như mô tả trên.
+
+Chưa đóng toàn bộ E05. Chỉ cần xử lý nhánh module còn lại trong phạm vi finding này; chưa có lý do thay tokenizer hay đổi hướng Python + Semgrep. Nghiệm thu editor thật và các gate thí nghiệm vẫn tách riêng như các review trước. Lượt này chỉ sửa Nhan_xet.md; probe dùng thư mục tạm, không sửa code/cấu hình thật hoặc gọi model.
+
 ## Cập nhật mới nhất — bfb7163 (12/09/2026)
 
 **Tokenizer sửa được lỗi thay đổi chuỗi; E05 còn mở ở nhánh nhận diện command legacy.** Review chỉ tập trung thay đổi mới và hai ca E05 trước đó. Các phần dưới là lịch sử.

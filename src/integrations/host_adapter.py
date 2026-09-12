@@ -132,9 +132,9 @@ def _split_cmd_tokens(cmd: str) -> List[str]:
 def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
     """
     Check if a command entry in emeraldwalk.runonsave['commands'] belongs to VulnAgent.
-    Prioritizes stable IDs, verifies actual launcher paths against this VulnAgent install,
-    and only migrates legacy commands with verified structure; preserves unverified commands
-    and commands belonging to other projects.
+    Only claims ownership for entries with explicit VulnAgent identifiers or where
+    the executed launcher path is verified against this VulnAgent installation.
+    Preserves all other commands (including 'python -m cli' without proof of ownership).
     """
     if not isinstance(item, dict):
         return False
@@ -160,26 +160,22 @@ def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
         except Exception:
             pass
 
+    if not cur_launcher_path:
+        return False
+
     script_arg = None
     remaining_args: List[str] = []
 
     is_python_exe = exe_name in ("python", "python.exe", "python3", "python3.exe", "py", "py.exe") or "python" in exe_name
 
     if is_python_exe and len(tokens) > 1:
-        # Check for legacy invocation: python -m cli hook ...
         idx = 1
         # Skip optional python interpreter flags (-u, -B, -O, etc.)
-        while idx < len(tokens) and tokens[idx].startswith("-") and tokens[idx] not in ("-m", "-c"):
+        while idx < len(tokens) and tokens[idx].startswith("-"):
             if tokens[idx] in ("-W", "-X") and idx + 1 < len(tokens):
                 idx += 2
             else:
                 idx += 1
-
-        if idx + 2 < len(tokens) and tokens[idx] == "-m" and tokens[idx + 1].lower() == "cli" and tokens[idx + 2].lower() == "hook":
-            # Only migrate if arguments contain VulnAgent save-hook parameters
-            cmd_lower = cmd.lower()
-            if "${workspacefolder}" in cmd_lower or "--target" in tokens[idx + 3:] or "--files" in tokens[idx + 3:]:
-                return True
 
         if idx < len(tokens) and not tokens[idx].startswith("-"):
             script_arg = tokens[idx]
@@ -191,7 +187,7 @@ def _is_vulnagent_save_command(item: Any, current_launcher: str) -> bool:
             remaining_args = tokens[1:]
 
     # Verify that the invoked script resolves to THIS VulnAgent's launcher
-    if script_arg and cur_launcher_path:
+    if script_arg:
         try:
             target_path = Path(script_arg).resolve()
             # On Windows, path comparison should be case-insensitive

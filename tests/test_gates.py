@@ -1630,11 +1630,25 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
         '        "match": "\\\\.py$",\n'
         '        "cmd": "python -m cli hook --target \\"${workspaceFolder}\\" --files \\"${file}\\" --trailing",\n'
         '      },\n'
+        '      {\n'
+        '        "match": "\\\\.py$",\n'
+        '        "cmd": "python -m cli hook --files app.py",\n'
+        '      },\n'
+        '      {\n'
+        '        "id": "vulnagent-on-save",\n'
+        '        "name": "VulnAgent On-Save Security Check",\n'
+        '        "match": "\\\\.py$",\n'
+        '        "cmd": "outdated vulnagent command",\n'
+        '      },\n'
         '    ],\n'
         '  },\n'
         "}\n"
     )
     (config_dir / "settings.json").write_text(existing_settings_raw, encoding="utf-8")
+
+    # Local cli.py simulating another project's cli module in root
+    local_cli = tmp_path / "cli.py"
+    local_cli.write_text("print('OTHER_PROJECT_CLI')\n", encoding="utf-8")
 
     # 2. Existing tasks.json with custom user task containing comment and trailing commas
     existing_tasks_raw = (
@@ -1676,16 +1690,19 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     assert settings_data["emeraldwalk.runonsave"]["autoClearConsole"] is True
 
     cmds = settings_data["emeraldwalk.runonsave"]["commands"]
-    # User commands must ALL be preserved (including other projects and echo commands)
+    # User commands must ALL be preserved (including other projects, echo commands, and unverified -m cli)
     assert any(c.get("cmd") == "eslint ${file}" for c in cmds)
     assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds)
     assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds)
     assert any(c.get("cmd") == "python C:/OtherProject/src/cli.py hook --check" for c in cmds)
     assert any("Using F:/Projects/VulnAgent/src/cli.py hook" in c.get("cmd", "") for c in cmds)
-    # Legacy hook command replaced by current hook command
-    assert not any(c.get("cmd") == 'python -m cli hook --target "${workspaceFolder}" --files "${file}" --trailing' for c in cmds)
-    assert any(c.get("id") == "vulnagent-on-save" for c in cmds)
-    assert len(cmds) == 6
+    assert any(c.get("cmd") == 'python -m cli hook --target "${workspaceFolder}" --files "${file}" --trailing' for c in cmds)
+    assert any(c.get("cmd") == "python -m cli hook --files app.py" for c in cmds)
+    # The entry with VulnAgent ID was updated to current launcher hook command
+    vulnagent_cmds = [c for c in cmds if c.get("id") == "vulnagent-on-save"]
+    assert len(vulnagent_cmds) == 1
+    assert "outdated vulnagent command" not in vulnagent_cmds[0].get("cmd", "")
+    assert len(cmds) == 8
 
     # Check tasks.json preserved user build task
     tasks_data = json.loads((config_dir / "tasks.json").read_text(encoding="utf-8"))
@@ -1698,12 +1715,15 @@ async def test_r09_editor_hook_preserves_existing_settings_and_tasks(tmp_path: P
     assert res2["hook_configured"] is True
     settings_data2 = json.loads((config_dir / "settings.json").read_text(encoding="utf-8"))
     cmds2 = settings_data2["emeraldwalk.runonsave"]["commands"]
-    assert len(cmds2) == 6
+    assert len(cmds2) == 8
     assert any(c.get("cmd") == "eslint ${file}" for c in cmds2)
     assert any(c.get("cmd") == "python tools/cli.py lint" for c in cmds2)
     assert any(c.get("cmd") == "echo 'keep-me vulnagent mention'" for c in cmds2)
     assert any(c.get("cmd") == "python C:/OtherProject/src/cli.py hook --check" for c in cmds2)
     assert any("Using F:/Projects/VulnAgent/src/cli.py hook" in c.get("cmd", "") for c in cmds2)
+    assert any(c.get("cmd") == 'python -m cli hook --target "${workspaceFolder}" --files "${file}" --trailing' for c in cmds2)
+    assert any(c.get("cmd") == "python -m cli hook --files app.py" for c in cmds2)
+    assert len([c for c in cmds2 if c.get("id") == "vulnagent-on-save"]) == 1
 
 
 def test_r09_parse_jsonc_preserves_complex_strings():
