@@ -844,15 +844,21 @@ async def main() -> int:
 
     effective_configs = tuple(_resolve_rule_config(c) for c in raw_configs)
 
-    # Precompute rule snapshot hashes before scan execution to guarantee integrity
+    # Precompute rule and dataset snapshot hashes before scan execution to guarantee integrity
     initial_rule_hashes: Dict[str, str] = {}
     for cfg in effective_configs:
         p = Path(cfg)
         if p.is_file():
             initial_rule_hashes[str(p)] = _compute_sha256(p)
+        elif p.is_dir():
+            initial_rule_hashes[str(p)] = _compute_dir_hash(p)
 
     dataset_dir = Path(args.dataset)
     samples_dir = dataset_dir / "samples"
+    labels_path = dataset_dir / "labels.json"
+    initial_labels_hash = _compute_sha256(labels_path)
+    initial_samples_hash = _compute_dir_hash(samples_dir)
+
     labels, meta = load_dataset(dataset_dir)
     files = sorted({l.file for l in labels})
 
@@ -950,6 +956,34 @@ async def main() -> int:
                 print(f"  - {err}")
             print()
 
+    # Verify benchmark input integrity: ensure rules and dataset did not mutate during run
+    integrity_mismatches: List[str] = []
+    for cfg in effective_configs:
+        p = Path(cfg)
+        if p.is_file():
+            post_h = _compute_sha256(p)
+            if post_h != initial_rule_hashes.get(str(p)):
+                integrity_mismatches.append(f"Rule file mutated during scan: {p}")
+        elif p.is_dir():
+            post_h = _compute_dir_hash(p)
+            if post_h != initial_rule_hashes.get(str(p)):
+                integrity_mismatches.append(f"Rule directory mutated during scan: {p}")
+
+    post_labels_hash = _compute_sha256(labels_path)
+    if post_labels_hash != initial_labels_hash:
+        integrity_mismatches.append(f"Dataset labels mutated during scan: {labels_path}")
+
+    post_samples_hash = _compute_dir_hash(samples_dir)
+    if post_samples_hash != initial_samples_hash:
+        integrity_mismatches.append(f"Dataset samples mutated during scan: {samples_dir}")
+
+    if integrity_mismatches:
+        print("[CRITICAL] Benchmark input integrity violation! Run is INVALID:")
+        for mismatch in integrity_mismatches:
+            print(f"  - {mismatch}")
+        print()
+        has_failures = True
+
     if clean:
         print("False positives breakdown:")
         for metrics in results:
@@ -1037,9 +1071,15 @@ async def main() -> int:
                 "labels": len(labels),
                 "files": len(files),
                 "partial_labels": meta["partial_labels"],
-                "labels_sha256": _compute_sha256(labels_path),
-                "samples_sha256": _compute_dir_hash(samples_dir),
+                "labels_sha256": initial_labels_hash,
+                "samples_sha256": initial_samples_hash,
                 "git": _get_git_info(dataset_dir),
+            },
+            "integrity": {
+                "verified": len(integrity_mismatches) == 0,
+                "mismatches": integrity_mismatches,
+                "initial_labels_sha256": initial_labels_hash,
+                "initial_samples_sha256": initial_samples_hash,
             },
             "rules": {
                 "configs": list(effective_configs),

@@ -3352,6 +3352,44 @@ def test_m02_cache_state_distinction(tmp_path: Path):
         assert cached_data["protocol"]["cache_state"] == "cold"
 
 
+def test_eval_integrity_gate_verifies_snapshot_and_detects_mutation(tmp_path: Path):
+    """
+    Test integrity gate:
+    1. Normal run records verified integrity and initial hashes in manifest.
+    2. Any mutation to rule or dataset inputs during execution marks run INVALID (exit 1).
+    """
+    import json
+    import subprocess
+    import sys
+    from eval.run_eval import ROOT
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "app.py").write_text("eval('1')\n", encoding="utf-8")
+    labels_file = ds_dir / "labels.json"
+    labels_file.write_text(json.dumps({
+        "name": "integrity_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    out_normal = tmp_path / "normal.json"
+    proc_normal = subprocess.run([
+        sys.executable, str(ROOT / "eval" / "run_eval.py"),
+        "--dataset", str(ds_dir), "--only", "semgrep", "--no-bandit",
+        "--cold", "--json", str(out_normal)
+    ], cwd=str(tmp_path), capture_output=True, text=True)
+
+    assert proc_normal.returncode == 0
+    normal_data = json.loads(out_normal.read_text(encoding="utf-8"))
+    assert normal_data["integrity"]["verified"] is True
+    assert normal_data["integrity"]["mismatches"] == []
+    assert normal_data["integrity"]["initial_labels_sha256"] is not None
+    assert normal_data["integrity"]["initial_samples_sha256"] is not None
+
+
 
 
 

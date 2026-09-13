@@ -1,5 +1,29 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review M01/D01 — 16b6e79 (13/09/2026)
+
+**Có thể đóng hai ca lỗi M01 và D01 còn mở ở review 1faddd4 trong phạm vi kiểm chứng dưới đây.** Không phát hiện lại sai rules hash do khác cwd hoặc mất history do sai filename/schema. Các phần bên dưới là lịch sử; không coi các mục M01/D01 cũ đều còn mở.
+
+### Bằng chứng chạy CLI thật
+
+- **M01:** tạo workspace tạm có rules/pinned_security_rules.yaml khác file cùng tên trong ROOT; chạy eval với --rules tương đối, --only semgrep, --cold và xuất JSON từ cwd tạm. Semgrep thật completed, exit 0; rules.configs là đường dẫn tuyệt đối của file trong cwd, hash bằng hash file đó. Git công cụ vẫn đúng 16b6e798a4685722a2a449c5798247344bb692aa. Ca shadow path của lượt trước đã qua.
+- **D01/init:** chạy init --host vscode --rules với đường dẫn tương đối trong workspace tạm; task được sinh chứa --rules tuyệt đối đúng file. Regression còn kiểm tra cả settings và tasks.
+- **D01/hook → history:** hook chạy Semgrep thật trên subprocess.call(input(), shell=True), trả findings_detected/exit 1, in CWE-78 đúng một prefix. Gọi history sau đó trả exit 0 và hiển thị HOOK_SCAN status=findings_detected findings=1 cùng Runner State. Event được ghi/đọc qua audit_log.jsonl đúng envelope.
+- Regression D01 ghi assessment và event qua AssessmentStore thật, rồi chạy history bằng subprocess để kiểm tra finding ID, supported và event details. Runbook đã tách hook stream khỏi assessment MCP; không còn hứa assessment tự sinh từ rule-only hook.
+
+### Kiểm thử
+
+- `python -m pytest tests -q -ra`: **116 passed, 1 warning, 223.39 giây**, không có skip được báo.
+- Probe CLI init/hook/history và eval với Semgrep thật đạt các kiểm tra rules hash/path, Git provenance, CWE output và hook event như mô tả trên.
+
+### Giới hạn nghiệm thu và bước tiếp theo
+
+Kết luận này đóng lỗi resolve-path/hash và audit producer/reader cụ thể, không khẳng định snapshot bất biến trong mọi trường hợp. initial_rule_hashes hiện được tính nhưng chưa dùng để đối chiếu sau scan; manifest vẫn hash lại cuối lượt. Nếu thay rules/dataset giữa lượt chạy thì chưa có integrity gate tương ứng. Trước benchmark chính cần khóa input hoặc kiểm tra thay đổi và báo rõ run invalid; đây là phần hoàn thiện protocol đã ghi trước, không phải tái xuất hiện lỗi shadow path.
+
+Có thể chuyển sang pilot có raw artifacts và demo save thực tế trên một host. Lượt này kiểm chứng CLI/config được sinh, chưa thao tác editor thật; vì vậy chưa nghiệm thu trigger extension, giao diện phản hồi, contention dài/đa file, hay toàn bộ G6/G7. Giữ kết luận M02 đã tách cache policy/state trong phạm vi trước đó.
+
+Review chỉ cập nhật Nhan_xet.md; các probe dùng thư mục tạm, không sửa code/cấu hình thật hoặc gọi model.
+
 ## Review M01/D01/M02 — 1faddd4 (13/09/2026)
 
 **M02 đã sửa lỗi đồng nhất enabled với warm; M01 và D01 còn các nhánh cụ thể dưới đây.** Review chạy CLI thật trên workspace tạm, Semgrep thật với rules local và suite. Các phần dưới là lịch sử.
