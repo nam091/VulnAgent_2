@@ -15,27 +15,35 @@ Hướng dẫn thao tác nghiệm thu tính năng on-save trigger, diagnostic fe
   pip install semgrep bandit
   ```
 - **Thiết lập Rules Offline:**
-  Để quy trình editor hook chạy hoàn toàn offline không gọi ra ngoài:
-  ```bash
-  # Trên Linux / macOS:
-  export VULNAGENT_SEMGREP_RULES="rules/pinned_security_rules.yaml"
+  Để quy trình editor hook chạy hoàn toàn offline không gọi ra ngoài mạng, có hai cách thiết lập:
+  - **Cách 1 (Khuyến nghị):** Truyền trực tiếp `--rules` vào lệnh `init` để ghi cấu hình tuyệt đối vào settings/tasks của editor:
+    ```bash
+    python src/cli.py init --host vscode --rules "rules/pinned_security_rules.yaml"
+    ```
+    Cách này đảm bảo tiến trình Extension Host của VS Code/Cursor luôn nhận được đường dẫn rules mà không phụ thuộc vào biến môi trường terminal.
+  - **Cách 2:** Đặt biến môi trường trước khi khởi động editor từ terminal:
+    ```bash
+    # Trên Linux / macOS:
+    export VULNAGENT_SEMGREP_RULES="rules/pinned_security_rules.yaml"
+    code .
 
-  # Trên Windows PowerShell:
-  $env:VULNAGENT_SEMGREP_RULES = "rules/pinned_security_rules.yaml"
-  ```
+    # Trên Windows PowerShell:
+    $env:VULNAGENT_SEMGREP_RULES = "rules/pinned_security_rules.yaml"
+    code .
+    ```
 
 ---
 
 ## 2. Bước 1: Khởi tạo cấu hình Editor Hook
 
-Chạy lệnh khởi tạo tự động cho workspace (chọn host `vscode` hoặc `cursor`):
+Chạy lệnh khởi tạo tự động cho workspace (chọn host `vscode` hoặc `cursor` kèm `--rules` offline):
 
 ```bash
-# Cấu hình tự động cho VS Code:
-python src/cli.py init --host vscode
+# Cấu hình tự động cho VS Code kèm rules offline:
+python src/cli.py init --host vscode --rules "rules/pinned_security_rules.yaml"
 
 # Hoặc cho Cursor:
-python src/cli.py init --host cursor
+python src/cli.py init --host cursor --rules "rules/pinned_security_rules.yaml"
 ```
 
 ### Kiểm tra sức khỏe môi trường:
@@ -51,15 +59,16 @@ Mở file `.vscode/settings.json` (hoặc `.cursor/settings.json`), xác nhận 
   "emeraldwalk.runonsave": {
     "commands": [
       {
+        "id": "vulnagent-on-save",
+        "name": "VulnAgent On-Save Security Check",
         "match": "\\.py$",
-        "cmd": "\"<python_path>\" \"<project_root>/src/cli.py\" hook --target \"${workspaceFolder}\" --files \"${file}\" --trailing",
-        "id": "vulnagent-on-save"
+        "cmd": "\"<python_path>\" \"<project_root>/src/cli.py\" hook --target \"${workspaceFolder}\" --files \"${file}\" --trailing --rules \"<project_root>/rules/pinned_security_rules.yaml\""
       }
     ]
   }
 }
 ```
-Và file `.vscode/tasks.json` chứa task `"VulnAgent On-Save Security Check"`.
+Và file `.vscode/tasks.json` chứa task `"VulnAgent On-Save Security Check"` với arguments tương ứng.
 
 *Ghi chú bảo toàn:* Lệnh `init` là idempotent, bảo tồn toàn bộ tasks và settings có sẵn của người dùng, chỉ cập nhật entry có id `vulnagent-on-save`.
 
@@ -77,10 +86,10 @@ Và file `.vscode/tasks.json` chứa task `"VulnAgent On-Save Security Check"`.
 4. **Phản hồi mong đợi (Expected Output trong Terminal):**
    ```text
    Hook status: findings_detected
-     - [HIGH] SQL_INJECTION (CWE-89) at examples/vulnerable_app.py:17
+     - [CRITICAL] SQL_INJECTION (CWE-89) at examples/vulnerable_app.py:17
      - [HIGH] CROSS_SITE_SCRIPTING (CWE-79) at examples/vulnerable_app.py:25
      - [MEDIUM] PATH_TRAVERSAL (CWE-22) at examples/vulnerable_app.py:31
-     - [HIGH] OS_COMMAND_INJECTION (CWE-78) at examples/vulnerable_app.py:38
+     - [CRITICAL] OS_COMMAND_INJECTION (CWE-78) at examples/vulnerable_app.py:38
    ```
    Exit code của tiến trình: `1` (báo hiệu phát hiện lỗ hổng bảo mật).
 
@@ -128,22 +137,26 @@ Kịch bản kiểm tra khả năng không bị nuốt sự kiện save khi scan
 
 - Thư mục lưu vết kiểm toán và trạng thái:
   - Trạng thái runner: `.vulnagent-audit/runner_state.json`
-  - Nhật ký sự kiện và bằng chứng: `.vulnagent-audit/audit.jsonl`
+  - Nhật ký sự kiện & assessment: `.vulnagent-audit/audit_log.jsonl` (chuẩn schema `AssessmentStore`)
   - Cache nội dung: `.vulnagent-cache/`
 
 - Kiểm tra audit trail qua CLI:
   ```bash
   python src/cli.py history --limit 5
   ```
-  Output mẫu:
+  Output mẫu từ luồng on-save hook:
   ```text
-  VulnAgent Audit Trail:
-    [2026-09-13T...] SCAN             status=completed  scan_id=...
-    [2026-09-13T...] ASSESSMENT       status=supported  finding_id=...
-  
+  VulnAgent Audit Trail (1 entries):
+    [2026-09-13T12:00:00.000000] HOOK_SCAN        status=findings_detected findings=4 target=/path/to/workspace
+
   Runner State (.vulnagent-audit/runner_state.json):
-    Last on-save run: 2026-09-13T...
+    Last on-save run: 2026-09-13T12:00:00.000000
     Tracked files:    1
+  ```
+
+  Khi có phiên làm việc qua MCP workflow (gọi `assess_finding` qua `AssessmentStore`), danh sách audit sẽ hiển thị các bản ghi đánh giá chi tiết:
+  ```text
+    [2026-09-13T12:05:00.000000] ASSESSMENT       status=supported  finding_id=finding-01 assessor=agent (Verified taint sink)
   ```
 
 - Kiểm tra qua giao thức MCP stdio:

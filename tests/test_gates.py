@@ -3157,26 +3157,34 @@ def test_m01_manifest_rules_and_git_provenance_from_arbitrary_cwd(tmp_path: Path
     assert len(git_info["commit"]) == 40
     assert git_info["repo_root"] == str(ROOT.resolve())
 
-    # 2. Test CLI execution from other_cwd with rules override
-    custom_rules_file = tmp_path / "custom_security_rules.yaml"
+    # 2. Test CLI execution from other_cwd with relative path --rules rules/pinned_security_rules.yaml
+    # where other_cwd has its own rules file with different content from ROOT's rules file
+    other_rules_dir = other_cwd / "rules"
+    other_rules_dir.mkdir(parents=True, exist_ok=True)
+    custom_rules_file = other_rules_dir / "pinned_security_rules.yaml"
     custom_rules_content = (
+        "# UNIQUE CWD RULES OVERRIDE TEST\n"
         "rules:\n"
-        "  - id: custom-test-rule\n"
+        "  - id: custom-test-rule-cwd\n"
         "    patterns:\n"
         "      - pattern: eval(...)\n"
-        "    message: 'Custom rule test'\n"
+        "    message: 'Custom CWD rule test'\n"
         "    languages: [python]\n"
         "    severity: ERROR\n"
         "    metadata:\n"
         "      cwe: 'CWE-94: Code Injection'\n"
     )
     custom_rules_file.write_bytes(custom_rules_content.encode("utf-8"))
-    expected_rule_hash = hashlib.sha256(custom_rules_file.read_bytes()).hexdigest()
+    expected_cwd_rule_hash = hashlib.sha256(custom_rules_file.read_bytes()).hexdigest()
 
-    # Setup small dataset
-    ds_dir = tmp_path / "dataset"
+    root_rules_file = ROOT / "rules" / "pinned_security_rules.yaml"
+    root_rule_hash = hashlib.sha256(root_rules_file.read_bytes()).hexdigest()
+    assert expected_cwd_rule_hash != root_rule_hash
+
+    # Setup small dataset in other_cwd
+    ds_dir = other_cwd / "dataset"
     samples_dir = ds_dir / "samples"
-    samples_dir.mkdir(parents=True)
+    samples_dir.mkdir(parents=True, exist_ok=True)
     (samples_dir / "target.py").write_text("x = eval('1+1')\n", encoding="utf-8")
     labels_content = {
         "schema_version": 1,
@@ -3189,16 +3197,16 @@ def test_m01_manifest_rules_and_git_provenance_from_arbitrary_cwd(tmp_path: Path
     }
     (ds_dir / "labels.json").write_text(json.dumps(labels_content), encoding="utf-8")
 
-    out_json = tmp_path / "eval_out.json"
+    out_json = other_cwd / "eval_out.json"
 
-    # Run eval CLI from other_cwd with custom rules override
+    # Run eval CLI from other_cwd passing relative path --rules rules/pinned_security_rules.yaml
     cmd = [
         sys.executable,
         str(ROOT / "eval" / "run_eval.py"),
         "--dataset", str(ds_dir),
         "--only", "semgrep",
         "--no-bandit",
-        "--rules", str(custom_rules_file),
+        "--rules", "rules/pinned_security_rules.yaml",
         "--cold",
         "--json", str(out_json),
     ]
@@ -3208,8 +3216,10 @@ def test_m01_manifest_rules_and_git_provenance_from_arbitrary_cwd(tmp_path: Path
 
     data = json.loads(out_json.read_text(encoding="utf-8"))
     assert data["environment"]["git"]["commit"] == git_info["commit"]
-    assert data["rules"]["sha256"] == expected_rule_hash
-    assert data["rules"]["path"] == str(custom_rules_file)
+    assert data["rules"]["sha256"] == expected_cwd_rule_hash
+    assert data["rules"]["sha256"] != root_rule_hash
+    assert data["rules"]["path"] == str(custom_rules_file.resolve())
+    assert data["rules"]["configs"] == [str(custom_rules_file.resolve())]
     assert data["protocol"]["cache_policy"] == "disabled"
     assert data["protocol"]["cache_state"] == "disabled"
     assert "semgrep" in data["environment"]["engines"]
@@ -3218,34 +3228,68 @@ def test_m01_manifest_rules_and_git_provenance_from_arbitrary_cwd(tmp_path: Path
 def test_d01_cli_history_init_and_doctor(tmp_path: Path):
     """
     Test D01:
-    1. python src/cli.py history --limit 5 exits with code 0 without parser error.
-    2. python src/cli.py init --host vscode configures .vscode settings and tasks.
+    1. AssessmentStore writes real assessment and event records to audit_log.jsonl;
+       python src/cli.py history --target <dir> --limit 5 displays both ASSESSMENT and EVENT.
+    2. python src/cli.py init --host vscode --rules rules/pinned_security_rules.yaml
+       bakes absolute rules path into .vscode settings.json and tasks.json.
     3. python src/cli.py doctor runs successfully.
     """
+    import json
     import subprocess
     import sys
     from eval.run_eval import ROOT
+    from models.assessment import AssessmentStore, FindingAssessment, AssessmentStatus
 
-    # 1. history subcommand
+    # 1. Real AssessmentStore persistence & history reading
+    audit_dir = tmp_path / ".vulnagent-audit"
+    store = AssessmentStore(storage_dir=audit_dir)
+    store.save(FindingAssessment(
+        finding_id="finding-d01-test",
+        snapshot_id="snap-d01",
+        status=AssessmentStatus.SUPPORTED,
+        reason="Verified sink in test",
+        assessor="agent",
+    ))
+    store.record_event("test_hook_event", {
+        "status": "findings_detected",
+        "findings_count": 4,
+        "target": str(tmp_path),
+    })
+
     res_hist = subprocess.run(
-        [sys.executable, str(ROOT / "src" / "cli.py"), "history", "--limit", "5"],
+        [sys.executable, str(ROOT / "src" / "cli.py"), "history", "--target", str(tmp_path), "--limit", "5"],
         cwd=str(ROOT),
         capture_output=True,
         text=True,
     )
     assert res_hist.returncode == 0
-    assert "No audit records found" in res_hist.stdout or "Audit Trail" in res_hist.stdout
+    assert "VulnAgent Audit Trail" in res_hist.stdout
+    assert "ASSESSMENT" in res_hist.stdout
+    assert "finding-d01-test" in res_hist.stdout
+    assert "supported" in res_hist.stdout
+    assert "TEST_HOOK_EVENT" in res_hist.stdout
+    assert "findings=4" in res_hist.stdout
 
-    # 2. init --host vscode in tmp_path
+    # 2. init --host vscode with --rules
     res_init = subprocess.run(
-        [sys.executable, str(ROOT / "src" / "cli.py"), "init", "--host", "vscode"],
+        [
+            sys.executable, str(ROOT / "src" / "cli.py"),
+            "init", "--host", "vscode",
+            "--rules", str(ROOT / "rules" / "pinned_security_rules.yaml")
+        ],
         cwd=str(tmp_path),
         capture_output=True,
         text=True,
     )
     assert res_init.returncode == 0
-    assert (tmp_path / ".vscode" / "tasks.json").is_file()
-    assert (tmp_path / ".vscode" / "settings.json").is_file()
+    tasks_file = tmp_path / ".vscode" / "tasks.json"
+    settings_file = tmp_path / ".vscode" / "settings.json"
+    assert tasks_file.is_file()
+    assert settings_file.is_file()
+    tasks_content = tasks_file.read_text(encoding="utf-8")
+    settings_content = settings_file.read_text(encoding="utf-8")
+    assert "--rules" in tasks_content
+    assert "--rules" in settings_content
 
     # 3. doctor in ROOT
     res_doc = subprocess.run(

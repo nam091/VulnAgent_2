@@ -231,6 +231,21 @@ def _compute_dir_hash(p: Path) -> str:
     return h.hexdigest()
 
 
+def _resolve_rule_config(cfg: str) -> str:
+    """
+    Resolve rule config once according to CLI / CWD precedence.
+    Returns resolved absolute path string if local file/directory exists, else raw config string.
+    """
+    p = Path(cfg)
+    if p.is_absolute():
+        return str(p.resolve())
+    if p.exists():
+        return str(p.resolve())
+    if (ROOT / p).exists():
+        return str((ROOT / p).resolve())
+    return cfg
+
+
 def _get_git_info(repo_path: Optional[Path] = None) -> Dict[str, Any]:
     target_repo = (repo_path or ROOT).resolve()
     try:
@@ -817,14 +832,24 @@ async def main() -> int:
     use_cache = not (args.no_cache or args.cold)
 
     # Resolve effective Semgrep rules before scan execution
+    raw_configs: Tuple[str, ...]
     if args.rules:
-        effective_configs = tuple(r.strip() for r in args.rules.split(",") if r.strip())
+        raw_configs = tuple(r.strip() for r in args.rules.split(",") if r.strip())
     elif os.environ.get("VULNAGENT_SEMGREP_RULES"):
-        effective_configs = tuple(r.strip() for r in os.environ["VULNAGENT_SEMGREP_RULES"].split(",") if r.strip())
+        raw_configs = tuple(r.strip() for r in os.environ["VULNAGENT_SEMGREP_RULES"].split(",") if r.strip())
     elif (ROOT / "rules" / "pinned_security_rules.yaml").is_file():
-        effective_configs = (str(ROOT / "rules" / "pinned_security_rules.yaml"),)
+        raw_configs = (str((ROOT / "rules" / "pinned_security_rules.yaml").resolve()),)
     else:
-        effective_configs = ("p/python", "p/security-audit")
+        raw_configs = ("p/python", "p/security-audit")
+
+    effective_configs = tuple(_resolve_rule_config(c) for c in raw_configs)
+
+    # Precompute rule snapshot hashes before scan execution to guarantee integrity
+    initial_rule_hashes: Dict[str, str] = {}
+    for cfg in effective_configs:
+        p = Path(cfg)
+        if p.is_file():
+            initial_rule_hashes[str(p)] = _compute_sha256(p)
 
     dataset_dir = Path(args.dataset)
     samples_dir = dataset_dir / "samples"
@@ -957,37 +982,26 @@ async def main() -> int:
     if args.json:
         labels_path = dataset_dir / "labels.json"
 
-        # Compute effective rules metadata
+        # Compute effective rules metadata directly from resolved configs
         rule_entries = []
         primary_path = None
         primary_sha256 = None
         for cfg in effective_configs:
             p = Path(cfg)
-            if not p.is_absolute():
-                if (ROOT / p).exists():
-                    p = (ROOT / p).resolve()
-                elif p.exists():
-                    p = p.resolve()
             if p.is_file():
                 h = _compute_sha256(p)
-                try:
-                    rel_path = str(p.relative_to(ROOT))
-                except ValueError:
-                    rel_path = str(p)
-                rule_entries.append({"type": "file", "path": rel_path, "sha256": h})
+                path_str = str(p.resolve())
+                rule_entries.append({"type": "file", "path": path_str, "sha256": h})
                 if primary_sha256 is None:
                     primary_sha256 = h
-                    primary_path = rel_path
+                    primary_path = path_str
             elif p.is_dir():
                 h = _compute_dir_hash(p)
-                try:
-                    rel_path = str(p.relative_to(ROOT))
-                except ValueError:
-                    rel_path = str(p)
-                rule_entries.append({"type": "directory", "path": rel_path, "sha256": h})
+                path_str = str(p.resolve())
+                rule_entries.append({"type": "directory", "path": path_str, "sha256": h})
                 if primary_sha256 is None:
                     primary_sha256 = h
-                    primary_path = rel_path
+                    primary_path = path_str
             else:
                 rule_entries.append({"type": "registry", "pack": cfg, "sha256": None})
                 if primary_path is None:

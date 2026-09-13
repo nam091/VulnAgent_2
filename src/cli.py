@@ -168,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_cmd = subparsers.add_parser("init", help="Initialize VulnAgent in current workspace")
     init_cmd.add_argument("--host", "--editor", dest="host", choices=("cursor", "vscode", "claude", "auto"), default="auto", help="Target editor host (default: auto)")
+    init_cmd.add_argument("--rules", default=None, help="Semgrep rules configuration to bake into on-save hook (file, dir, or pack)")
 
     subparsers.add_parser("doctor", help="Check local environment, dependencies and tools")
 
@@ -613,15 +614,16 @@ async def _run_init(args: argparse.Namespace) -> int:
     """
     adapter = HostAdapter(Path.cwd())
     host = args.host if args.host != "auto" else adapter.detect_host()
+    rules_arg = getattr(args, "rules", None) or os.environ.get("VULNAGENT_SEMGREP_RULES")
     if host == "cursor":
         res = adapter.configure_cursor()
-        res_hook = adapter.configure_editor_save_hook(host="cursor")
+        res_hook = adapter.configure_editor_save_hook(host="cursor", rules=rules_arg)
         print(f"VulnAgent initialized for Cursor.")
         print(f"  MCP configuration: {res['mcp_config']}")
         print(f"  Security rules:    {res['rules_file']}")
         print(f"  On-save hook:      {res_hook['tasks_config']}")
     elif host == "vscode":
-        res_hook = adapter.configure_editor_save_hook(host="vscode")
+        res_hook = adapter.configure_editor_save_hook(host="vscode", rules=rules_arg)
         print(f"VulnAgent initialized for VS Code.")
         print(f"  On-save tasks:     {res_hook['tasks_config']}")
         print(f"  On-save settings:  {res_hook['settings_config']}")
@@ -795,32 +797,84 @@ async def _run_check(args: argparse.Namespace) -> int:
 async def _run_history(args: argparse.Namespace) -> int:
     """
     View scan and hook audit trail.
+    Reads AssessmentStore audit_log.jsonl (with fallback to legacy audit.jsonl)
+    and unpacks envelope schemas (record_type="assessment" | "event").
     """
+    from datetime import datetime
+
     root = Path(args.target).resolve()
     audit_dir = root / ".vulnagent-audit"
-    audit_file = audit_dir / "audit.jsonl"
     runner_file = audit_dir / "runner_state.json"
 
+    log_file = audit_dir / "audit_log.jsonl"
+    if not log_file.is_file():
+        fallback = audit_dir / "audit.jsonl"
+        if fallback.is_file():
+            log_file = fallback
+
     found = False
-    if audit_file.is_file():
+    if log_file.is_file():
         found = True
         try:
-            lines = audit_file.read_text(encoding="utf-8").strip().splitlines()
+            raw_lines = log_file.read_text(encoding="utf-8").strip().splitlines()
             entries = []
-            for line in lines:
+            for line in raw_lines:
                 line = line.strip()
-                if line:
-                    try:
-                        entries.append(json.loads(line))
-                    except Exception:
-                        pass
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except Exception:
+                    pass
+
             print(f"VulnAgent Audit Trail ({len(entries)} entries):")
             for entry in entries[-args.limit:]:
-                ts = entry.get("timestamp", "")
-                event = entry.get("event") or entry.get("action") or entry.get("type", "record")
-                status = entry.get("status", "")
-                details = entry.get("details") or entry.get("finding_id") or ""
-                print(f"  [{ts}] {str(event).upper():<16} status={status:<10} {details}")
+                rec_type = entry.get("record_type")
+                if rec_type == "assessment" and isinstance(entry.get("data"), dict):
+                    d = entry["data"]
+                    raw_ts = d.get("updated_at") or d.get("created_at")
+                    try:
+                        ts_str = datetime.fromtimestamp(raw_ts).isoformat() if isinstance(raw_ts, (int, float)) else str(raw_ts)
+                    except Exception:
+                        ts_str = str(raw_ts)
+                    finding_id = d.get("finding_id", "")
+                    status = d.get("status", "")
+                    assessor = d.get("assessor", "agent")
+                    reason = d.get("reason", "")
+                    detail = f"finding_id={finding_id} assessor={assessor}"
+                    if reason:
+                        detail += f" ({reason[:40]})"
+                    print(f"  [{ts_str}] ASSESSMENT       status={status:<10} {detail}")
+                elif rec_type == "event" and isinstance(entry.get("data"), dict):
+                    d = entry["data"]
+                    raw_ts = d.get("timestamp")
+                    try:
+                        ts_str = datetime.fromtimestamp(raw_ts).isoformat() if isinstance(raw_ts, (int, float)) else str(raw_ts)
+                    except Exception:
+                        ts_str = str(raw_ts)
+                    evt_name = str(d.get("event", "EVENT")).upper()
+                    status = d.get("status", "")
+                    details_parts = []
+                    if status:
+                        details_parts.append(f"status={status}")
+                    if "findings_count" in d:
+                        details_parts.append(f"findings={d['findings_count']}")
+                    if "finding_id" in d:
+                        details_parts.append(f"finding_id={d['finding_id']}")
+                    if "target" in d:
+                        details_parts.append(f"target={d['target']}")
+                    detail_str = " ".join(details_parts)
+                    print(f"  [{ts_str}] {evt_name:<16} {detail_str}")
+                else:
+                    raw_ts = entry.get("timestamp", "")
+                    try:
+                        ts_str = datetime.fromtimestamp(raw_ts).isoformat() if isinstance(raw_ts, (int, float)) else str(raw_ts)
+                    except Exception:
+                        ts_str = str(raw_ts)
+                    event = entry.get("event") or entry.get("action") or entry.get("type", "RECORD")
+                    status = entry.get("status", "")
+                    details = entry.get("details") or entry.get("finding_id") or ""
+                    print(f"  [{ts_str}] {str(event).upper():<16} status={status:<10} {details}")
         except Exception as e:
             print(f"  Error reading audit trail: {e}")
 
@@ -879,11 +933,33 @@ async def _run_hook(args: argparse.Namespace) -> int:
     )
     status = result.get("status")
     print(f"Hook status: {status}")
+
+    # Record hook scan event into audit_log.jsonl if audit directory exists
+    audit_dir = root / ".vulnagent-audit"
+    if audit_dir.is_dir():
+        try:
+            from models.assessment import AssessmentStore
+            store = AssessmentStore(storage_dir=audit_dir)
+            findings_count = len(last_scan_result.vulnerabilities) if (last_scan_result and getattr(last_scan_result, "vulnerabilities", None)) else 0
+            store.record_event("hook_scan", {
+                "status": status,
+                "target": str(root),
+                "findings_count": findings_count,
+            })
+        except Exception as e:
+            logging.debug(f"Failed to record hook scan event: {e}")
+
     if status == "findings_detected":
         if last_scan_result and getattr(last_scan_result, "vulnerabilities", None):
             for v in last_scan_result.vulnerabilities:
                 v_type = v.type.value if hasattr(v.type, "value") else str(v.type)
-                cwe = f" (CWE-{v.cwe_id})" if getattr(v, "cwe_id", None) else ""
+                raw_cwe = getattr(v, "cwe_id", None)
+                if raw_cwe:
+                    cwe_str = str(raw_cwe).strip()
+                    cwe_norm = cwe_str if cwe_str.upper().startswith("CWE-") else f"CWE-{cwe_str}"
+                    cwe = f" ({cwe_norm})"
+                else:
+                    cwe = ""
                 file_loc = f"{v.location.file_path}:{v.location.start_line}" if v.location else "unknown"
                 print(f"  - [{v.severity.value}] {v_type}{cwe} at {file_loc}")
         return EXIT_FINDINGS

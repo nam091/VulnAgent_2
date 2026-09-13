@@ -1,5 +1,40 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review M01/D01/M02 — 1faddd4 (13/09/2026)
+
+**M02 đã sửa lỗi đồng nhất enabled với warm; M01 và D01 còn các nhánh cụ thể dưới đây.** Review chạy CLI thật trên workspace tạm, Semgrep thật với rules local và suite. Các phần dưới là lịch sử.
+
+### Đã kiểm chứng
+
+- init --host vscode chạy thành công và sinh cấu hình trong workspace tạm; hook --rules chạy được. Bộ rules mới phát hiện đủ bốn CWE 89/78/79/22 ở dòng 17/38/25/31 của bản sao vulnerable_app.py, exit 1.
+- Git provenance công cụ đã trỏ ROOT: eval chạy từ cwd tạm vẫn ghi commit 1faddd4fec39c0c1ca4b8b6ca0a571f10a50dff6. Manifest bổ sung engine versions và config list.
+- Cache policy/state đã tách; --cold trong probe ghi disabled. Bật cache không có hits không còn tự ghi warmed. Cần hiểu warmed ở đây là có ít nhất một hit, không bảo đảm toàn bộ workload đã warm; hits/misses vẫn là bằng chứng cần đọc cùng trạng thái.
+
+### M01 — P1 còn mở: rules tương đối được resolve khác nhau khi scan và khi hash
+
+main truyền chuỗi --rules tương đối vào Scanner, Semgrep chạy theo cwd. Khi tạo manifest, code lại ưu tiên ROOT/path trước cwd/path. Probe tạo workspace tạm có rules/pinned_security_rules.yaml khác bản trong ROOT, chạy từ workspace đó với `--rules rules/pinned_security_rules.yaml --only semgrep --cold`: run completed/exit 0 nhưng hash thực là ddcc28cfafa463b3137e00e41bec35bd1d0779464fc4ae1d00514ffad3c8cb8d, manifest ghi 163659e4b34e60e7f5e750a141fe6bf0bd84fa9ea7995413752657fa87882132 (file trong ROOT).
+
+Sửa: resolve config local một lần theo quy ước CLI/cwd trước chạy, truyền đường dẫn tuyệt đối đó cho cả Scanner và manifest. Không tìm lại file cùng tên ở ROOT sau scan. Chốt/hash input trước chạy và đối chiếu sau chạy nếu muốn bảo đảm snapshot. Regression phải có hai file rules cùng relative path nhưng khác nội dung ở ROOT và cwd, assert config thực/hash đều trỏ đúng file. Ca path tuyệt đối và Git cwd cũ đã sửa không cần mở lại.
+
+### D01 — P2 còn mở: history/runbook chưa nối đúng audit store
+
+history hiện đọc .vulnagent-audit/audit.jsonl, nhưng AssessmentStore ghi audit_log.jsonl với envelope record_type/data. Vì vậy history chưa đọc được audit thật của MCP; chỉ đổi filename cũng chưa đủ nếu không giải envelope/schema.
+
+Probe init → hook thật → history trong workspace tạm: history exit 0 nhưng chỉ có Runner State, không có SCAN/ASSESSMENT như mẫu runbook; audit.jsonl không tồn tại. Hook rule-only không tạo assessment MCP, nên không thể hứa các event này từ riêng luồng save. Regression hiện chỉ kiểm tra history chạy được hoặc không có records, chưa tạo audit thật rồi kiểm tra đọc lại.
+
+Sửa: dùng chung API/schema AssessmentStore cho history; regression ghi assessment/event qua store thật rồi gọi CLI để kiểm tra nội dung/limit. Runbook tách rõ bằng chứng runner-state của hook với assessment history chỉ có khi đã chạy workflow MCP; ghi đúng tên file và các bước tạo dữ liệu trước khi yêu cầu xem log. Nếu muốn hook có lịch sử scan riêng, triển khai producer và reader chung trước khi đưa vào expected output.
+
+Output hook đã có finding list nhưng hiện in CWE-CWE-89/78/79/22 do thêm prefix hai lần; severity SQL/command trong probe là CRITICAL thay vì HIGH ở ví dụ. Chuẩn hóa CWE một lần và dùng output quan sát được trong runbook. Đây là sai khác hiển thị, không phải lỗi detector mới.
+
+Đối với on-save thực, cần xác minh process editor nhận rules đã chọn; đặt biến môi trường trong terminal không tự chứng minh extension host đang chạy đã nhận biến đó. Runbook nên truyền --rules tuyệt đối trong command sinh ra hoặc mô tả cách khởi động editor với môi trường đó, rồi kiểm tra config hiệu lực. Lượt này chỉ kiểm chứng CLI, chưa điều khiển editor thật.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **116 passed, 1 warning, 168.28 giây**, không có skip được báo.
+- Probe CLI init/hook/history và eval với Semgrep thật hoàn tất; các kết quả và giới hạn được ghi ở trên.
+
+Ưu tiên resolve-once cho M01 và nối history với audit store thật cho D01; không cần thay lại cơ chế cache chỉ để đóng lỗi M02 cũ. Chưa nghiệm thu toàn bộ manifest/demo G6/G7. Review chỉ cập nhật tài liệu; toàn bộ probe dùng thư mục tạm, không gọi model hoặc sửa cấu hình thật.
+
 ## Review manifest/cold-cache và runbook — cdd757c (13/09/2026)
 
 **Có thêm artifact metadata và runbook, nhưng chưa thể nghiệm thu tính tái lập hoặc demo editor theo tài liệu mới.** Review source, chạy thử CLI eval/Semgrep thật trên dataset tạm, thử hai lệnh trong runbook và chạy suite. Các kết luận đóng G602–G604 trước đó vẫn giữ nguyên.

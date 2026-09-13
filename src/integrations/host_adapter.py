@@ -302,7 +302,7 @@ class HostAdapter:
             "configured": True,
         }
 
-    def configure_editor_save_hook(self, host: str = "cursor") -> Dict[str, Any]:
+    def configure_editor_save_hook(self, host: str = "cursor", rules: Optional[str] = None) -> Dict[str, Any]:
         """
         Configures an on-save hook in the editor workspace (.cursor or .vscode tasks and settings).
         Maps editor file change event to CLI runner with unified launcher and trailing debounce.
@@ -315,6 +315,17 @@ class HostAdapter:
 
         cli_entry = (Path(__file__).resolve().parents[1] / "cli.py").resolve()
         cli_entry_str = cli_entry.as_posix()
+
+        resolved_rules = None
+        if rules:
+            r_str = str(rules).strip()
+            r_path = Path(r_str)
+            if r_path.exists():
+                resolved_rules = str(r_path.resolve())
+            elif (self.root / r_path).exists():
+                resolved_rules = str((self.root / r_path).resolve())
+            else:
+                resolved_rules = r_str
 
         # 1. Configure tasks.json with process type and explicit absolute CLI launcher
         tasks: Dict[str, Any] = {"version": "2.0.0", "tasks": []}
@@ -333,17 +344,21 @@ class HostAdapter:
                     "host": host,
                 }
 
+        task_args = [
+            cli_entry_str,
+            "hook",
+            "--target", "${workspaceFolder}",
+            "--files", "${file}",
+            "--trailing"
+        ]
+        if resolved_rules:
+            task_args.extend(["--rules", resolved_rules])
+
         hook_task = {
             "label": "VulnAgent On-Save Security Check",
             "type": "process",
             "command": sys.executable,
-            "args": [
-                cli_entry_str,
-                "hook",
-                "--target", "${workspaceFolder}",
-                "--files", "${file}",
-                "--trailing"
-            ],
+            "args": task_args,
             "group": "build",
             "presentation": {
                 "reveal": "silent",
@@ -377,6 +392,8 @@ class HostAdapter:
                 }
 
         save_cmd = f'"{sys.executable}" "{cli_entry_str}" hook --target "${{workspaceFolder}}" --files "${{file}}" --trailing'
+        if resolved_rules:
+            save_cmd += f' --rules "{resolved_rules}"'
         runonsave = settings.get("emeraldwalk.runonsave")
         if not isinstance(runonsave, dict):
             runonsave = {}
