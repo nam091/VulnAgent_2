@@ -17,6 +17,9 @@ output/*
 # Durable scan-job state written by the web server at runtime
 .vulnagent-jobs/
 **/.vulnagent-jobs/
+.vulnagent-audit/
+**/.vulnagent-audit/
+.vulnagent.lock
 
 # Scan artifacts
 *.sarif

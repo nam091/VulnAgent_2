@@ -1,5 +1,42 @@
 # Nhận xét codebase VulnAgent so với kế hoạch
 
+## Review integrity gate — ec8ac65 (14/09/2026)
+
+**Gate đã phát hiện thay đổi nội dung rules/labels/samples, nhưng chưa thể gọi là chặn mọi mutation: xóa rules local vẫn lọt.** Review tập trung cơ chế snapshot mới. Các kết luận đóng lỗi path/hash và audit trước đó giữ nguyên.
+
+### Các ca đã kiểm chứng
+
+Probe gọi main của harness trên dataset tạm, thay callback engine bằng fixture để chèn mutation đúng trong giai đoạn scan. Không dùng kết quả này làm benchmark detector; mục đích là kiểm tra exit code và manifest của harness.
+
+| Ca trong callback scan | Exit | integrity.verified | Kết quả |
+|---|---:|---|---|
+| Không thay đổi | 0 | true | Đúng |
+| Đổi nội dung rules file | 1 | false | Đúng, có mismatch rules |
+| Đổi labels.json | 1 | false | Đúng, có mismatch labels |
+| Đổi sample Python | 1 | false | Đúng, có mismatch samples |
+| Xóa rules file đã snapshot | 0 | true | Sai, không có mismatch |
+
+### I01 — P1: mất rules file/directory không được đối chiếu
+
+Vòng post-scan chỉ kiểm tra cfg nếu p.is_file() hoặc p.is_dir() còn True. Khi file bị xóa, cả hai nhánh bị bỏ qua nên không so với initial_rule_hashes. Trong probe, manifest.rules.entries còn biến đường dẫn local đã mất thành type=registry, sha256=null. Run được đánh dấu toàn vẹn dù input đã biến mất.
+
+Sửa: snapshot mỗi config local thành entry có loại, path và hash trước scan; duyệt chính tập snapshot đó để đối chiếu sau scan. Mất file/directory, đổi loại hoặc không đọc được đều phải có mismatch và run invalid. Không phân loại lại một config local đã mất thành registry. Lưu initial và post hash/state riêng trong artifact; hiện rules entry vẫn dùng hash cuối lượt, nên khi mutation xảy ra cần giữ hash ban đầu để truy vết. Registry chưa snapshot được nên biểu diễn là chưa kiểm chứng, không coi sự tồn tại của config string là bằng chứng content integrity.
+
+### I02 — P2: regression mới chưa chạy nhánh mutation
+
+test_eval_integrity_gate_verifies_snapshot_and_detects_mutation mô tả hai nhánh, nhưng implementation chỉ chạy normal subprocess rồi assert verified=True. Không có bước thay rules/labels/sample và không assert exit 1. Vì vậy suite pass chưa chứng minh cơ chế phát hiện mutation.
+
+Sửa test bằng callback/mock engine có kiểm soát hoặc subprocess đồng bộ bằng event/barrier; giữ main → integrity → JSON → exit code thật. Thêm ca edit/delete rules file, xóa rules directory, edit/delete labels, add/delete/edit sample và unchanged. Assert mismatch đúng đối tượng, initial hash còn nguyên và không đổi local entry thành registry; tránh sleep theo thời gian để gây race ngẫu nhiên.
+
+### Kiểm thử và kết luận
+
+- `python -m pytest tests -q -ra`: **117 passed, 1 warning, 241.76 giây**, không có skip được báo.
+- Năm probe harness ngoài suite cho kết quả như bảng trên; engine callback được giả lập để tạo mutation xác định, không phải thí nghiệm chất lượng detector.
+
+Cần sửa I01 và bổ sung negative tests I02 trước khi đóng hạng mục integrity. Snapshot trước/sau chỉ chứng minh hai thời điểm đối chiếu; nếu cần bảo đảm engine luôn đọc đúng cùng input trong cả lượt, chạy trên bản snapshot bất biến hoặc cơ chế tương đương. Demo editor thật, pilot artifacts và nghiệm thu toàn bộ G6/G7 vẫn là các bước riêng.
+
+Review chỉ cập nhật Nhan_xet.md; probe dùng thư mục tạm, không xóa/sửa rules hay dataset thật của người dùng, không gọi model.
+
 ## Review M01/D01 — 16b6e79 (13/09/2026)
 
 **Có thể đóng hai ca lỗi M01 và D01 còn mở ở review 1faddd4 trong phạm vi kiểm chứng dưới đây.** Không phát hiện lại sai rules hash do khác cwd hoặc mất history do sai filename/schema. Các phần bên dưới là lịch sử; không coi các mục M01/D01 cũ đều còn mở.

@@ -9,5 +9,5 @@ typing-extensions
 python-multipart
 aiofiles
 semgrep
-mcp
+mcp<2.0.0
 setuptools

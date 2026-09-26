@@ -23,6 +23,7 @@ setup(
         "python-multipart",
         "aiofiles",
         "semgrep",
+        "mcp<2.0.0",
         "setuptools"
     ],
     entry_points={

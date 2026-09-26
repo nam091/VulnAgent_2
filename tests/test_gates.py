@@ -3390,6 +3390,166 @@ def test_eval_integrity_gate_verifies_snapshot_and_detects_mutation(tmp_path: Pa
     assert normal_data["integrity"]["initial_samples_sha256"] is not None
 
 
+@pytest.mark.asyncio
+async def test_eval_integrity_gate_detects_rule_file_deleted(tmp_path: Path):
+    """
+    I02 negative case 1: Deleting a snapshotted rule file mid-run invalidates the run (exit 1).
+    """
+    import json
+    from unittest.mock import patch
+    from eval.run_eval import main, RunRecord
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "app.py").write_text("eval('1')\n", encoding="utf-8")
+    labels_file = ds_dir / "labels.json"
+    labels_file.write_text(json.dumps({
+        "name": "integrity_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    rule_file = tmp_path / "custom_rules.yaml"
+    rule_file.write_text("rules:\n  - id: test-r\n    pattern: eval(...)\n    message: bad\n    languages: [python]\n    severity: ERROR\n", encoding="utf-8")
+
+    out_del = tmp_path / "out_del.json"
+    async def mutate_delete_rule(*args, **kwargs):
+        if rule_file.is_file():
+            rule_file.unlink()
+        return RunRecord(configuration="Semgrep only", detections=[], elapsed=0.01, status="completed")
+
+    argv = [
+        "run_eval.py", "--dataset", str(ds_dir), "--rules", str(rule_file),
+        "--only", "semgrep", "--no-bandit", "--cold", "--json", str(out_del)
+    ]
+    with patch("sys.argv", argv), patch("eval.run_eval.run_vulnagent", side_effect=mutate_delete_rule), patch("eval.run_eval._get_tool_version", return_value="1.0"):
+        code = await main()
+        assert code == 1
+        data = json.loads(out_del.read_text(encoding="utf-8"))
+        assert data["integrity"]["verified"] is False
+        assert any("deleted or missing" in m for m in data["integrity"]["mismatches"])
+
+
+@pytest.mark.asyncio
+async def test_eval_integrity_gate_detects_rule_file_mutated(tmp_path: Path):
+    """
+    I02 negative case 2: Mutating content of a rule file mid-run invalidates the run (exit 1).
+    """
+    import json
+    from unittest.mock import patch
+    from eval.run_eval import main, RunRecord
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "app.py").write_text("eval('1')\n", encoding="utf-8")
+    labels_file = ds_dir / "labels.json"
+    labels_file.write_text(json.dumps({
+        "name": "integrity_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    rule_file = tmp_path / "custom_rules.yaml"
+    rule_file.write_text("rules:\n  - id: test-r\n    pattern: eval(...)\n    message: bad\n    languages: [python]\n    severity: ERROR\n", encoding="utf-8")
+
+    out_mod = tmp_path / "out_mod.json"
+    async def mutate_modify_rule(*args, **kwargs):
+        rule_file.write_text("rules: [] # mutated\n", encoding="utf-8")
+        return RunRecord(configuration="Semgrep only", detections=[], elapsed=0.01, status="completed")
+
+    argv = [
+        "run_eval.py", "--dataset", str(ds_dir), "--rules", str(rule_file),
+        "--only", "semgrep", "--no-bandit", "--cold", "--json", str(out_mod)
+    ]
+    with patch("sys.argv", argv), patch("eval.run_eval.run_vulnagent", side_effect=mutate_modify_rule), patch("eval.run_eval._get_tool_version", return_value="1.0"):
+        code = await main()
+        assert code == 1
+        data = json.loads(out_mod.read_text(encoding="utf-8"))
+        assert data["integrity"]["verified"] is False
+        assert any("Rule file mutated" in m for m in data["integrity"]["mismatches"])
+
+
+@pytest.mark.asyncio
+async def test_eval_integrity_gate_detects_labels_mutated(tmp_path: Path):
+    """
+    I02 negative case 3: Mutating labels.json mid-run invalidates the run (exit 1).
+    """
+    import json
+    from unittest.mock import patch
+    from eval.run_eval import main, RunRecord
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    (samples_dir / "app.py").write_text("eval('1')\n", encoding="utf-8")
+    labels_file = ds_dir / "labels.json"
+    labels_file.write_text(json.dumps({
+        "name": "integrity_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    out_mod = tmp_path / "out_labels.json"
+    async def mutate_modify_labels(*args, **kwargs):
+        labels_file.write_text(json.dumps({"name": "tampered", "match_mode": "file", "partial_labels": True, "labels": []}), encoding="utf-8")
+        return RunRecord(configuration="Semgrep only", detections=[], elapsed=0.01, status="completed")
+
+    argv = [
+        "run_eval.py", "--dataset", str(ds_dir),
+        "--only", "semgrep", "--no-bandit", "--cold", "--json", str(out_mod)
+    ]
+    with patch("sys.argv", argv), patch("eval.run_eval.run_vulnagent", side_effect=mutate_modify_labels), patch("eval.run_eval._get_tool_version", return_value="1.0"):
+        code = await main()
+        assert code == 1
+        data = json.loads(out_mod.read_text(encoding="utf-8"))
+        assert data["integrity"]["verified"] is False
+        assert any("Dataset labels mutated" in m for m in data["integrity"]["mismatches"])
+
+
+@pytest.mark.asyncio
+async def test_eval_integrity_gate_detects_samples_mutated(tmp_path: Path):
+    """
+    I02 negative case 4: Mutating samples directory mid-run invalidates the run (exit 1).
+    """
+    import json
+    from unittest.mock import patch
+    from eval.run_eval import main, RunRecord
+
+    ds_dir = tmp_path / "ds"
+    samples_dir = ds_dir / "samples"
+    samples_dir.mkdir(parents=True)
+    sample_file = samples_dir / "app.py"
+    sample_file.write_text("eval('1')\n", encoding="utf-8")
+    labels_file = ds_dir / "labels.json"
+    labels_file.write_text(json.dumps({
+        "name": "integrity_test",
+        "match_mode": "file",
+        "partial_labels": True,
+        "labels": [{"file": "app.py", "line": 1, "cwe": "94", "type": "CODE_INJECTION"}]
+    }), encoding="utf-8")
+
+    out_mod = tmp_path / "out_samples.json"
+    async def mutate_modify_sample(*args, **kwargs):
+        sample_file.write_text("eval('tampered_code')\n", encoding="utf-8")
+        return RunRecord(configuration="Semgrep only", detections=[], elapsed=0.01, status="completed")
+
+    argv = [
+        "run_eval.py", "--dataset", str(ds_dir),
+        "--only", "semgrep", "--no-bandit", "--cold", "--json", str(out_mod)
+    ]
+    with patch("sys.argv", argv), patch("eval.run_eval.run_vulnagent", side_effect=mutate_modify_sample), patch("eval.run_eval._get_tool_version", return_value="1.0"):
+        code = await main()
+        assert code == 1
+        data = json.loads(out_mod.read_text(encoding="utf-8"))
+        assert data["integrity"]["verified"] is False
+        assert any("Dataset samples mutated" in m for m in data["integrity"]["mismatches"])
+
+
 
 
 

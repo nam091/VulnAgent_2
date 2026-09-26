@@ -845,13 +845,27 @@ async def main() -> int:
     effective_configs = tuple(_resolve_rule_config(c) for c in raw_configs)
 
     # Precompute rule and dataset snapshot hashes before scan execution to guarantee integrity
-    initial_rule_hashes: Dict[str, str] = {}
+    initial_rule_snapshots: Dict[str, Dict[str, Any]] = {}
     for cfg in effective_configs:
         p = Path(cfg)
         if p.is_file():
-            initial_rule_hashes[str(p)] = _compute_sha256(p)
+            initial_rule_snapshots[cfg] = {
+                "type": "file",
+                "path": str(p.resolve()),
+                "sha256": _compute_sha256(p),
+            }
         elif p.is_dir():
-            initial_rule_hashes[str(p)] = _compute_dir_hash(p)
+            initial_rule_snapshots[cfg] = {
+                "type": "directory",
+                "path": str(p.resolve()),
+                "sha256": _compute_dir_hash(p),
+            }
+        else:
+            initial_rule_snapshots[cfg] = {
+                "type": "registry",
+                "pack": cfg,
+                "sha256": None,
+            }
 
     dataset_dir = Path(args.dataset)
     samples_dir = dataset_dir / "samples"
@@ -958,24 +972,44 @@ async def main() -> int:
 
     # Verify benchmark input integrity: ensure rules and dataset did not mutate during run
     integrity_mismatches: List[str] = []
-    for cfg in effective_configs:
-        p = Path(cfg)
-        if p.is_file():
-            post_h = _compute_sha256(p)
-            if post_h != initial_rule_hashes.get(str(p)):
-                integrity_mismatches.append(f"Rule file mutated during scan: {p}")
-        elif p.is_dir():
-            post_h = _compute_dir_hash(p)
-            if post_h != initial_rule_hashes.get(str(p)):
-                integrity_mismatches.append(f"Rule directory mutated during scan: {p}")
+    for cfg, snap in initial_rule_snapshots.items():
+        snap_type = snap["type"]
+        p = Path(snap["path"]) if "path" in snap else Path(cfg)
+        if snap_type == "file":
+            if not p.exists():
+                integrity_mismatches.append(f"Rule file deleted or missing during scan: {snap.get('path', cfg)}")
+            elif not p.is_file():
+                integrity_mismatches.append(f"Rule path type changed from file: {snap.get('path', cfg)}")
+            else:
+                post_h = _compute_sha256(p)
+                if post_h != snap["sha256"]:
+                    integrity_mismatches.append(f"Rule file mutated during scan: {p}")
+        elif snap_type == "directory":
+            if not p.exists():
+                integrity_mismatches.append(f"Rule directory deleted or missing during scan: {snap.get('path', cfg)}")
+            elif not p.is_dir():
+                integrity_mismatches.append(f"Rule path type changed from directory: {snap.get('path', cfg)}")
+            else:
+                post_h = _compute_dir_hash(p)
+                if post_h != snap["sha256"]:
+                    integrity_mismatches.append(f"Rule directory mutated during scan: {p}")
+        elif snap_type == "registry":
+            # Registry configs are not local files; cannot be snapshotted offline
+            pass
 
-    post_labels_hash = _compute_sha256(labels_path)
-    if post_labels_hash != initial_labels_hash:
-        integrity_mismatches.append(f"Dataset labels mutated during scan: {labels_path}")
+    if not labels_path.exists():
+        integrity_mismatches.append(f"Dataset labels deleted or missing during scan: {labels_path}")
+    else:
+        post_labels_hash = _compute_sha256(labels_path)
+        if post_labels_hash != initial_labels_hash:
+            integrity_mismatches.append(f"Dataset labels mutated during scan: {labels_path}")
 
-    post_samples_hash = _compute_dir_hash(samples_dir)
-    if post_samples_hash != initial_samples_hash:
-        integrity_mismatches.append(f"Dataset samples mutated during scan: {samples_dir}")
+    if not samples_dir.exists():
+        integrity_mismatches.append(f"Dataset samples directory deleted or missing during scan: {samples_dir}")
+    else:
+        post_samples_hash = _compute_dir_hash(samples_dir)
+        if post_samples_hash != initial_samples_hash:
+            integrity_mismatches.append(f"Dataset samples mutated during scan: {samples_dir}")
 
     if integrity_mismatches:
         print("[CRITICAL] Benchmark input integrity violation! Run is INVALID:")
@@ -1016,28 +1050,47 @@ async def main() -> int:
     if args.json:
         labels_path = dataset_dir / "labels.json"
 
-        # Compute effective rules metadata directly from resolved configs
+        # Compute effective rules metadata directly from resolved configs snapshot
         rule_entries = []
         primary_path = None
         primary_sha256 = None
-        for cfg in effective_configs:
-            p = Path(cfg)
-            if p.is_file():
-                h = _compute_sha256(p)
-                path_str = str(p.resolve())
-                rule_entries.append({"type": "file", "path": path_str, "sha256": h})
+        for cfg, snap in initial_rule_snapshots.items():
+            snap_type = snap["type"]
+            p = Path(snap["path"]) if "path" in snap else Path(cfg)
+            if snap_type == "file":
+                post_h = _compute_sha256(p) if p.is_file() else None
+                entry = {
+                    "type": "file",
+                    "path": snap["path"],
+                    "sha256": snap["sha256"],
+                    "post_sha256": post_h,
+                    "status": "verified" if (post_h == snap["sha256"]) else "mutated_or_missing",
+                }
+                rule_entries.append(entry)
                 if primary_sha256 is None:
-                    primary_sha256 = h
-                    primary_path = path_str
-            elif p.is_dir():
-                h = _compute_dir_hash(p)
-                path_str = str(p.resolve())
-                rule_entries.append({"type": "directory", "path": path_str, "sha256": h})
+                    primary_sha256 = snap["sha256"]
+                    primary_path = snap["path"]
+            elif snap_type == "directory":
+                post_h = _compute_dir_hash(p) if p.is_dir() else None
+                entry = {
+                    "type": "directory",
+                    "path": snap["path"],
+                    "sha256": snap["sha256"],
+                    "post_sha256": post_h,
+                    "status": "verified" if (post_h == snap["sha256"]) else "mutated_or_missing",
+                }
+                rule_entries.append(entry)
                 if primary_sha256 is None:
-                    primary_sha256 = h
-                    primary_path = path_str
+                    primary_sha256 = snap["sha256"]
+                    primary_path = snap["path"]
             else:
-                rule_entries.append({"type": "registry", "pack": cfg, "sha256": None})
+                rule_entries.append({
+                    "type": "registry",
+                    "pack": cfg,
+                    "sha256": None,
+                    "verified": False,
+                    "note": "Registry rules not snapshotted offline",
+                })
                 if primary_path is None:
                     primary_path = cfg
 

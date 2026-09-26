@@ -27,17 +27,20 @@ from dotenv import load_dotenv
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
-    class FastMCP:  # type: ignore
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
+    try:
+        from mcp.server.mcpserver import MCPServer as FastMCP
+    except ImportError:
+        class FastMCP:  # type: ignore
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
 
-        def tool(self, *args: Any, **kwargs: Any) -> Any:
-            def decorator(f: Any) -> Any:
-                return f
-            return decorator
+            def tool(self, *args: Any, **kwargs: Any) -> Any:
+                def decorator(f: Any) -> Any:
+                    return f
+                return decorator
 
-        def run(self) -> None:
-            print("mcp package is not installed. Install with: pip install mcp", file=sys.stderr)
+            def run(self, *args: Any, **kwargs: Any) -> None:
+                print("mcp package is not installed. Install with: pip install mcp", file=sys.stderr)
 
 from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner
