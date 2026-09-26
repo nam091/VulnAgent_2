@@ -1076,6 +1076,7 @@ async def capabilities() -> Dict[str, Any]:
             "scan_file": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
             "scan_directory": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
             "suggest_fix": {"mode": "standalone" if not EDITOR_MODE else "editor", "backend_llm_calls": not EDITOR_MODE},
+            "capabilities": {"mode": "editor", "backend_llm_calls": False},
         },
         "rule_engine": {
             "name": "semgrep",

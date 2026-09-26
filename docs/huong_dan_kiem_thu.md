@@ -106,13 +106,15 @@ Hoặc dùng comment `# nosec` hoặc `# nosemgrep`. Khi quét lại, VulnAgent 
 
 ## 4. Kiểm Thử Tự Động Sửa Lỗi An Toàn (`vulnagent fix`)
 
-> **Lưu ý:** Chức năng `fix` yêu cầu có API key của LLM trong file `.env` (OpenAI, Anthropic hoặc endpoint tương thích) vì Semgrep thuần túy không thể tự viết lại code an toàn theo ngữ cảnh.
+> **Lưu ý quan trọng về API Key:** Chức năng `fix` bắt buộc yêu cầu có API key của LLM trong file `.env` (OpenAI, Anthropic hoặc endpoint tương thích) vì tầng Semgrep thuần túy không sinh bản vá ngữ nghĩa. Nếu chưa cấu hình hoặc API key hết hạn, lệnh sẽ thông báo `No applicable patches` kèm cảnh báo lỗi tài khoản LLM.
 
 ### 4.1. Xem trước bản vá (Dry-run / Preview)
 ```bash
 vulnagent fix examples/vulnerable_app.py --dry-run
 ```
-**Kết quả mong đợi:** In ra bảng các bản vá dự kiến kèm diff phân loại mức độ rủi ro (`risk="safe"` hoặc `risk="review"`), **không** can thiệp hay ghi đè vào file trên đĩa.
+**Kết quả mong đợi:** 
+- Khi có API key LLM hợp lệ: In ra bảng các bản vá dự kiến kèm diff phân loại mức độ rủi ro (`risk="safe"` hoặc `risk="review"`), **không** can thiệp hay ghi đè vào file trên đĩa.
+- Khi không có API key LLM: In thông báo `No applicable patches` (bỏ qua do thiếu secure code example từ LLM).
 
 ### 4.2. Áp dụng bản vá kèm kiểm chứng tự động (`--verify`)
 ```bash
@@ -130,44 +132,15 @@ vulnagent fix examples/vulnerable_app.py --verify
 VulnAgent cung cấp MCP Server qua `stdio` để AI Agent (như Cursor Composer, Windsurf, Claude Code) tự động gọi audit code.
 
 ### 5.1. Chạy kịch bản kiểm thử MCP độc lập (Test Client Script)
-Chạy script kiểm tra bắt tay giao thức và gọi trực tiếp các tool MCP:
+Dự án đã chuẩn bị sẵn file script kiểm tra bắt tay giao thức và gọi trực tiếp các tool MCP tại `examples/test_mcp_client.py`:
 
 ```bash
-python -c "
-import asyncio, sys, json
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-async def test():
-    params = StdioServerParameters(command=sys.executable, args=['src/mcp_server.py'])
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            print('[+] MCP Server Handshake: SUCCESS')
-            
-            # 1. Liệt kê tools
-            tools = await session.list_tools()
-            print(f'[+] Loaded {len(tools.tools)} MCP Tools')
-            
-            # 2. Test tool scan_code trên mã nguồn động
-            snippet = '''
-import subprocess
-def ping_server(host):
-    subprocess.call(f\"ping -c 1 {host}\", shell=True)
-'''
-            res = await session.call_tool('scan_code', arguments={'code': snippet, 'mode': 'fast'})
-            data = json.loads(res.content[0].text)
-            print('[+] scan_code Result:', data.get('summary'))
-            for f in data.get('findings', []):
-                print(f\"    -> [{f['severity']}] {f['type']} at line {f['start_line']}\")
-
-asyncio.run(test())
-"
+python examples/test_mcp_client.py
 ```
 **Kết quả mong đợi:** 
-- In `[+] MCP Server Handshake: SUCCESS`
-- Liệt kê đầy đủ 12 công cụ MCP.
-- Bắt chính xác lỗ hổng `CRITICAL OS_COMMAND_INJECTION` tại dòng số 4.
+- In `[+] Bắt tay giao thức MCP: THÀNH CÔNG!`
+- Liệt kê đầy đủ danh mục **12 công cụ MCP**.
+- Bắt chính xác lỗ hổng `CRITICAL OS_COMMAND_INJECTION` (CWE-78) và in đoạn code vi phạm kèm đề xuất sửa.
 
 ### 5.2. Cấu hình tích hợp vào Cursor hoặc Claude Code
 Mở file cấu hình MCP của Cursor (ví dụ: `.cursor/mcp.json` hoặc trong Settings của Cursor):
