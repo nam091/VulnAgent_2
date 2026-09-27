@@ -21,16 +21,17 @@ Tài liệu này hướng dẫn chi tiết cách tải, thiết lập và chạy
 
 ## 2. CHUẨN BỊ MÔI TRƯỜNG PYGOAT
 
-Mở terminal tại thư mục cha hoặc thư mục làm việc, tải PyGoat về máy:
+Bạn có 2 cách để chuẩn bị:
 
+### Cách 1: Sử dụng ngay bản offline có sẵn trong repo (Khuyên dùng khi bảo vệ)
+Trong VulnAgent, tệp điều phối chứa toàn bộ 10 lỗ hổng của PyGoat đã được chuẩn bị sẵn tại:
+`eval/datasets/pygoat/samples/pygoat_views.py` (Kèm file nhãn chuẩn `eval/datasets/pygoat/labels.json`).
+Bạn có thể quét ngay lập tức mà không cần kết nối mạng hoặc clone gì thêm!
+
+### Cách 2: Clone từ kho GitHub chính thức
 ```bash
 # 1. Clone repository chính thức của PyGoat
 git clone https://github.com/adeyosemanputra/pygoat.git
-
-# 2. Khóa commit cố định để đảm bảo số dòng không bị xê dịch
-cd pygoat
-git checkout 6378e9f
-cd ..
 ```
 
 ---
@@ -67,23 +68,44 @@ vulnagent serve
 ### 🎬 Kênh 3: AI Coding Agent Tự Động Quét & Vá Code Qua MCP (3 phút — Màn Highlight Đắt Giá Nhất)
 *Chứng minh giải pháp cốt lõi cho xu hướng Vibe Coding:*
 
-1. Mở thư mục `pygoat` trong editor Cursor hoặc VS Code.
-2. Mở file `pygoat/introduction/views.py`, tìm tới hàm chứa SQL Injection:
+1. Mở file `pygoat_views.py` trong editor Cursor hoặc VS Code.
+2. Tìm tới hàm thực tế `sql_lab` (khoảng dòng 155–165):
    ```python
    def sql_lab(request):
-       name = request.POST.get('name')
-       query = "SELECT * FROM users WHERE name = '" + name + "'"
-       login.objects.raw(query)
+       if request.method == 'POST':
+           name = request.POST.get('name')
+           query = "SELECT * FROM introduction_users WHERE username = '" + name + "'"
+           user = Users.objects.raw(query)
+           return render(request, 'Lab_2021/A1_Injection/sql_lab.html', {'user': user})
    ```
 3. Mở khung chat Cursor Composer, nhập prompt:
    > *"Dùng tool `scan_code` của `vulnagent` kiểm tra hàm `sql_lab` này và sửa lại an toàn giúp tôi."*
 4. **Quan sát AI Agent tự động thực hiện chu trình khép kín:**
-   - Agent gọi MCP `scan_code` $\rightarrow$ Phát hiện `CRITICAL SQL_INJECTION (CWE-89)`.
+   - Agent gọi MCP `scan_code` → Phát hiện `CRITICAL SQL_INJECTION (CWE-89)`.
    - Agent viết lại hàm bằng **Parameterized Query**:
      ```python
-     login.objects.raw("SELECT * FROM users WHERE name = %s", [name])
+     user = Users.objects.raw("SELECT * FROM introduction_users WHERE username = %s", [name])
      ```
-   - Agent gọi MCP `check_fix` $\rightarrow$ Hệ thống rescan xác nhận lỗi đã sạch và code không bị lỗi cú pháp.
+   - Agent gọi MCP `check_fix` → Hệ thống rescan xác nhận lỗi đã sạch và code không bị lỗi cú pháp.
+
+---
+
+## 4. BỘ BENCHMARK BỔ TRỢ: SECURITYEVAL (115 MẪU PYTHON CWE)
+
+Bên cạnh PyGoat (dùng cho live demo ứng dụng web), VulnAgent tích hợp sẵn tập benchmark học thuật quốc tế **SecurityEval** (từ hội nghị MSR 2022) tại `eval/datasets/securityeval/`:
+- **Quy mô:** 115 bài toán bảo mật độc lập trên 70+ họ mã CWE khác nhau.
+- **Lệnh chạy thực nghiệm đo lường:**
+  ```bash
+  python eval/run_eval.py --dataset eval/datasets/securityeval --only semgrep --no-bandit --cold
+  ```
+- **Ý nghĩa khoa học:** Chứng minh VulnAgent được đo lường khách quan trên tập dữ liệu chuẩn mực quốc tế, không chỉ riêng một ứng dụng mẫu nào.
+
+---
+
+## 5. PHƯƠNG ÁN DỰ PHÒNG (FALLBACK PLAN)
+- Nếu phòng hội đồng mất mạng hoặc máy tính gặp trục trặc:
+  - Sử dụng bản quét offline có sẵn: `vulnagent scan eval/datasets/pygoat/samples/pygoat_views.py --no-llm`
+  - Mở trực tiếp các tệp JSON kết quả đã lưu sẵn trong `output/eval_pygoat.json` và `output/pygoat_rules.json` để trình chiếu cho Hội đồng xem.
 
 ---
 
