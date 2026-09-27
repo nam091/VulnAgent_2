@@ -1,11 +1,14 @@
 import asyncio
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
 from analyzer.code_analyzer import CodeAnalyzer
 
-ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "output"
 
 

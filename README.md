@@ -3,7 +3,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[English](README.en.md) | [Tiếng Việt](README.md)
+[English](README.en.md) | [Tiếng Việt](README.md) | [Live Demo](DEMO.md)
 
 > **VulnAgent** phát hiện các lỗ hổng bảo mật trong mã nguồn bằng cách vận hành một công cụ
 > quét theo quy tắc (Rule engine - Semgrep) và một mô hình ngôn ngữ lớn (LLM) dưới dạng **hai tầng độc lập**,
