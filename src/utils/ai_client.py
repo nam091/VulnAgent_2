@@ -364,8 +364,14 @@ class AIClient:
             Dict[str, Any]: The parsed response
         """
 
-        choice = response.choices[0]
-        content = choice.message.content
+        choices = getattr(response, "choices", None)
+        if not choices:
+            error_detail = getattr(response, "error", None) or getattr(response, "message", None) or "no choices returned in model response"
+            raise ValueError(f"Failed to parse OpenAI-compatible response: {error_detail}")
+
+        choice = choices[0]
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None) if message else None
 
         finish_reason = getattr(choice, "finish_reason", None)
         if finish_reason == "length":
