@@ -83,8 +83,8 @@ python examples/test_mcp_client.py
 
 **Thao tác lệnh:**
 ```bash
-# 1. Khởi tạo cấu hình cho workspace
-python src/cli.py init --host vscode --rules "rules/pinned_security_rules.yaml"
+# 1. Khởi tạo cấu hình cho workspace (chuẩn lệnh CLI)
+vulnagent init --host vscode --rules "rules/pinned_security_rules.yaml"
 
 # 2. Xem cấu hình on-save tự động sinh trong .vscode/settings.json
 cat .vscode/settings.json
@@ -102,48 +102,49 @@ cat .vscode/settings.json
 ---
 
 ### Màn 3: Adversarial Verifier Đánh Bại Cảnh Báo Sai (False Positive)
-- **Ý nghĩa:** Trình diễn sự khác biệt giữa Scanner truyền thống và VulnAgent. Scanner thường thấy hàm nguy hiểm là báo động đỏ (False Positive), trong khi VulnAgent có Agent phản biện đọc ngược code để chứng minh an toàn.
-
-**Tạo nhanh file đối chứng an toàn `examples/safe_demo.py`:**
-```python
-import sqlite3
-
-def get_user_profile(user_id):
-    # Lập trình viên dùng tham số hóa (Parameterized Query) an toàn
-    conn = sqlite3.connect("app.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    return cursor.fetchone()
-```
+- **Ý nghĩa:** Trình diễn sự khác biệt giữa Scanner truyền thống và VulnAgent. Scanner thông thường chỉ bắt theo keyword/regex sẽ báo động đỏ (False Positive) ngay cả khi code an toàn, trong khi VulnAgent có tầng phân tích cú pháp AST và Agent phản biện để chứng minh an toàn.
+- **File mẫu đã chuẩn bị sẵn trong repo:** `examples/safe_demo.py` (sử dụng Parameterized Query chuẩn).
 
 **Thao tác lệnh:**
 ```bash
 vulnagent scan examples/safe_demo.py --no-llm
 ```
 
+**Kết quả quan sát được:**
+```text
+VulnAgent  1 file(s) scanned  ·  0 sent to LLM
+  No vulnerabilities found.
+```
+
 **Lời thoại thuyết trình:**
-> *"Thưa Thầy/Cô, trong đoạn code này, hàm `cursor.execute` được gọi, nhưng lập trình viên đã dùng dấu `?` tham số hóa chuẩn mực. Scanner thông thường nếu bắt bằng regex lỏng lẻo sẽ ném cảnh báo sai.  
-> Trong VulnAgent, tầng phân tích xác nhận dữ liệu không bị nối chuỗi. Đặc biệt, khi bật Verifier đối kháng (`--verify-findings`), Agent được giao mục tiêu: 'Hãy tìm lý do báo cáo này SAI'. Khi không tìm thấy vết bẩn (taint) nối từ source vào sink, Agent lập tức bác bỏ và gắn nhãn `refuted`, giúp loại bỏ hoàn toàn cảnh báo rác gây phiền toái cho lập trình viên."*
+> *"Thưa Thầy/Cô, trong file `examples/safe_demo.py`, hàm `cursor.execute` được gọi để truy vấn CSDL nhưng lập trình viên đã dùng dấu `?` tham số hóa. Scanner ngây thơ chỉ dựa trên keyword `cursor.execute` sẽ ném cảnh báo sai.  
+> Tầng phân tích cú pháp của VulnAgent nhận biết đây là query an toàn và báo sạch (Exit code 0).  
+> Đặc biệt, khi kích hoạt chế độ đối kháng (`--verify-findings`), Agent được giao mục tiêu: 'Hãy tìm lý do chứng minh báo cáo này SAI'. Khi không tìm thấy vết bẩn (taint) nối từ input người dùng vào sink thực thi, Agent lập tức bác bỏ và gắn nhãn `refuted`, loại bỏ hoàn toàn các cảnh báo rác làm phiền lập trình viên."*
 
 ---
 
 ### Màn 4: Thất Bại Có Kiểm Soát (Controlled Degradation)
-- **Ý nghĩa:** Chứng minh tính trung thực học thuật của sản phẩm. Khi hệ thống gặp sự cố (mất mạng, engine bị timeout, cú pháp code bị lỗi), VulnAgent **tuyệt đối không bao giờ báo "0 vulnerabilities found - Clean"** mà phải báo rõ `DEGRADED / INCOMPLETE SCAN`.
-
-**Tạo file code bị lỗi cú pháp `examples/broken_syntax.py`:**
-```python
-def broken_function(:
-    print("Code này bị lỗi cú pháp cố tình"
-```
+- **Ý nghĩa:** Chứng minh tính trung thực học thuật của sản phẩm. Khi hệ thống gặp sự cố (mất mạng, engine bị timeout, cú pháp code bị lỗi), VulnAgent **tuyệt đối không bao giờ báo "0 vulnerabilities found - Clean"** mà phải báo rõ `DEGRADED / INCOMPLETE SCAN` và chặn build với **Exit code 2**.
+- **File mẫu đã chuẩn bị sẵn trong repo:** `examples/broken_syntax.py` (cố tình sai cú pháp Python).
 
 **Thao tác lệnh:**
 ```bash
 vulnagent scan examples/broken_syntax.py --no-llm
 ```
 
+**Kết quả quan sát được trên màn hình:**
+```text
+WARNING Semgrep error: Syntax error at line examples\broken_syntax.py:1: `def calculate_tax(amount: float:` was unexpected
+VulnAgent  1 file(s) scanned  ·  0 sent to LLM
+  WARNING: Scan completed with degraded or failed tiers. Results may be incomplete.
+  No vulnerabilities found.
+  gate: failed because one or more analysis tiers degraded/failed
+```
+*(Exit code trả về là 2 - Báo lỗi hệ thống)*
+
 **Lời thoại thuyết trình:**
-> *"Một lỗ hổng chết người của nhiều scanner thương mại là khi gặp file lỗi cú pháp hoặc engine bị crash, nó âm thầm bỏ qua và trả về kết quả: '0 lỗ hổng - Code an toàn', khiến lập trình viên tưởng rằng code đã sạch và tự tin đẩy lên production.  
-> VulnAgent tuân thủ nguyên tắc 'Evidence-First': Khi engine không thể phân tích trọn vẹn, hệ thống gắn cờ `DEGRADED`, exit code trả về mã lỗi và từ chối cấp chứng nhận an toàn cho bản build."*
+> *"Một lỗ hổng chết người của nhiều scanner thương mại là khi gặp file lỗi cú pháp hoặc engine bị crash, nó âm thầm bỏ qua và trả về: '0 lỗ hổng - Code an toàn', khiến lập trình viên tưởng rằng code đã sạch và tự tin đẩy lên production.  
+> VulnAgent tuân thủ nghiêm ngặt nguyên tắc 'Evidence-First': Khi engine không thể phân tích trọn vẹn, hệ thống lập tức gắn cờ `DEGRADED`, exit code trả về mã 2 (EXIT_ERROR) và đánh fail gate bảo vệ, từ chối cấp chứng nhận an toàn giả tạo cho bản build."*
 
 ---
 
@@ -276,3 +277,43 @@ Dưới đây là 5 câu hỏi kinh điển mà các Thầy/Cô chuyên gia an t
 > 1. Bản vá bắt buộc phải vượt qua bước kiểm tra cú pháp AST (`ast.parse`), nếu lỗi cú pháp sẽ bị hủy ngay.  
 > 2. Hệ thống phân loại bản vá: Những bản vá an toàn cục bộ (như đổi `shell=True` thành `False`) mới được gán nhãn `safe`. Các bản vá thay đổi luồng điều khiển được gán nhãn `review` để con người duyệt.  
 > 3. Chế độ `--verify` tự động chạy rescan ngầm sau khi vá. Nếu phát hiện số lượng lỗi tăng lên hoặc lỗi cũ chưa hết, hệ thống sẽ tự động hoàn tác (Rollback) file về trạng thái ban đầu."*
+
+---
+
+### ❓ Câu 6: "Tập dữ liệu 11 nhãn có quá nhỏ không? Có ý nghĩa thống kê khoa học không?"
+> **Trả lời (Thẳng thắn, chuẩn mực khoa học):**  
+> *"Dạ thưa Thầy/Cô, con số 11 nhãn là tập **Calibration Smoke Test** nội bộ nhằm mục đích phát triển và hiệu chỉnh pipeline. Điểm độc đáo của tập này là nó chứa file đối chứng sạch `safe_handlers.py` — nơi toàn bộ các API nguy hiểm đều được sử dụng an toàn. Một bộ dữ liệu chỉ toàn mã độc sẽ không bao giờ đo được độ chính xác (Precision) và khả năng bắt nhầm (False Positive) của LLM.  
+> Để kiểm chứng quy mô lớn hơn, đồ án đã tích hợp và xây dựng sẵn bộ chuyển đổi cho benchmark quốc tế **SecurityEval (115 mẫu Python CWE)** qua script `eval/prepare_securityeval.py` và dự án thực tế **OWASP PyGoat** qua `eval/prepare_pygoat.py`."*
+
+---
+
+### ❓ Câu 7: "Nếu đổi mô hình nền tảng (ví dụ: từ GPT-4o sang Claude 3.5 Sonnet hay Gemini 1.5 Pro), kết quả có bị sai lệch không?"
+> **Trả lời:**  
+> *"Dạ thưa Thầy/Cô, kiến trúc của VulnAgent được thiết kế **Model-Agnostic** (không phụ thuộc vào một vendor độc quyền nào) qua module `ai_client.py`:  
+> 1. Toàn bộ prompt đều yêu cầu schema JSON đầu ra nghiêm ngặt.  
+> 2. Tầng Rule Tier (Semgrep) luôn đóng vai trò là 'chiếc neo kiểm soát' (Anchor). Kể cả khi LLM thay đổi hành vi suy luận, những lỗ hổng đồng thuận (`CONFIRMED`) vẫn giữ nguyên tính ổn định.  
+> 3. Sự khác biệt giữa các model lớn chủ yếu nằm ở số lượng gợi ý đơn nguồn (`llm-only`), và đây chính là lý do cờ `--confirmed-only` được khuyến nghị làm cổng chặn mặc định."*
+
+---
+
+## 7. Kế Hoạch Dự Phòng Cho Live Demo (Fallback Plan)
+
+Trong kịch bản xấu nhất tại phòng hội đồng (mất kết nối WiFi, API key bị rate limit, máy chiếu chập chờn):
+
+1. **Dự phòng Mạng / API LLM:**
+   - Sử dụng toàn bộ các lệnh demo ở chế độ offline `--no-llm`. Rule tier chạy 100% cục bộ, không cần internet.
+   - Thư mục `output/` đã lưu trữ sẵn các bản scan JSON, SARIF và report đầy đủ (`output/results.sarif`, `output/scan.json`, `output/eval_results.json`) để mở trực tiếp cho Hội đồng xem.
+2. **Dự phòng Live Script:**
+   - Nếu script MCP client gặp trục trặc, chạy trực tiếp lệnh kiểm tra sức khỏe: `vulnagent doctor`.
+   - Mở sẵn file `docs/hien_trang_du_an.md` và `docs/huong_dan_kiem_thu.md` để chứng minh quy trình đã được chuẩn hóa.
+
+---
+
+## 8. Tóm Lược Thông Điệp Kết Luận (Wrap-up Slide)
+
+Trước khi kết thúc phần thuyết trình, chuyển sang slide kết luận với 3 thông điệp đanh thép:
+
+1. **Về mặt Khoa học:** Chứng minh rằng hợp hai engine SAST + LLM làm giảm chất lượng, nhưng **lọc theo sự đồng thuận độc lập (Corroboration)** mang lại độ chính xác tiệm cận tuyệt đối (**Precision = 1.000, F1 = 0.842**).
+2. **Về mặt Kỹ thuật:** Hiện thực hóa cơ chế bảo mật bên trong vòng lặp phát triển của lập trình viên (Inner Dev Loop) thông qua giao thức chuẩn **MCP** và bộ điều phối **Editor Hook** có kiểm soát tương tranh.
+3. **Về mặt Thực tiễn:** Cung cấp đầy đủ công cụ DevSecOps (SARIF, Baseline, Verify Rollback) giúp áp dụng ngay vào các dự án phần mềm Python thực tế.
+
