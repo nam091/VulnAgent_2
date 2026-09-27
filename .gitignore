@@ -25,6 +25,14 @@ output/*
 *.sarif
 .vulnagent-baseline.json
 
+# Documentation
+docs/
+
+# Tooling and agent metadata
+.claude/
+.pi/
+.pytest_cache/
+
 # Third-party evaluation corpora. Regenerate with the prepare_*.py scripts
 # rather than vendoring them: SecurityEval ships a CITATION.cff but no
 # licence, so redistributing its samples here would be an unlicensed
