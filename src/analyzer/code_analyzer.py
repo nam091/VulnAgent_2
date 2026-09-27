@@ -237,8 +237,9 @@ class CodeAnalyzer:
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(f"Failed to get AI analysis after {max_retries} attempts: {str(e)}")
-                logging.warning(f"Retry {attempt + 1}/{max_retries} failed: {str(e)}")
-                await asyncio.sleep(1.5 * (attempt + 1))
+                backoff = 2 ** attempt
+                logging.warning(f"Retry {attempt + 1}/{max_retries} failed ({str(e)}), waiting {backoff}s...")
+                await asyncio.sleep(backoff)
                 continue
 
     def _chain_vulnerabilities(self, vulnerabilities: List[Vulnerability]) -> List[VulnerabilityChain]:

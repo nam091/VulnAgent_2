@@ -366,7 +366,16 @@ class AIClient:
 
         choices = getattr(response, "choices", None)
         if not choices:
-            error_detail = getattr(response, "error", None) or getattr(response, "message", None) or "no choices returned in model response"
+            logging.debug(f"Raw model response with empty choices: {repr(response)[:500]}")
+            extra_err = None
+            if hasattr(response, "model_extra") and isinstance(response.model_extra, dict):
+                extra_err = response.model_extra.get("error")
+            error_detail = (
+                getattr(response, "error", None)
+                or getattr(response, "message", None)
+                or extra_err
+                or "no choices returned in model response"
+            )
             raise ValueError(f"Failed to parse OpenAI-compatible response: {error_detail}")
 
         choice = choices[0]
