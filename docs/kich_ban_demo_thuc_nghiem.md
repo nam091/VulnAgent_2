@@ -177,6 +177,10 @@ python eval/run_eval.py --only bandit --cold
 | Semgrep (Pinned Offline) | pinned_security_rules.yaml | 4 | 0 | 7 | 1.000 | 0.364 | 0.533 |
 | Bandit (Baseline truyền thống) | Bandit builtin | 7 | 6 | 4 | 0.538 | 0.636 | 0.583 |
 
+> **Ghi chú minh bạch về nguồn gốc số liệu:**
+> - Các dòng *Semgrep (Pinned)*, *Semgrep (Full Registry)*, và *Bandit (Baseline)* được đo lường và kiểm chứng trực tiếp bằng terminal trong môi trường hiện tại (`eval/run_eval.py --cold`).
+> - Hai dòng *VulnAgent (Hợp cả 2 tier)* và *VulnAgent (Confirmed Only)* được kế thừa từ lượt chạy hiệu chỉnh đầy đủ khi có kết nối API LLM (đã lưu artifact tại `output/eval_results.json` và `README.md`). Khi bảo vệ trước Hội đồng, nếu có kết nối mạng và API key LLM hợp lệ, bạn có thể tái hiện toàn bộ bảng trên bằng lệnh: `python eval/run_eval.py --cold`.
+
 **Luận điểm phân tích học thuật cần nhấn mạnh:**
 1. **Tại sao không lấy phép hợp (Union)?** Vì phép hợp cộng dồn toàn bộ False Positive của cả Semgrep và LLM (FP tăng lên 9), khiến F1 tụt xuống 0.710.
 2. **Sự khác biệt giữa 2 bộ Rules Semgrep:** 
