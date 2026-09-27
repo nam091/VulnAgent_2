@@ -11,8 +11,13 @@ import json
 import logging
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
+
+# Suppress benign third-party forward-ref warnings on Python 3.14
+warnings.filterwarnings("ignore", message=".*Field 'lifespan' has an incomplete definition.*")
+warnings.filterwarnings("ignore", message=".*Core Pydantic V1 functionality.*")
 
 # Allow standalone execution from arbitrary cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))

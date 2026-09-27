@@ -15,8 +15,13 @@ import logging
 import os
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Suppress benign third-party forward-ref warnings on Python 3.14
+warnings.filterwarnings("ignore", message=".*Field 'lifespan' has an incomplete definition.*")
+warnings.filterwarnings("ignore", message=".*Core Pydantic V1 functionality.*")
 
 
 # Allow execution as a plain script from any working directory.
