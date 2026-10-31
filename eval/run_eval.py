@@ -31,7 +31,6 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-from analyzer.scanner import ScanOptions, Scanner  # noqa: E402
 from models.vulnerability import FindingSource, Vulnerability  # noqa: E402
 
 DEFAULT_DATASET = Path(__file__).resolve().parent / "dataset"
@@ -578,6 +577,9 @@ async def run_vulnagent(
     Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
     """
     min_risk = kwargs.pop("min_risk", 0)
+    # Lazy import to avoid loading heavy analyzer/LLM subsystems when only evaluating metrics
+    from analyzer.scanner import ScanOptions, Scanner
+
     options = ScanOptions(
         target=str(samples_dir),
         use_llm=use_llm,
