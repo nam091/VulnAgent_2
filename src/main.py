@@ -759,12 +759,173 @@ async def get_job(job_id: str) -> Dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="No such job")
 
+    bench_eval = None
+    if job.status == "done" and job.result:
+        bench_eval = evaluate_job_benchmark_data(job)
+
     return {
         **job.as_summary(),
         "options": job.options,
         "result": job.result,
         "events": job.events[-80:],
+        "benchmark_evaluation": bench_eval,
     }
+
+
+def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
+    """
+    Automatically evaluate a job against benchmark ground truth.
+    Strictly supports ONLY benchmark100 and benchmark1000 datasets.
+    """
+    try:
+        import math
+        from eval.evaluate_scan import (
+            resolve_dataset_dir,
+            extract_findings_from_payload,
+            finding_to_detection,
+            compute_per_cwe_breakdown,
+        )
+        from eval.run_eval import (
+            load_dataset,
+            match,
+            LINE_TOLERANCE,
+            _min_cost_max_bipartite_matching,
+        )
+    except ImportError as e:
+        return {"supported": False, "reason": f"Evaluation engine unavailable: {e}"}
+
+    job_options = getattr(job, "options", {}) or {}
+    job_label = getattr(job, "label", "") or ""
+    job_workspace = getattr(job, "workspace", "") or ""
+    job_result = getattr(job, "result", None) or {}
+
+    target = str(job_options.get("target", "")).lower()
+    label = str(job_label).lower()
+    workspace = str(job_workspace).lower()
+
+    files = job_result.get("files", [])
+    file_names = [f.get("file", "") if isinstance(f, dict) else str(f) for f in files]
+    has_benchmark_files = any("benchmarktest" in fn.lower() for fn in file_names)
+
+    dataset_key = None
+    # Strictly identify benchmark100 and benchmark1000 ONLY
+    if "benchmark100" in target or "benchmark100" in label or "benchmark100" in workspace:
+        dataset_key = "benchmark100"
+    elif "benchmark1000" in target or "benchmark1000" in label or "benchmark1230" in label or "1230" in label or "1,230" in label:
+        dataset_key = "benchmark1000"
+    elif has_benchmark_files:
+        dataset_key = "benchmark100" if len(files) <= 150 else "benchmark1000"
+    elif "100 files" in label or "100 selected" in label:
+        dataset_key = "benchmark100"
+
+    if not dataset_key:
+        return {
+            "supported": False,
+            "reason": "Automatic benchmark evaluation is only supported for benchmark100 and benchmark1000 datasets."
+        }
+
+    try:
+        dataset_name = "benchmark100" if dataset_key == "benchmark100" else "benchmark"
+        dataset_dir = resolve_dataset_dir(dataset_name)
+        labels, dataset_meta = load_dataset(dataset_dir)
+        findings_raw = extract_findings_from_payload(job_result)
+        label_files = {l.file for l in labels}
+        detections = []
+        for f in findings_raw:
+            det = finding_to_detection(f, dataset_dir, label_files=label_files)
+            if det:
+                detections.append(det)
+
+        match_mode = dataset_meta.get("match_mode", "line")
+        partial_labels = dataset_meta.get("partial_labels", False)
+        clean_files = dataset_meta.get("clean_files", [])
+
+        metrics = match(
+            detections=detections,
+            labels=labels,
+            name=getattr(job, "id", "scan"),
+            match_mode=match_mode,
+            partial_labels=partial_labels,
+            exact_cwe=False,
+            clean_files=clean_files,
+            raw_findings=findings_raw,
+        )
+        matched_pairs = _min_cost_max_bipartite_matching(
+            detections=detections,
+            labels=labels,
+            match_mode=match_mode,
+            exact_cwe=False,
+            tolerance=LINE_TOLERANCE,
+        )
+        claimed_label_indices = {l_idx for _, l_idx in matched_pairs}
+        per_cwe = compute_per_cwe_breakdown(labels, claimed_label_indices)
+
+        return {
+            "supported": True,
+            "dataset_key": dataset_key,
+            "dataset_name": dataset_meta.get("name", "OWASP Benchmark"),
+            "total_ground_truth": len(labels),
+            "findings_count": len(findings_raw),
+            "detections_count": len(detections),
+            "metrics": {
+                "tp": metrics.true_positives,
+                "fp": metrics.false_positives,
+                "fn": metrics.false_negatives,
+                "precision": round(metrics.precision, 4) if (metrics.precision and not math.isnan(metrics.precision)) else 0.0,
+                "recall": round(metrics.recall, 4) if (metrics.recall and not math.isnan(metrics.recall)) else 0.0,
+                "f1": round(metrics.f1, 4) if (metrics.f1 and not math.isnan(metrics.f1)) else 0.0,
+                "fp_on_clean_files": metrics.fp_on_clean,
+                "fp_duplicate_sink": metrics.fp_duplicate,
+                "fp_wrong_line_tolerance": metrics.fp_wrong_line,
+                "fp_wrong_type_right_file": metrics.fp_wrong_type,
+                "unmatched": metrics.unmatched,
+            },
+            "per_cwe": per_cwe,
+            "missed": (metrics.missed or [])[:50],
+            "spurious": (metrics.spurious or [])[:50],
+        }
+    except Exception as e:
+        return {"supported": False, "reason": f"Benchmark evaluation failed: {e}"}
+
+
+@app.get("/api/jobs/{job_id}/benchmark")
+async def get_job_benchmark(job_id: str) -> Dict[str, Any]:
+    """
+    Get automated benchmark evaluation for a job if it belongs to benchmark100 or benchmark1000.
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+    if job.status != "done" or not job.result:
+        return {"supported": False, "reason": "Job is still in progress or has no result."}
+    return evaluate_job_benchmark_data(job)
+
+
+@app.get("/api/benchmarks")
+async def list_benchmark_evaluations() -> Dict[str, Any]:
+    """
+    List all completed benchmark jobs with their ground-truth evaluations (benchmark100 and benchmark1000).
+    """
+    jobs = store.list(limit=200)
+    bench_jobs = []
+    for j in jobs:
+        if j.status == "done" and j.result:
+            ev = evaluate_job_benchmark_data(j)
+            if ev.get("supported"):
+                bench_jobs.append({
+                    "id": j.id,
+                    "label": j.label,
+                    "kind": j.kind,
+                    "status": j.status,
+                    "dataset_key": ev["dataset_key"],
+                    "dataset_name": ev["dataset_name"],
+                    "created_at": j.created_at,
+                    "finished_at": j.finished_at,
+                    "metrics": ev["metrics"],
+                    "findings_count": ev["findings_count"],
+                    "total_ground_truth": ev["total_ground_truth"]
+                })
+    return {"benchmark_jobs": bench_jobs}
 
 
 @app.delete("/api/jobs/{job_id}")

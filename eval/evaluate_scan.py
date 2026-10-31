@@ -66,6 +66,13 @@ def resolve_dataset_dir(dataset_arg: Union[str, Path], root_dir: Optional[Path] 
     root = (root_dir or ROOT).resolve()
     candidate = Path(dataset_arg)
 
+    # Handle benchmark1000 / benchmark1230 aliases
+    arg_str = str(dataset_arg).strip().lower()
+    if arg_str in ("benchmark1000", "benchmark1230", "owasp1000", "owasp1230"):
+        benchmark_dir = root / "eval" / "datasets" / "benchmark"
+        if benchmark_dir.is_dir() and (benchmark_dir / "labels.json").is_file():
+            return benchmark_dir.resolve()
+
     # 1. Exact path (absolute or relative to cwd)
     if candidate.is_dir() and (candidate / "labels.json").is_file():
         return candidate.resolve()

@@ -695,3 +695,110 @@ pre.diff .del { color: var(--crit); display: block; }
   .metric { border-bottom: var(--border) solid var(--edge); }
   .f-loc { margin-left: 0; width: 100%; }
 }
+
+/* ---------- benchmark evaluation & scoring view ---------- */
+
+.bench-header-box {
+  background: var(--raised);
+  border: var(--border) solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.bench-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+@media (max-width: 900px) {
+  .bench-grid { grid-template-columns: 1fr 1fr; }
+}
+.bench-metric-card {
+  background: var(--panel);
+  border: var(--border) solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 18px 20px;
+}
+.bench-metric-card.good { border-top: 3px solid var(--low); }
+.bench-metric-card.warn { border-top: 3px solid var(--high); }
+.bench-metric-card.neutral { border-top: 3px solid var(--signal); }
+.bench-metric-val {
+  font: 700 28px/1 var(--data-font);
+  letter-spacing: -1px;
+  color: var(--text);
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.bench-metric-label {
+  font: var(--label-weight) 10.5px/1.2 var(--ui-font);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--label-spacing);
+  margin-bottom: 4px;
+}
+.bench-metric-sub {
+  font: 400 11px/1.4 var(--data-font);
+  color: var(--text-faint);
+}
+.bench-bar-track {
+  height: 24px;
+  background: var(--raised);
+  border: var(--border) solid var(--edge);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  margin: 10px 0 16px;
+}
+.bench-bar-seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 10.5px/1 var(--ui-font);
+  color: #fff;
+  transition: width 0.3s;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bench-bar-tp { background: var(--low); }
+.bench-bar-fp { background: var(--crit); }
+.bench-bar-fn { background: var(--edge-hot); color: var(--text-dim); }
+.bench-table-wrap {
+  overflow-x: auto;
+  border: var(--border) solid var(--edge);
+  border-radius: var(--radius-sm);
+  margin-top: 14px;
+}
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 400 12.5px/1.5 var(--data-font);
+  text-align: left;
+}
+.bench-table th {
+  background: var(--raised);
+  padding: 10px 14px;
+  font: var(--label-weight) 10.5px/1 var(--ui-font);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--label-spacing);
+  border-bottom: var(--border) solid var(--edge);
+}
+.bench-table td {
+  padding: 11px 14px;
+  border-bottom: var(--border) solid var(--edge);
+  color: var(--text);
+}
+.bench-table tr:last-child td { border-bottom: 0; }
+.bench-table tr:hover td { background: var(--raised); }
+.bench-status-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font: 700 10.5px/1 var(--ui-font);
+}
+.bench-status-badge.perfect { background: var(--signal-dim); color: var(--low); border: 1px solid var(--low); }
+.bench-status-badge.partial { background: var(--signal-dim); color: var(--high); border: 1px solid var(--high); }
+.bench-status-badge.zero { background: var(--signal-dim); color: var(--crit); border: 1px solid var(--crit); }
+

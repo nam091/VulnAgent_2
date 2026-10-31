@@ -504,7 +504,10 @@ async function renderJobs() {
 
 /* ---------------- job detail ---------------- */
 
-async function renderJob(id) {
+let currentJobDetailTab = 'findings';
+let currentLoadedJob = null;
+
+async function renderJob(id, subtab) {
   view.innerHTML = `<div class="empty"><span class="spinner"></span>Loading scan</div>`;
   let job;
   try {
@@ -515,52 +518,38 @@ async function renderJob(id) {
     return;
   }
 
+  currentLoadedJob = job;
+  currentJobDetailTab = (subtab === 'benchmark' || location.hash.includes('/benchmark')) ? 'benchmark' : 'findings';
   paintJob(job);
   if (job.status === 'running' || job.status === 'queued') follow(id);
 }
 
+function switchJobDetailTab(tab) {
+  currentJobDetailTab = tab;
+  const fTab = document.getElementById('job-tab-findings-content');
+  const bTab = document.getElementById('job-tab-benchmark-content');
+  const tabBtns = document.querySelectorAll('#job-detail-tabs .tab');
+  if (fTab && bTab) {
+    if (tab === 'benchmark') {
+      fTab.classList.add('hide');
+      bTab.classList.remove('hide');
+      if (tabBtns[0]) tabBtns[0].classList.remove('on');
+      if (tabBtns[1]) tabBtns[1].classList.add('on');
+    } else {
+      fTab.classList.remove('hide');
+      bTab.classList.add('hide');
+      if (tabBtns[0]) tabBtns[0].classList.add('on');
+      if (tabBtns[1]) tabBtns[1].classList.remove('on');
+    }
+  }
+}
+
 function paintJob(job) {
   const running = job.status === 'running' || job.status === 'queued';
-  const result = job.result;
+  const result = job.result || {};
 
-  view.innerHTML = `
-    <div class="page-head">
-      <div class="row">
-        <div style="min-width:0">
-          <h1 id="job-title-header">${esc(job.label)}</h1>
-          <p>${esc(job.kind)} · ${esc(job.status)} · started ${ago(job.created_at)}</p>
-        </div>
-        <div class="spacer"></div>
-        <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">✎ Rename</button>
-        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">✨ AI Name</button>
-        <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">Delete scan</button>
-        <a class="btn ghost sm" href="#/jobs">All scans</a>
-      </div>
-    </div>
-    <div id="job-body"></div>`;
-
-  const body = document.getElementById('job-body');
-
-  if (job.status === 'failed') {
-    body.innerHTML = `<div class="banner err"><b>Scan failed.</b> ${esc(job.error || job.message)}</div>`;
-    return;
-  }
-
-  if (running) {
-    body.innerHTML = progressCard(job) + partialResults(job);
-    body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
-      head.nextElementSibling.classList.toggle('hide'));
-    return;
-  }
-
-  if (!result) {
-    body.innerHTML = emptyState('No result stored', 'This scan finished without a result payload.');
-    return;
-  }
-
-  const counts = result.counts || {};
-  const sources = result.sources || {};
-  const stats = result.stats || {};
+  const bench = job.benchmark_evaluation;
+  const isBenchSupported = bench && bench.supported;
 
   function getTrustRank(f) {
     const isConfirmed = f.source === 'confirmed' || f.corroborated;
@@ -583,6 +572,54 @@ function paintJob(job) {
   });
 
   const totalFindings = findings.length;
+
+  view.innerHTML = `
+    <div class="page-head">
+      <div class="row">
+        <div style="min-width:0">
+          <h1 id="job-title-header">${esc(job.label)}</h1>
+          <p>${esc(job.kind)} · ${esc(job.status)} · started ${ago(job.created_at)}</p>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">✎ Rename</button>
+        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">✨ AI Name</button>
+        <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">Delete scan</button>
+        <a class="btn ghost sm" href="#/jobs">All scans</a>
+      </div>
+      ${isBenchSupported ? `
+      <div class="tabs" id="job-detail-tabs" style="margin-top:16px;margin-bottom:0">
+        <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" onclick="switchJobDetailTab('findings')">
+          Findings &amp; Code Analysis (${totalFindings})
+        </button>
+        <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
+          🎯 Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
+        </button>
+      </div>` : ''}
+    </div>
+    <div id="job-body"></div>`;
+
+  const body = document.getElementById('job-body');
+
+  if (job.status === 'failed') {
+    body.innerHTML = `<div class="banner err"><b>Scan failed.</b> ${esc(job.error || job.message)}</div>`;
+    return;
+  }
+
+  if (running) {
+    body.innerHTML = progressCard(job) + partialResults(job);
+    body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
+      head.nextElementSibling.classList.toggle('hide'));
+    return;
+  }
+
+  if (!job.result) {
+    body.innerHTML = emptyState('No result stored', 'This scan finished without a result payload.');
+    return;
+  }
+
+  const counts = result.counts || {};
+  const sources = result.sources || {};
+  const stats = result.stats || {};
   const countConfirmed = findings.filter(f => f.source === 'confirmed' || f.corroborated).length;
   const countVerified = findings.filter(f => f.verification && f.verification.verdict === 'confirmed').length;
   const countLlm = findings.filter(f => f.source === 'llm-only' || f.source === 'llm').length;
@@ -619,7 +656,7 @@ function paintJob(job) {
     });
   });
 
-  body.innerHTML = `
+  const findingsTabHtml = `
     ${(result.degraded && degradedFiles.length) ? `<div class="banner warn" style="margin-bottom:18px">
       <b>Analysis Coverage Note:</b> ${degradedFiles.length} file(s) encountered a local tier limitation (e.g., syntax or timeout), while remaining tiers completed and guarded results.</div>` : ''}
 
@@ -726,6 +763,16 @@ function paintJob(job) {
         ${findings.length ? findings.map(f => findingCard(f, job.id)).join('')
           : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
       </div>
+    </div>`;
+
+  const benchmarkTabHtml = isBenchSupported ? renderBenchmarkTabContent(job) : '';
+
+  body.innerHTML = `
+    <div id="job-tab-findings-content" class="${currentJobDetailTab === 'findings' ? '' : 'hide'}">
+      ${findingsTabHtml}
+    </div>
+    <div id="job-tab-benchmark-content" class="${currentJobDetailTab === 'benchmark' ? '' : 'hide'}">
+      ${benchmarkTabHtml}
     </div>`;
 
   const searchInput = body.querySelector('#finding-search-input');
@@ -1513,6 +1560,274 @@ async function testConnection() {
   }
 }
 
+/* ---------------- benchmark evaluation view & center ---------------- */
+
+function renderBenchmarkTabContent(job) {
+  const bench = job.benchmark_evaluation;
+  if (!bench || !bench.supported) {
+    return `<div class="banner info">Automatic benchmark evaluation is only supported for benchmark100 and benchmark1000 datasets.</div>`;
+  }
+
+  const m = bench.metrics || {};
+  const perCwe = bench.per_cwe || {};
+  const totalGroundTruth = bench.total_ground_truth || 0;
+  const tp = m.tp || 0;
+  const fp = m.fp || 0;
+  const fn = m.fn || 0;
+  const prec = (m.precision * 100).toFixed(1);
+  const rec = (m.recall * 100).toFixed(1);
+  const f1 = (m.f1 || 0).toFixed(4);
+
+  const totalDetections = tp + fp + fn || 1;
+  const tpPct = ((tp / totalDetections) * 100).toFixed(1);
+  const fpPct = ((fp / totalDetections) * 100).toFixed(1);
+  const fnPct = ((fn / totalDetections) * 100).toFixed(1);
+
+  const cweRows = Object.values(perCwe).sort((a, b) => b.total - a.total).map(row => {
+    const rate = ((row.recall || 0) * 100).toFixed(1);
+    const badgeClass = row.recall >= 1.0 ? 'perfect' : (row.recall > 0 ? 'partial' : 'zero');
+    const badgeText = row.recall >= 1.0 ? '100% Detected' : (row.recall > 0 ? `${rate}% Partial` : '0% Missed');
+    return `
+      <tr>
+        <td style="font-weight:700"><code>${esc(row.cwe)}</code></td>
+        <td>${esc((row.types || []).join(', ') || row.cwe)}</td>
+        <td style="font-weight:700">${row.total}</td>
+        <td style="color:var(--low);font-weight:700">${row.tp}</td>
+        <td style="color:${row.fn > 0 ? 'var(--crit)' : 'var(--text-faint)'}">${row.fn}</td>
+        <td style="font-weight:700;font-variant-numeric:tabular-nums">${rate}%</td>
+        <td><span class="bench-status-badge ${badgeClass}">${badgeText}</span></td>
+      </tr>`;
+  }).join('');
+
+  const spuriousItems = (bench.spurious || []).slice(0, 30).map(s => `<li><code>${esc(s)}</code></li>`).join('');
+  const missedItems = (bench.missed || []).slice(0, 30).map(m => `<li><code>${esc(m)}</code></li>`).join('');
+
+  return `
+    <div class="bench-header-box">
+      <div class="row" style="align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">
+            🎯 Automated Ground-Truth Benchmark Evaluation
+          </div>
+          <p class="muted" style="margin:0">
+            Dataset: <b>${esc(bench.dataset_name)}</b> (<code>${esc(bench.dataset_key)}</code>) ·
+            Ground-Truth Labels: <b>${totalGroundTruth}</b> · Evaluated via bipartite sink-matching (&plusmn;3 lines tolerance, CWE equivalence classes).
+          </p>
+        </div>
+        <div class="row" style="gap:8px">
+          <button type="button" class="btn ghost sm" onclick="copyBenchmarkMarkdown('${esc(job.id)}')">
+            📋 Copy Thesis Markdown Table
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bench-grid">
+      <div class="bench-metric-card good">
+        <div class="bench-metric-val">${prec}%</div>
+        <div class="bench-metric-label">Precision</div>
+        <div class="bench-metric-sub">True Positives / All Findings</div>
+      </div>
+      <div class="bench-metric-card good">
+        <div class="bench-metric-val">${rec}%</div>
+        <div class="bench-metric-label">Recall (Coverage)</div>
+        <div class="bench-metric-sub">Captured ${tp} of ${totalGroundTruth} actual defects</div>
+      </div>
+      <div class="bench-metric-card neutral">
+        <div class="bench-metric-val">${f1}</div>
+        <div class="bench-metric-label">F1-Score</div>
+        <div class="bench-metric-sub">Harmonic mean of P &amp; R</div>
+      </div>
+      <div class="bench-metric-card warn">
+        <div class="bench-metric-val">${tp} / ${fp} / ${fn}</div>
+        <div class="bench-metric-label">TP / FP / FN</div>
+        <div class="bench-metric-sub">Clean-file FP: ${m.fp_on_clean_files || 0}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Detection Accuracy Distribution</div>
+      <div class="bench-bar-track">
+        <div class="bench-bar-seg bench-bar-tp" style="width:${tpPct}%" title="True Positives: ${tp} (${tpPct}%)">
+          ${tp > 0 ? `TP: ${tp}` : ''}
+        </div>
+        <div class="bench-bar-seg bench-bar-fp" style="width:${fpPct}%" title="False Positives: ${fp} (${fpPct}%)">
+          ${fp > 0 ? `FP: ${fp}` : ''}
+        </div>
+        <div class="bench-bar-seg bench-bar-fn" style="width:${fnPct}%" title="False Negatives: ${fn} (${fnPct}%)">
+          ${fn > 0 ? `FN: ${fn}` : ''}
+        </div>
+      </div>
+      <div class="row muted" style="justify-content:space-between;font-size:11.5px">
+        <span style="color:var(--low)">■ True Positives: <b>${tp}</b> (${tpPct}%)</span>
+        <span style="color:var(--crit)">■ False Positives: <b>${fp}</b> (${fpPct}%)</span>
+        <span style="color:var(--text-faint)">■ False Negatives (Missed): <b>${fn}</b> (${fnPct}%)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <div class="card-title" style="margin:0">Defect Breakdown by CWE Category</div>
+        <div class="spacer"></div>
+        <span class="muted">${Object.keys(perCwe).length} categories evaluated</span>
+      </div>
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th>CWE ID</th>
+              <th>Vulnerability Category</th>
+              <th>Ground Truth</th>
+              <th>Detected (TP)</th>
+              <th>Missed (FN)</th>
+              <th>Recall Rate</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cweRows || '<tr><td colspan="7" class="muted" style="text-align:center">No CWE breakdown data.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">False Positives (Spurious Findings: ${fp})</div>
+        <p class="muted">Detections that did not match any ground-truth labeled defect:</p>
+        ${spuriousItems ? `<ul style="max-height:220px;overflow-y:auto;padding-left:20px;font-size:12px">${spuriousItems}</ul>` : `<div class="muted">Zero false positives recorded!</div>`}
+      </div>
+      <div class="card">
+        <div class="card-title">False Negatives (Missed Defects: ${fn})</div>
+        <p class="muted">Ground-truth vulnerabilities not captured in this run:</p>
+        ${missedItems ? `<ul style="max-height:220px;overflow-y:auto;padding-left:20px;font-size:12px">${missedItems}</ul>` : `<div class="muted" style="color:var(--low)">100% of ground-truth defects were captured!</div>`}
+      </div>
+    </div>`;
+}
+
+async function copyBenchmarkMarkdown(jobId) {
+  try {
+    const res = await api(`/api/jobs/${jobId}/benchmark`);
+    if (!res || !res.supported) {
+      alert('Benchmark evaluation not available for this job.');
+      return;
+    }
+    const m = res.metrics || {};
+    let md = `### Quantitative Benchmark Evaluation Report (${res.dataset_key})\n\n`;
+    md += `| Metric | Score | Note |\n`;
+    md += `| :--- | :--- | :--- |\n`;
+    md += `| **Precision** | **${(m.precision * 100).toFixed(2)}%** | True Positives / Total Alarms |\n`;
+    md += `| **Recall** | **${(m.recall * 100).toFixed(2)}%** | Captured ${m.tp} / ${res.total_ground_truth} Ground-Truth Defects |\n`;
+    md += `| **F1-Score** | **${m.f1.toFixed(4)}** | Harmonic Mean |\n`;
+    md += `| **True Positives (TP)** | **${m.tp}** | Confirmed correct detections |\n`;
+    md += `| **False Positives (FP)** | **${m.fp}** | Spurious findings (Clean-file FP: ${m.fp_on_clean_files || 0}) |\n`;
+    md += `| **False Negatives (FN)** | **${m.fn}** | Missed ground-truth defects |\n\n`;
+
+    md += `#### Per-CWE Vulnerability Breakdown\n\n`;
+    md += `| CWE ID | Category Name | Ground Truth | Detected (TP) | Missed (FN) | Recall Rate |\n`;
+    md += `| :--- | :--- | :---: | :---: | :---: | :---: |\n`;
+    for (const [cwe, r] of Object.entries(res.per_cwe || {})) {
+      md += `| ${cwe} | ${(r.types || []).join(', ')} | ${r.total} | ${r.tp} | ${r.fn} | ${((r.recall || 0) * 100).toFixed(1)}% |\n`;
+    }
+
+    await navigator.clipboard.writeText(md);
+    alert('✓ Benchmark Markdown summary copied to clipboard! You can paste it directly into Chapter 4 of your thesis.');
+  } catch (err) {
+    alert('Copy failed: ' + err.message);
+  }
+}
+
+async function renderBenchmarkCenter() {
+  view.innerHTML = `
+    <div class="page-head">
+      <h1>🎯 Benchmark Evaluation Center</h1>
+      <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+    </div>
+    <div class="empty"><span class="spinner"></span>Loading benchmark evaluations...</div>`;
+
+  let benchJobs = [];
+  try {
+    const res = await api('/api/benchmarks');
+    if (res && res.benchmark_jobs) {
+      benchJobs = res.benchmark_jobs;
+    }
+  } catch (err) {
+    view.innerHTML = `<div class="banner err">Failed to load benchmark evaluations: ${esc(err.message)}</div>`;
+    return;
+  }
+
+  const b100Jobs = benchJobs.filter(j => j.dataset_key === 'benchmark100');
+  const b1000Jobs = benchJobs.filter(j => j.dataset_key === 'benchmark1000');
+
+  function renderBenchSummaryCard(j) {
+    const m = j.metrics || {};
+    const prec = (m.precision * 100).toFixed(1);
+    const rec = (m.recall * 100).toFixed(1);
+    const f1 = (m.f1 || 0).toFixed(4);
+    return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="row" style="align-items:flex-start">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:700;font-size:15px;margin-bottom:4px">
+              <a href="#/job/${esc(j.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(j.label)}</a>
+            </div>
+            <p class="muted" style="margin:0">
+              Dataset: <code>${esc(j.dataset_key)}</code> · Finished ${ago(j.finished_at || j.created_at)} · Total Findings: ${j.findings_count}
+            </p>
+          </div>
+          <a class="btn sm" href="#/job/${esc(j.id)}/benchmark">
+            View Evaluation ➔
+          </a>
+        </div>
+        <div class="bench-grid" style="margin-top:14px;margin-bottom:0">
+          <div class="bench-metric-card good" style="padding:10px 14px">
+            <div class="bench-metric-val" style="font-size:20px">${prec}%</div>
+            <div class="bench-metric-label">Precision</div>
+          </div>
+          <div class="bench-metric-card good" style="padding:10px 14px">
+            <div class="bench-metric-val" style="font-size:20px">${rec}%</div>
+            <div class="bench-metric-label">Recall</div>
+          </div>
+          <div class="bench-metric-card neutral" style="padding:10px 14px">
+            <div class="bench-metric-val" style="font-size:20px">${f1}</div>
+            <div class="bench-metric-label">F1-Score</div>
+          </div>
+          <div class="bench-metric-card warn" style="padding:10px 14px">
+            <div class="bench-metric-val" style="font-size:20px">TP: ${m.tp} / FP: ${m.fp}</div>
+            <div class="bench-metric-label">Confusion (FN: ${m.fn})</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  view.innerHTML = `
+    <div class="page-head">
+      <h1>🎯 Benchmark Evaluation Center</h1>
+      <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:22px;background:var(--raised)">
+      <div style="font-weight:700;margin-bottom:4px">Strict Benchmark Dataset Scope</div>
+      <p class="muted" style="margin:0">
+        In accordance with research methodology, automated ground-truth scoring is strictly restricted to <b>benchmark100</b> (50 vulnerable + 50 clean testcases) and <b>benchmark1000</b> (OWASP 1,230 files). All custom repositories and ad-hoc scans operate in standard security audit mode.
+      </p>
+    </div>
+
+    <div style="margin-bottom:28px">
+      <h2 style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)">
+        OWASP Benchmark 100 Selected Suite (${b100Jobs.length} run${b100Jobs.length === 1 ? '' : 's'})
+      </h2>
+      ${b100Jobs.length ? b100Jobs.map(renderBenchSummaryCard).join('') : '<div class="muted">No completed benchmark100 runs found. Run a scan targeting <code>eval/datasets/benchmark100</code> to generate evaluation metrics.</div>'}
+    </div>
+
+    <div>
+      <h2 style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)">
+        OWASP Benchmark 1000 Full Suite (${b1000Jobs.length} run${b1000Jobs.length === 1 ? '' : 's'})
+      </h2>
+      ${b1000Jobs.length ? b1000Jobs.map(renderBenchSummaryCard).join('') : '<div class="muted">No completed benchmark1000 runs found. Run a scan targeting <code>eval/datasets/benchmark</code> to generate evaluation metrics.</div>'}
+    </div>`;
+}
+
 /* ---------------- routing ---------------- */
 
 async function route() {
@@ -1525,13 +1840,15 @@ async function route() {
     const target = a.dataset.route;
     a.classList.toggle('on',
       target === page || (page === '' && target === 'dashboard') ||
-      (page === 'job' && target === 'jobs'));
+      (page === 'job' && target === 'jobs') ||
+      (page === 'benchmark' && target === 'benchmark'));
   });
 
   try {
     if (page === 'scan') renderScan();
     else if (page === 'jobs') await renderJobs();
-    else if (page === 'job' && parts[1]) await renderJob(parts[1]);
+    else if (page === 'job' && parts[1]) await renderJob(parts[1], parts[2]);
+    else if (page === 'benchmark') await renderBenchmarkCenter();
     else if (page === 'settings') await renderSettings();
     else await renderDashboard();
   } catch (e) {
