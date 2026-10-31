@@ -1,0 +1,735 @@
+{
+  "model": "cx/gpt-5.6-luna",
+  "role": "competitor",
+  "timestamp": "2026-10-24T06:17:21.413302+00:00",
+  "base_url": "http://127.0.0.1:20128/v1",
+  "timeout_sec": 45.0,
+  "summary": {
+    "model": "cx/gpt-5.6-luna",
+    "role": "competitor",
+    "total_files": 13,
+    "success_count": 13,
+    "blocked_count": 0,
+    "timeout_count": 0,
+    "http_error_count": 0,
+    "avg_latency_sec": 16.371,
+    "total_latency_sec": 212.82,
+    "total_prompt_tokens": 168417,
+    "total_completion_tokens": 29258,
+    "total_reasoning_tokens": 0,
+    "total_tokens": 197675,
+    "total_findings": 29,
+    "valid_json_rate": 100.0,
+    "true_positives": 5,
+    "false_positives": 24,
+    "false_negatives": 4,
+    "fp_on_clean": 3,
+    "precision": 0.1724,
+    "recall": 0.5556,
+    "f1_score": 0.2632
+  },
+  "file_results": [
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "superset_config.py",
+      "dataset": "superset",
+      "category": "HARDCODED_CREDENTIALS / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 18.236,
+      "tokens": {
+        "prompt_tokens": 22302,
+        "completion_tokens": 2555,
+        "reasoning_tokens": 0,
+        "total_tokens": 24857
+      },
+      "is_valid_json": true,
+      "findings_count": 5,
+      "extracted_findings": [
+        {
+          "cwe": "798",
+          "line": 181,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "CRITICAL",
+          "description": "The application assigns its cryptographic SECRET_KEY to a static placeholder value imported from the source tree. If this default is used in a deployed environment, attackers who know the repository v"
+        },
+        {
+          "cwe": "798",
+          "line": 1269,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "HIGH",
+          "description": "The configuration contains a static, publicly discoverable JWT signing secret for global asynchronous queries."
+        },
+        {
+          "cwe": "798",
+          "line": 1278,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "HIGH",
+          "description": "The guest-token JWT signing secret is a static test value embedded in the configuration."
+        },
+        {
+          "cwe": "798",
+          "line": 979,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "MEDIUM",
+          "description": "The SMTP password is configured as a static default credential."
+        },
+        {
+          "cwe": "1188",
+          "line": 1219,
+          "type": "SECURITY_MISCONFIGURATION",
+          "severity": "MEDIUM",
+          "description": "Session cookies are configured without the Secure attribute by default, allowing them to be transmitted over unencrypted HTTP connections."
+        }
+      ],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"HARDCODED_CREDENTIALS\",\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\",\n      \"owasp_category\": \"A02:2021-Cryptographic Failures\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\",\n      \"location\": {\n        \"file_path\": \"supe",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "superset_config.py",
+          "line": 1,
+          "cwe": "798",
+          "type": "HARDCODED_CREDENTIALS",
+          "note": "CVE-2023-27524 / CWE-798: Default SECRET_KEY vulnerability allowing session forgery and RCE"
+        }
+      ],
+      "tp": 1,
+      "fp": 4,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "superset_config.py:181 HARDCODED_CREDENTIALS",
+        "superset_config.py:1269 HARDCODED_CREDENTIALS",
+        "superset_config.py:1278 HARDCODED_CREDENTIALS",
+        "superset_config.py:1219 SECURITY_MISCONFIGURATION"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "views_core.py",
+      "dataset": "superset",
+      "category": "SSRF / Complex View",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 16.895,
+      "tokens": {
+        "prompt_tokens": 42982,
+        "completion_tokens": 2357,
+        "reasoning_tokens": 0,
+        "total_tokens": 45339
+      },
+      "is_valid_json": true,
+      "findings_count": 3,
+      "extracted_findings": [
+        {
+          "cwe": "352",
+          "line": 753,
+          "type": "CSRF",
+          "severity": "HIGH",
+          "description": "The explore endpoint accepts state-changing chart save operations through request query parameters. When action is \"saveas\" or \"overwrite\", the endpoint invokes save_or_overwrite_slice(), which create"
+        },
+        {
+          "cwe": "352",
+          "line": 275,
+          "type": "CSRF",
+          "severity": "HIGH",
+          "description": "The request_access endpoint performs a state-changing access-request operation when the query parameter action equals \"go\". The operation creates DatasourceAccessRequest records, but the shown handler"
+        },
+        {
+          "cwe": "20",
+          "line": 1035,
+          "type": "INSUFFICIENT_INPUT_VALIDATION",
+          "severity": "MEDIUM",
+          "description": "A client-controlled save_to_dashboard_id is converted directly with int() and used in a database lookup without controller-level validation or graceful error handling. Malformed values raise an uncaug"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"CSRF\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-352\",\n      \"owasp_category\": \"A01:2021-Broken Access Control\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:H/A:N\",\n      \"location\": {\n        \"file_path\": \"views_core.py\",\n        \"s",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "views_core.py",
+          "line": 1,
+          "cwe": "918",
+          "type": "SSRF",
+          "note": "CVE-2023-36388 / CWE-918: Server-Side Request Forgery (SSRF) in URL fetching and export endpoints"
+        }
+      ],
+      "tp": 0,
+      "fp": 3,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "views_core.py:1 SSRF"
+      ],
+      "spurious": [
+        "views_core.py:753 CSRF",
+        "views_core.py:275 CSRF",
+        "views_core.py:1035 INSUFFICIENT_INPUT_VALIDATION"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "database_views.py",
+      "dataset": "superset",
+      "category": "INFORMATION_DISCLOSURE",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 13.277,
+      "tokens": {
+        "prompt_tokens": 23360,
+        "completion_tokens": 1810,
+        "reasoning_tokens": 0,
+        "total_tokens": 25170
+      },
+      "is_valid_json": true,
+      "findings_count": 2,
+      "extracted_findings": [
+        {
+          "cwe": "209",
+          "line": 219,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "severity": "MEDIUM",
+          "description": "The CSV upload exception handler includes the raw exception string in a message flashed to the user. Exceptions from pandas, SQLAlchemy, database drivers, filesystem operations, and engine-specific in"
+        },
+        {
+          "cwe": "409",
+          "line": 410,
+          "type": "RESOURCE_EXHAUSTION",
+          "severity": "MEDIUM",
+          "description": "A user-uploaded ZIP archive is opened and every archive member is fully decompressed into memory without limits on the number of entries, compressed size, uncompressed size, or total expanded size. A "
+        }
+      ],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"IMPROPER_ERROR_HANDLING\",\n      \"severity\": \"MEDIUM\",\n      \"cwe_id\": \"CWE-209\",\n      \"owasp_category\": \"A05:2021-Security Misconfiguration\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N\",\n      \"location\": {\n        \"file_path\": \"d",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "database_views.py",
+          "line": 1,
+          "cwe": "209",
+          "type": "INFORMATION_DISCLOSURE",
+          "note": "CVE-2024-53948 / CWE-209: Information Disclosure / Metadata leak in DB test connection error reporting"
+        }
+      ],
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "database_views.py:410 RESOURCE_EXHAUSTION"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "query_context_factory.py",
+      "dataset": "superset",
+      "category": "INPUT_VALIDATION / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 19.966,
+      "tokens": {
+        "prompt_tokens": 4104,
+        "completion_tokens": 2871,
+        "reasoning_tokens": 0,
+        "total_tokens": 6975
+      },
+      "is_valid_json": true,
+      "findings_count": 3,
+      "extracted_findings": [
+        {
+          "cwe": "862",
+          "line": 46,
+          "type": "Missing Authorization (CWE-862)",
+          "severity": "High",
+          "description": "The factory accepts caller-supplied datasource identifiers and a caller-supplied slice_id, then resolves them through ConnectorRegistry.get_datasource() and ChartDAO.find_by_id() without performing an"
+        },
+        {
+          "cwe": "20",
+          "line": 92,
+          "type": "Improper Input Validation (CWE-20)",
+          "severity": "Medium",
+          "description": "The code performs only type coercion on datasource.type and datasource.id. It does not validate that the values are present, belong to an allowed connector type, are within an acceptable numeric range"
+        },
+        {
+          "cwe": "400",
+          "line": 46,
+          "type": "Uncontrolled Resource Consumption (CWE-400)",
+          "severity": "Medium",
+          "description": "The method accepts an unbounded queries list, arbitrary query dictionaries, force, and custom_cache_timeout. It creates one query object per supplied entry and preserves the complete input in cache_va"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"file\": \"query_context_factory.py\",\n  \"file_type\": \"source\",\n  \"analysis_scope\": {\n    \"imports\": [],\n    \"functions\": [],\n    \"classes\": [],\n    \"user_controlled_entry_points\": {\n      \"django\": \"None directly present. The create() parameters may receive values originating from request.GET, req",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "query_context_factory.py",
+          "line": 1,
+          "cwe": "20",
+          "type": "INPUT_VALIDATION",
+          "note": "CVE-2023-25504 / CWE-20: Improper Input Validation in query payload processing"
+        }
+      ],
+      "tp": 1,
+      "fp": 2,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "query_context_factory.py:46 Missing Authorization (CWE-862)",
+        "query_context_factory.py:46 Uncontrolled Resource Consumption (CWE-400)"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "sql_lab_models.py",
+      "dataset": "superset",
+      "category": "SQL_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 2.081,
+      "tokens": {
+        "prompt_tokens": 13619,
+        "completion_tokens": 80,
+        "reasoning_tokens": 0,
+        "total_tokens": 13699
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\"vulnerabilities\":[]}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "sql_lab_models.py",
+          "line": 1,
+          "cwe": "89",
+          "type": "SQL_INJECTION",
+          "note": "CVE-2023-39265 / CWE-89: SQL Injection in SQL Lab query execution"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "sql_lab_models.py:1 SQL_INJECTION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "slack_util.py",
+      "dataset": "superset",
+      "category": "COMMAND_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 25.671,
+      "tokens": {
+        "prompt_tokens": 3669,
+        "completion_tokens": 3729,
+        "reasoning_tokens": 0,
+        "total_tokens": 7398
+      },
+      "is_valid_json": true,
+      "findings_count": 4,
+      "extracted_findings": [
+        {
+          "cwe": "862",
+          "line": 35,
+          "type": "CWE-862: Missing Authorization",
+          "severity": "High",
+          "description": "The function sends messages and uploads files using the globally configured Slack API token, but performs no authentication or authorization check on slack_channel, subject, body, or file. Any reachab"
+        },
+        {
+          "cwe": "73",
+          "line": 39,
+          "type": "CWE-73: External Control of File Name or Path",
+          "severity": "High",
+          "description": "The file argument accepts str, IOBase, or bytes and is passed directly to files_upload. In Slack SDK versions that interpret a string as a local filename, a tainted path can cause the process to read "
+        },
+        {
+          "cwe": "117",
+          "line": 61,
+          "type": "CWE-117: Improper Output Neutralization for Logs",
+          "severity": "Medium",
+          "description": "slack_channel is included directly in an informational log record. If it contains newline or control characters, an attacker who can influence the channel value may forge additional log lines or corru"
+        },
+        {
+          "cwe": "617",
+          "line": 54,
+          "type": "CWE-617: Reachable Assertion",
+          "severity": "Medium",
+          "description": "The function uses assert statements to validate Slack responses. Python removes assert statements when run with optimization, so the checks are not reliable runtime validation. When assertions are ena"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"id\": \"SLACK-001\",\n      \"vulnerability_type\": {\n        \"cwe\": \"CWE-862: Missing Authorization\",\n        \"owasp_top_10_2023\": \"A01:2021 - Broken Access Control\",\n        \"sans_cwe_top_25\": \"CWE-862: Missing Authorization\",\n        \"language_specific_pitfall\": \"P",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "slack_util.py",
+          "line": 1,
+          "cwe": "78",
+          "type": "COMMAND_INJECTION",
+          "note": "CVE-2020-13948 / CWE-78: OS Command Injection in slack utility via unsanitized command string"
+        }
+      ],
+      "tp": 0,
+      "fp": 4,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "slack_util.py:1 COMMAND_INJECTION"
+      ],
+      "spurious": [
+        "slack_util.py:35 CWE-862: Missing Authorization",
+        "slack_util.py:39 CWE-73: External Control of File Name or Path",
+        "slack_util.py:61 CWE-117: Improper Output Neutralization for Logs",
+        "slack_util.py:54 CWE-617: Reachable Assertion"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "clean_date_parser.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 3.203,
+      "tokens": {
+        "prompt_tokens": 16839,
+        "completion_tokens": 159,
+        "reasoning_tokens": 0,
+        "total_tokens": 16998
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\"vulnerabilities\":[]}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "clean_hashing.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 14.553,
+      "tokens": {
+        "prompt_tokens": 3360,
+        "completion_tokens": 1976,
+        "reasoning_tokens": 0,
+        "total_tokens": 5336
+      },
+      "is_valid_json": true,
+      "findings_count": 1,
+      "extracted_findings": [
+        {
+          "cwe": "328",
+          "line": 23,
+          "type": "CWE-328: Use of Weak Hash",
+          "severity": "High",
+          "description": "The function computes an MD5 digest using hashlib.md5(). MD5 is cryptographically broken: practical collision attacks allow an attacker to construct distinct inputs with the same digest. The function "
+        }
+      ],
+      "raw_response_snippet": "{\n  \"file\": \"clean_hashing.py\",\n  \"file_type\": \"source\",\n  \"code_context\": {\n    \"imports\": [],\n    \"functions\": [],\n    \"classes\": []\n  },\n  \"user_controlled_entry_points\": {\n    \"django\": {\n      \"request_parameters\": false,\n      \"form_data\": false,\n      \"body\": false,\n      \"json\": false,\n     ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "fp_on_clean": 1,
+      "missed": [],
+      "spurious": [
+        "clean_hashing.py:23 CWE-328: Use of Weak Hash"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "adyen_plugin.py",
+      "dataset": "saleor310",
+      "category": "TIMING_ATTACK / Sensitive Payment",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 3.412,
+      "tokens": {
+        "prompt_tokens": 13139,
+        "completion_tokens": 130,
+        "reasoning_tokens": 0,
+        "total_tokens": 13269
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\"vulnerabilities\":[]}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "adyen_plugin.py",
+          "line": 943,
+          "cwe": "208",
+          "type": "TIMING_ATTACK",
+          "note": "GHSA-3rqj-9v87-2x3f / CWE-208 / CWE-385: Timing attack in validate_hmac_signature via standard == string comparison instead of constant-time compare_digest"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "adyen_plugin.py:943 TIMING_ATTACK"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "refresh_token.py",
+      "dataset": "saleor310",
+      "category": "CSRF_BYPASS / Sensitive Auth",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 35.261,
+      "tokens": {
+        "prompt_tokens": 8443,
+        "completion_tokens": 5291,
+        "reasoning_tokens": 0,
+        "total_tokens": 13734
+      },
+      "is_valid_json": true,
+      "findings_count": 6,
+      "extracted_findings": [
+        {
+          "cwe": "352",
+          "line": 285,
+          "type": "CWE-352: Cross-Site Request Forgery (CSRF)",
+          "severity": "MEDIUM",
+          "description": "The mutation decides whether CSRF validation is required before normalizing the refresh token. It sets need_csrf to false whenever the caller supplies any value other than None, including an empty str"
+        },
+        {
+          "cwe": "203",
+          "line": 121,
+          "type": "CWE-203: Observable Discrepancy",
+          "severity": "MEDIUM",
+          "description": "Authentication failures expose distinct responses for invalid credentials, unconfirmed accounts, and inactive accounts. The response differences allow an unauthenticated caller to determine whether an"
+        },
+        {
+          "cwe": "400",
+          "line": 70,
+          "type": "CWE-400: Uncontrolled Resource Consumption",
+          "severity": "MEDIUM",
+          "description": "_does_token_match() calls Django's private CSRF unmasking function on attacker-controlled csrf_token input and on the token value from the JWT payload. The function only handles a boolean comparison r"
+        },
+        {
+          "cwe": "209",
+          "line": 37,
+          "type": "CWE-209: Generation of Error Message Containing Sensitive Information",
+          "severity": "MEDIUM",
+          "description": "The code converts several JWT parsing failures into distinct client-visible messages and error codes, including signature expiration, decode failure, and invalid token. These distinctions disclose tok"
+        },
+        {
+          "cwe": "209",
+          "line": 301,
+          "type": "CWE-209: Generation of Error Message Containing Sensitive Information",
+          "severity": "MEDIUM",
+          "description": "VerifyToken accepts an arbitrary caller-supplied JWT and returns both the resolved user and the complete decoded payload through GenericScalar. Although signature validation is delegated to jwt_decode"
+        },
+        {
+          "cwe": "862",
+          "line": 361,
+          "type": "CWE-862: Missing Authorization",
+          "severity": "MEDIUM",
+          "description": "The external authentication mutations accept attacker-controlled plugin_id and JSON input and invoke plugin operations without a visible permission declaration, plugin allowlist, or authorization chec"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"file\": \"refresh_token.py\",\n  \"file_type\": \"source\",\n  \"imports\": [],\n  \"functions\": [],\n  \"classes\": [],\n  \"analysis_scope\": {\n    \"framework\": \"Django with Graphene GraphQL\",\n    \"user_controlled_entry_points\": [\n      {\n        \"source\": \"GraphQL mutation arguments\",\n        \"locations\": [\n  ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "refresh_token.py",
+          "line": 218,
+          "cwe": "352",
+          "type": "CSRF_BYPASS",
+          "note": "GHSA-ff69-fwjf-3c9w / CWE-352 / CWE-287: CSRF bypass in get_refresh_token reading refresh token directly from cookies without CSRF validation"
+        }
+      ],
+      "tp": 1,
+      "fp": 5,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "refresh_token.py:121 CWE-203: Observable Discrepancy",
+        "refresh_token.py:70 CWE-400: Uncontrolled Resource Consumption",
+        "refresh_token.py:37 CWE-209: Generation of Error Message Containing Sensitive Information",
+        "refresh_token.py:301 CWE-209: Generation of Error Message Containing Sensitive Information",
+        "refresh_token.py:361 CWE-862: Missing Authorization"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "account_mutations.py",
+      "dataset": "saleor310",
+      "category": "AUTHORIZATION_BYPASS",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 28.295,
+      "tokens": {
+        "prompt_tokens": 8688,
+        "completion_tokens": 4112,
+        "reasoning_tokens": 0,
+        "total_tokens": 12800
+      },
+      "is_valid_json": true,
+      "findings_count": 3,
+      "extracted_findings": [
+        {
+          "cwe": "862",
+          "line": 525,
+          "type": "CWE-862: Missing Authorization",
+          "severity": "High",
+          "description": "ConfirmEmailChange decodes the token and uses new_email and old_email from its payload, but never validates payload['user_pk'] against info.context.user.pk. The mutation only verifies that the caller "
+        },
+        {
+          "cwe": "294",
+          "line": 486,
+          "type": "CWE-294: Authentication Bypass by Capture-replay",
+          "severity": "Medium",
+          "description": "RequestEmailChange creates a JWT containing the email-change data, while ConfirmEmailChange only decodes and validates the token. There is no nonce lookup, consumed flag, token revocation check, or at"
+        },
+        {
+          "cwe": "367",
+          "line": 550,
+          "type": "CWE-367: Time-of-check Time-of-use Race Condition",
+          "severity": "Medium",
+          "description": "ConfirmEmailChange checks whether new_email exists at line 550, then performs the update at lines 560-562. Two concurrent requests can both observe the address as available. If no database-level uniqu"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"file\": \"account_mutations.py\",\n  \"file_type\": \"source\",\n  \"code_context\": {\n    \"imports\": [],\n    \"functions\": [],\n    \"classes\": []\n  },\n  \"analysis_scope\": {\n    \"user_controlled_entry_points\": [\n      {\n        \"source\": \"GraphQL mutation arguments\",\n        \"locations\": [\n          \"Accoun",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "account_mutations.py",
+          "line": 74,
+          "cwe": "284",
+          "type": "AUTHORIZATION_BYPASS",
+          "note": "GHSA-6whj-8p3f-2xqp / CWE-284 / CWE-863: Account pre-hijacking and authorization bypass in AccountRegister mutation"
+        }
+      ],
+      "tp": 1,
+      "fp": 2,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "account_mutations.py:486 CWE-294: Authentication Bypass by Capture-replay",
+        "account_mutations.py:550 CWE-367: Time-of-check Time-of-use Race Condition"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "clean_core_utils.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 20.141,
+      "tokens": {
+        "prompt_tokens": 4567,
+        "completion_tokens": 2786,
+        "reasoning_tokens": 0,
+        "total_tokens": 7353
+      },
+      "is_valid_json": true,
+      "findings_count": 2,
+      "extracted_findings": [
+        {
+          "cwe": "601",
+          "line": 24,
+          "type": "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')",
+          "severity": "Medium",
+          "description": "The function accepts an arbitrary location and passes it to urljoin. If location is an absolute URL, urljoin discards the configured host and returns the attacker-controlled origin. The function docum"
+        },
+        {
+          "cwe": "807",
+          "line": 37,
+          "type": "CWE-807: Reliance on Untrusted Inputs in a Security Decision",
+          "severity": "Medium",
+          "description": "The function accepts the first syntactically valid address in HTTP_X_FORWARDED_FOR without verifying that the request came through a trusted reverse proxy. Any direct client can normally send this hea"
+        }
+      ],
+      "raw_response_snippet": "{\n  \"file\": \"clean_core_utils.py\",\n  \"file_type\": \"source\",\n  \"code_context\": {\n    \"imports\": [],\n    \"functions\": [],\n    \"classes\": []\n  },\n  \"user_controlled_entry_points\": {\n    \"django\": {\n      \"request_args\": false,\n      \"request_form\": false,\n      \"request_json\": false,\n      \"request_dat",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 2,
+      "fn": 0,
+      "fp_on_clean": 2,
+      "missed": [],
+      "spurious": [
+        "clean_core_utils.py:24 CWE-601: URL Redirection to Untrusted Site ('Open Redirect')",
+        "clean_core_utils.py:37 CWE-807: Reliance on Untrusted Inputs in a Security Decision"
+      ]
+    },
+    {
+      "model": "cx/gpt-5.6-luna",
+      "file": "clean_taxes.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 11.829,
+      "tokens": {
+        "prompt_tokens": 3345,
+        "completion_tokens": 1402,
+        "reasoning_tokens": 0,
+        "total_tokens": 4747
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [],\n  \"analysis\": {\n    \"file\": \"clean_taxes.py\",\n    \"file_type\": \"source\",\n    \"imports\": [],\n    \"functions\": [],\n    \"classes\": [],\n    \"scope\": {\n      \"start_line\": 1,\n      \"end_line\": 46\n    },\n    \"summary\": \"No exploitable security vulnerabilities were identified in ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    }
+  ]
+}

@@ -15,16 +15,18 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from analyzer import fusion
 from analyzer.code_analyzer import CodeAnalyzer
 from analyzer.discovery import DiscoveredFile, discover, route_to_llm
 from analyzer.semgrep_runner import SemgrepRunner, SemgrepUnavailable
+from evidence.safe_reader import enrich_taint_path
 from models.vulnerability import (
     FindingSource,
     Vulnerability,
     VulnerabilityReport,
+    VulnerabilityType,
 )
 
 CACHE_DIRNAME = ".vulnagent-cache"
@@ -42,36 +44,55 @@ class ScanOptions:
         use_llm: bool = True,
         use_semgrep: bool = True,
         concurrency: int = 5,
-        min_risk: int = 3,
+        min_risk: Optional[int] = None,
         max_llm_files: Optional[int] = None,
         excludes: Optional[List[str]] = None,
         use_cache: bool = True,
         cache_dir: Optional[str] = None,
         verify: bool = False,
-        verify_all: bool = False,
+        verify_all: Optional[bool] = None,
         verify_turns: int = 6,
         progress: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_partial: Optional[Callable[[List[VulnerabilityReport]], None]] = None,
         files: Optional[List[str]] = None,
         semgrep_configs: Optional[Tuple[str, ...]] = None,
+        use_ast_slicer: bool = True,
+        suppress_unconfirmed_rules: Optional[bool] = None,
+        min_confidence: Optional[float] = None,
+        offline: bool = False,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
         self.use_semgrep = use_semgrep
         self.concurrency = max(1, concurrency)
-        self.min_risk = min_risk
+        if min_risk is None:
+            self.min_risk = 0 if verify else 3
+        else:
+            self.min_risk = min_risk
         self.max_llm_files = max_llm_files
         self.excludes = excludes or []
         self.use_cache = use_cache
         self.cache_dir = cache_dir
         self.files = files
         self.semgrep_configs = semgrep_configs
+        self.use_ast_slicer = use_ast_slicer
+        self.min_confidence = min_confidence
+        self.offline = offline
+
+        if suppress_unconfirmed_rules is None:
+            self.suppress_unconfirmed_rules = True if verify else False
+        else:
+            self.suppress_unconfirmed_rules = suppress_unconfirmed_rules
+
         # Adversarial verification. By default it runs only on LLM-only
         # findings, which is where the measured false positives are; findings
         # two independent engines already agreed on do not need a third
         # opinion, and paying for one on every finding is mostly waste.
         self.verify = verify
-        self.verify_all = verify_all
+        if verify_all is None:
+            self.verify_all = True if verify else False
+        else:
+            self.verify_all = verify_all
         self.verify_turns = verify_turns
         # Called with a progress event after each phase and after each file
         # completes, so a caller can show real progress rather than a
@@ -218,7 +239,7 @@ class ScanResult:
             "llm": {
                 "analyzed_files": [
                     r.file_name for r in self.reports
-                    if r.file_name and r.engine_status.get("llm", {}).get("status") == "completed"
+                    if r.file_name and r.engine_status.get("llm", {}).get("status") in ("ok", "completed")
                 ],
                 "failed_files": [
                     r.file_name for r in self.reports
@@ -235,8 +256,17 @@ class Scanner:
 
     def __init__(self, options: ScanOptions) -> None:
         self.options = options
-        self.analyzer = CodeAnalyzer(use_semgrep=False, use_llm=options.use_llm)  # rule tier is run here
-        semgrep_kw = {"configs": options.semgrep_configs} if options.semgrep_configs else {}
+        self.analyzer = CodeAnalyzer(
+            use_semgrep=False,
+            use_llm=options.use_llm,
+            use_ast_slicer=getattr(options, "use_ast_slicer", True),
+            options=options,
+        )  # rule tier is run here
+        semgrep_kw = {}
+        if options.semgrep_configs:
+            semgrep_kw["configs"] = options.semgrep_configs
+        if getattr(options, "offline", False):
+            semgrep_kw["offline"] = True
         self.semgrep = SemgrepRunner(**semgrep_kw) if options.use_semgrep else None
         self._cache_dir: Optional[Path] = None
         # Set when the rule tier fails, so a hung or missing engine is
@@ -325,6 +355,11 @@ class Scanner:
                 "files_scanned": len(failed_reports),
                 "engine_failure": bool(missing_requested),
             })
+        try:
+            from utils.telemetry import TelemetryTracker
+            TelemetryTracker.get_instance().reset()
+        except Exception:
+            pass
         file_hashes: Dict[str, str] = {}
         for f in files:
             try:
@@ -356,12 +391,20 @@ class Scanner:
 
         # Tier 2: LLM over the routed subset only.
         rule_hits = {path: len(v) for path, v in rule_by_file.items()}
+        ast_sink_files: Set[str] = set()
+        if getattr(self.options, "use_ast_slicer", True):
+            ast_sink_files = self._find_ast_sink_files(files)
+
+        is_deep_verify = bool(getattr(self.options, "verify", False))
+        effective_min_risk = 0 if is_deep_verify else self.options.min_risk
+
         routed = (
             route_to_llm(
                 files,
                 rule_hits=rule_hits,
-                min_risk=self.options.min_risk,
-                limit=self.options.max_llm_files
+                min_risk=effective_min_risk,
+                limit=self.options.max_llm_files,
+                ast_sink_files=ast_sink_files,
             )
             if self.options.use_llm else []
         )
@@ -404,6 +447,13 @@ class Scanner:
             verify_stats = await self._run_verification(reports, root)
             verify_stats["verify_seconds"] = round(time.perf_counter() - verify_started, 2)
 
+        telemetry_stats = {}
+        try:
+            from utils.telemetry import TelemetryTracker
+            telemetry_stats = TelemetryTracker.get_instance().get_stats()
+        except Exception:
+            pass
+
         stats = {
             "files_discovered": len(files),
             "files_requested": requested_files or [f.relative for f in files],
@@ -417,8 +467,16 @@ class Scanner:
             "rule_error": self._rule_error,
             "file_hashes": file_hashes,
             "snapshot_hashes": file_hashes,
+            "api_requests": telemetry_stats.get("api_requests", 0),
+            "input_tokens": telemetry_stats.get("input_tokens", 0),
+            "output_tokens": telemetry_stats.get("output_tokens", 0),
+            "total_tokens": telemetry_stats.get("total_tokens", 0),
+            "telemetry": telemetry_stats,
             **verify_stats,
         }
+        # Guarantee 100% of taint path steps across all findings are enriched
+        self._enrich_all_taint_paths(reports, root)
+
         logging.info(f"Scan complete: {stats}")
         total_found = sum(len(r.vulnerabilities) for r in reports)
         chains = sum(len(r.chained_vulnerabilities) for r in reports)
@@ -431,6 +489,52 @@ class Scanner:
         )
 
         return ScanResult(reports, root, stats, file_hashes=file_hashes)
+
+    def _enrich_all_taint_paths(self, reports: List[VulnerabilityReport], root: Path) -> None:
+        """
+        Ensure 100% of steps across all vulnerability taint paths in reports
+        have complete step, kind, file, line, description, and code snippet.
+        """
+        for report in reports:
+            for vuln in report.vulnerabilities:
+                if vuln.taint_path:
+                    vuln.taint_path = enrich_taint_path(
+                        vuln.taint_path,
+                        default_file=vuln.location.file_path,
+                        root_dir=root,
+                        default_line=vuln.location.start_line,
+                        infer_kind=True,
+                    )
+
+    def _find_ast_sink_files(self, files: Sequence[DiscoveredFile]) -> Set[str]:
+        """
+        Identify files containing at least one AST sink anchor.
+
+        Args:
+            files: Discovered candidate files to inspect
+
+        Returns:
+            Set[str]: Relative and absolute path strings for files with AST sinks
+        """
+        sink_files: Set[str] = set()
+        try:
+            from context.ast_slicer import find_sink_anchors
+        except ImportError:
+            return sink_files
+
+        for f in files:
+            try:
+                if f.path.is_file():
+                    content = f.path.read_text(encoding="utf-8", errors="replace")
+                    if find_sink_anchors(content):
+                        sink_files.add(f.relative)
+                        sink_files.add(str(f.path))
+            except OSError:
+                continue
+            except Exception as e:
+                logging.debug("Error checking AST sink anchors for %s: %s", f.relative, e)
+                continue
+        return sink_files
 
     def _emit(
         self,
@@ -546,50 +650,55 @@ class Scanner:
         completed = {"n": 0}
         total = len(routed)
 
-        def tick(relative: str) -> None:
+        def tick(relative: str, outcome: str = "ok", count: int = 0, elapsed_file: float = 0.0) -> None:
             completed["n"] += 1
             # The LLM tier owns the 28-70 band of the overall progress bar.
             percent = 28 + 42 * (completed["n"] / total)
             found = sum(len(v) for v in results.values())
+            timing_note = f"in {elapsed_file:.1f}s" if elapsed_file > 0 else "from cache"
             self._emit(
                 "llm",
-                f"[{completed['n']}/{total}] {relative} - {found} finding(s) so far",
+                f"[{completed['n']}/{total}] {relative} -> {outcome} ({count} finding(s), {timing_note}) | Total: {found}",
                 percent, current=completed["n"], total=total, findings=found
             )
 
         async def analyse(item: DiscoveredFile) -> None:
             async with semaphore:
                 relative = item.relative
+                t_file = time.perf_counter()
                 try:
                     content = item.path.read_text(encoding="utf-8", errors="replace")
                 except OSError as e:
                     status[relative] = f"failed: {e}"
-                    tick(relative)
+                    tick(relative, outcome="read_error", count=0, elapsed_file=round(time.perf_counter() - t_file, 2))
                     return
 
                 cached = self._cache_get(content)
                 if cached is not None:
                     self._cache_hits += 1
-                    results[relative] = self.analyzer._process_ai_response(cached, relative)
+                    vulns = self.analyzer._process_ai_response(cached, relative)
+                    results[relative] = vulns
                     status[relative] = "ok"
-                    tick(relative)
+                    tick(relative, outcome="CACHED", count=len(vulns), elapsed_file=0.0)
                     return
 
                 self._cache_misses += 1
                 parsed = self.analyzer.code_parser.parse(content, relative)
-                prompt = self.analyzer._generate_security_prompt(parsed)
+                prompt = self.analyzer._generate_security_prompt(parsed, relative)
                 try:
                     raw = await self.analyzer._get_analysis_with_retry(prompt)
                 except Exception as e:
                     logging.error(f"LLM tier failed for {relative}: {e}")
                     status[relative] = f"failed: {e}"
-                    tick(relative)
+                    tick(relative, outcome=f"API_FAILED ({e})", count=0, elapsed_file=round(time.perf_counter() - t_file, 2))
                     return
 
                 self._cache_put(content, raw)
-                results[relative] = self.analyzer._process_ai_response(raw, relative)
+                vulns = self.analyzer._process_ai_response(raw, relative)
+                results[relative] = vulns
                 status[relative] = "ok"
-                tick(relative)
+                elapsed_req = round(time.perf_counter() - t_file, 2)
+                tick(relative, outcome="SUCCESS", count=len(vulns), elapsed_file=elapsed_req)
 
         await asyncio.gather(*(analyse(item) for item in routed))
         return results, status
@@ -648,46 +757,95 @@ class Scanner:
             async with semaphore:
                 verdict = await agent.verify(vuln)
                 done["n"] += 1
-                self._emit(
-                    "verify",
-                    f"[{done['n']}/{total}] {vuln.type.value} at "
-                    f"{Path(vuln.location.file_path).name}:{vuln.location.start_line}"
-                    f" -> {verdict.verdict}"
-                    f"  ({counters['confirmed']} upheld, {counters['refuted']} refuted)",
-                    75 + 23 * (done["n"] / total),
-                    current=done["n"], total=total,
-                    upheld=counters["confirmed"], refuted=counters["refuted"]
-                )
-                vuln.verification = verdict.as_dict()
-                counters["tool_calls"] += verdict.tool_calls
-                counters[verdict.verdict] = counters.get(verdict.verdict, 0) + 1
 
                 if verdict.confirmed:
                     vuln.taint_path = verdict.taint_path
                     vuln.assessment_status = "supported"
-                    # Corroboration by independent investigation, not by a
-                    # second engine - kept below CONFIRMED-by-fusion.
-                    vuln.confidence = max(vuln.confidence, 0.85)
+                    vuln.confidence = 0.98
+                    vuln.corroborated = True
                 elif verdict.refuted:
-                    vuln.assessment_status = "refuted"
-                    refuted_ids.add(vuln.id)
+                    # Protect AST Slicer corroborated findings or findings with a valid taint path
+                    # when no mitigating control is found
+                    has_ast_origin = getattr(vuln, "corroborated", False) or bool(getattr(vuln, "taint_path", None))
+                    mitigating = (verdict.mitigating_control or "").strip()
+                    has_control = bool(mitigating and mitigating.lower() not in ("none", "null", "n/a", "no", "empty"))
+                    is_weak_crypto = (
+                        str(getattr(vuln, "cwe_id", "")).replace("CWE-", "").strip() in ("328", "327")
+                        or getattr(vuln, "type", None) == VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM
+                    )
+                    if is_weak_crypto and any(k in mitigating.lower() for k in ("constant", "literal", "not used", "fixed")):
+                        has_control = False
+                    if has_ast_origin and not has_control:
+                        logging.info(
+                            f"Preserving AST-corroborated finding {vuln.id} ({vuln.type.value}) "
+                            f"at {vuln.location.file_path}:{vuln.location.start_line}: "
+                            "no mitigating control found to justify refutation."
+                        )
+                        verdict.verdict = "uncertain"
+                        verdict.reason = (
+                            "Finding có nguồn gốc AST Slicer xác thực và không tìm thấy "
+                            "biện pháp kiểm soát (mitigating control); bảo vệ không để bị rớt nhầm."
+                        )
+                        vuln.assessment_status = "uncertain"
+                    else:
+                        vuln.assessment_status = "refuted"
+                        refuted_ids.add(vuln.id)
                 else:
                     vuln.assessment_status = "uncertain"
+
+                vuln.verification = verdict.as_dict()
+                counters["tool_calls"] += verdict.tool_calls
+                counters[verdict.verdict] = counters.get(verdict.verdict, 0) + 1
+
+                verdict_icon = "[CONFIRMED]" if verdict.confirmed else ("[REFUTED]" if verdict.refuted else "[UNCERTAIN]")
+                tools_note = f"via {verdict.tool_calls} tool call(s)" if verdict.tool_calls > 0 else "no tools needed"
+                self._emit(
+                    "verify",
+                    f"[{done['n']}/{total}] {vuln.type.value} at "
+                    f"{Path(vuln.location.file_path).name}:{vuln.location.start_line} "
+                    f"-> {verdict_icon} ({tools_note}) | Upheld: {counters['confirmed']}, Refuted: {counters['refuted']}",
+                    75 + 23 * (done["n"] / total),
+                    current=done["n"], total=total,
+                    upheld=counters["confirmed"], refuted=counters["refuted"]
+                )
 
         await asyncio.gather(*(check(r, v) for r, v in candidates))
 
         dropped = 0
         for report in reports:
-            refuted_in_report = [v for v in report.vulnerabilities if v.id in refuted_ids]
+            refuted_in_report = []
+            for v in report.vulnerabilities:
+                if v.id in refuted_ids or getattr(v, "assessment_status", None) == "refuted":
+                    # Final safety check: protect AST-corroborated findings without mitigating control
+                    has_ast = getattr(v, "corroborated", False) or bool(getattr(v, "taint_path", None))
+                    v_dict = getattr(v, "verification", None) or {}
+                    ctrl = v_dict.get("mitigating_control", "").strip() if isinstance(v_dict, dict) else ""
+                    ctrl_is_empty = not ctrl or ctrl.lower() in ("none", "null", "n/a", "no", "empty")
+                    is_weak_crypto = (
+                        str(getattr(v, "cwe_id", "")).replace("CWE-", "").strip() in ("328", "327")
+                        or getattr(v, "type", None) == VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM
+                    )
+                    if is_weak_crypto and any(k in ctrl.lower() for k in ("constant", "literal", "not used", "fixed")):
+                        ctrl_is_empty = True
+                    if has_ast and ctrl_is_empty:
+                        continue
+                    refuted_in_report.append(v)
+
             if refuted_in_report:
-                report.refuted_vulnerabilities.extend(refuted_in_report)
+                refuted_in_report_ids = {v.id for v in refuted_in_report}
+                existing_refuted_ids = {v.id for v in report.refuted_vulnerabilities}
+                for v in refuted_in_report:
+                    if v.id not in existing_refuted_ids:
+                        report.refuted_vulnerabilities.append(v)
+                        existing_refuted_ids.add(v.id)
                 report.vulnerabilities = [
-                    v for v in report.vulnerabilities if v.id not in refuted_ids
+                    v for v in report.vulnerabilities if v.id not in refuted_in_report_ids
                 ]
                 dropped += len(refuted_in_report)
-                report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
-                    report.vulnerabilities
-                )
+                if hasattr(self.analyzer, "_chain_vulnerabilities"):
+                    report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
+                        report.vulnerabilities
+                    )
                 report.calculate_summary()
                 report.calculate_risk_score()
 
@@ -826,26 +984,6 @@ class Scanner:
 
             # Semgrep status for this specific file
             semgrep_reason = ""
-            if self.semgrep is None:
-                semgrep_status = "disabled"
-                semgrep_reason = "Engine disabled"
-            elif global_rule_err:
-                semgrep_status = "failed"
-                semgrep_reason = global_rule_err
-            elif not self.semgrep.available:
-                semgrep_status = "unavailable"
-                semgrep_reason = "Semgrep binary unavailable"
-            elif relative in file_rule_errors:
-                semgrep_status = "parse_error"
-                err_val = file_rule_errors[relative]
-                if isinstance(err_val, list) and err_val:
-                    err_entry = err_val[0]
-                else:
-                    err_entry = err_val
-                semgrep_reason = err_entry.get("message", "Syntax or parse error") if isinstance(err_entry, dict) else str(err_entry)
-            else:
-                semgrep_status = "ok"
-
             # LLM status for this specific file
             llm_reason = ""
             if not self.options.use_llm:
@@ -860,10 +998,33 @@ class Scanner:
                     llm_status = "not_routed"
                     llm_reason = "File did not clear risk threshold"
                 else:
-                    llm_status = "completed"
+                    llm_status = "ok"
+
+            if self.semgrep is None:
+                semgrep_status = "disabled"
+                semgrep_reason = "Engine disabled"
+            elif global_rule_err:
+                semgrep_status = "failed"
+                semgrep_reason = global_rule_err
+            elif not self.semgrep.available:
+                semgrep_status = "unavailable"
+                semgrep_reason = "Semgrep binary unavailable"
+            elif relative in file_rule_errors:
+                err_val = file_rule_errors[relative]
+                if isinstance(err_val, list) and err_val:
+                    err_entry = err_val[0]
+                else:
+                    err_entry = err_val
+                semgrep_reason = err_entry.get("message", "Syntax or parse error") if isinstance(err_entry, dict) else str(err_entry)
+                if self.options.use_llm and llm_status == "ok":
+                    semgrep_status = "syntax_skipped"
+                else:
+                    semgrep_status = "parse_error"
+            else:
+                semgrep_status = "ok"
 
             is_failed = (
-                semgrep_status in ("failed", "parse_error")
+                (semgrep_status in ("failed", "parse_error") and (not self.options.use_llm or llm_status != "ok"))
                 or llm_status == "failed"
             )
             is_partial = (
@@ -872,7 +1033,12 @@ class Scanner:
             )
             report_status = "failed" if is_failed else ("partial" if is_partial else "completed")
 
-            fused = fusion.fuse(rule_findings, llm_findings)
+            fused = fusion.fuse(
+                rule_findings,
+                llm_findings,
+                suppress_unconfirmed_rules=self.options.suppress_unconfirmed_rules,
+                file_analyzed_by_llm=(llm_status == "ok"),
+            )
             chains = self.analyzer._chain_vulnerabilities(fused.vulnerabilities)
 
             tiers = {
@@ -969,7 +1135,8 @@ class Scanner:
         provider = os.getenv("AI_PROVIDER", "openai")
         endpoint = os.getenv("OPENAI_BASE_URL", os.getenv("AI_ENDPOINT", "default_endpoint"))
         prompt_version = "prompt_v2_structured"
-        payload = f"{CACHE_VERSION}|{provider}|{model}|{endpoint}|{prompt_version}|{content}"
+        slicer_flag = getattr(self.options, "use_ast_slicer", True)
+        payload = f"{CACHE_VERSION}|{provider}|{model}|{endpoint}|{prompt_version}|slicer={slicer_flag}|{content}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _resolve_cache_dir(self) -> Optional[Path]:

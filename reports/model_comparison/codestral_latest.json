@@ -1,0 +1,865 @@
+{
+  "model": "mistral/codestral-latest",
+  "role": "competitor",
+  "timestamp": "2026-10-24T09:12:43.202036+00:00",
+  "base_url": "http://127.0.0.1:20128/v1",
+  "timeout_sec": 45.0,
+  "summary": {
+    "model": "mistral/codestral-latest",
+    "role": "competitor",
+    "total_files": 13,
+    "success_count": 12,
+    "blocked_count": 0,
+    "timeout_count": 1,
+    "http_error_count": 0,
+    "avg_latency_sec": 16.713,
+    "total_latency_sec": 217.267,
+    "total_prompt_tokens": 134220,
+    "total_completion_tokens": 19268,
+    "total_reasoning_tokens": 0,
+    "total_tokens": 153488,
+    "total_findings": 44,
+    "valid_json_rate": 100.0,
+    "true_positives": 3,
+    "false_positives": 41,
+    "false_negatives": 6,
+    "fp_on_clean": 10,
+    "precision": 0.0682,
+    "recall": 0.3333,
+    "f1_score": 0.1132
+  },
+  "file_results": [
+    {
+      "model": "mistral/codestral-latest",
+      "file": "superset_config.py",
+      "dataset": "superset",
+      "category": "HARDCODED_CREDENTIALS / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 15.273,
+      "tokens": {
+        "prompt_tokens": 25453,
+        "completion_tokens": 1778,
+        "reasoning_tokens": 0,
+        "total_tokens": 27231
+      },
+      "is_valid_json": true,
+      "findings_count": 4,
+      "extracted_findings": [
+        {
+          "cwe": "798",
+          "line": 181,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "CRITICAL",
+          "description": "The application uses a hardcoded secret key (CHANGE_ME_SECRET_KEY) for cryptographic operations. This is a critical security vulnerability as hardcoded secrets can be easily exposed and lead to comple"
+        },
+        {
+          "cwe": "1188",
+          "line": 223,
+          "type": "SECURITY_MISCONFIGURATION",
+          "severity": "HIGH",
+          "description": "The application enables debug mode based on an environment variable check. This can expose sensitive debugging information in production environments."
+        },
+        {
+          "cwe": "22",
+          "line": 109,
+          "type": "PATH_TRAVERSAL",
+          "severity": "HIGH",
+          "description": "The application reads a file using a user-controlled filepath parameter without proper path validation or sanitization. This can lead to path traversal attacks."
+        },
+        {
+          "cwe": "22",
+          "line": 117,
+          "type": "PATH_TRAVERSAL",
+          "severity": "HIGH",
+          "description": "The application reads a file using a user-controlled filepath parameter without proper path validation or sanitization. This can lead to path traversal attacks."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"HARDCODED_CREDENTIALS\",\n      \"severity\": \"CRITICAL\",\n      \"cwe_id\": \"CWE-798\",\n      \"owasp_category\": \"A02:2021-Cryptographic Failures\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\",\n      \"location\": {\n        \"file_path",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "superset_config.py",
+          "line": 1,
+          "cwe": "798",
+          "type": "HARDCODED_CREDENTIALS",
+          "note": "CVE-2023-27524 / CWE-798: Default SECRET_KEY vulnerability allowing session forgery and RCE"
+        }
+      ],
+      "tp": 1,
+      "fp": 3,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "superset_config.py:223 SECURITY_MISCONFIGURATION",
+        "superset_config.py:109 PATH_TRAVERSAL",
+        "superset_config.py:117 PATH_TRAVERSAL"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "views_core.py",
+      "dataset": "superset",
+      "category": "SSRF / Complex View",
+      "is_clean": false,
+      "status": "TIMEOUT",
+      "status_code": null,
+      "latency_sec": 45.02,
+      "tokens": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "",
+      "error_message": "Request timed out after 45.0s",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "views_core.py",
+          "line": 1,
+          "cwe": "918",
+          "type": "SSRF",
+          "note": "CVE-2023-36388 / CWE-918: Server-Side Request Forgery (SSRF) in URL fetching and export endpoints"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "views_core.py:1 SSRF"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "database_views.py",
+      "dataset": "superset",
+      "category": "INFORMATION_DISCLOSURE",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 20.561,
+      "tokens": {
+        "prompt_tokens": 25808,
+        "completion_tokens": 2543,
+        "reasoning_tokens": 0,
+        "total_tokens": 28351
+      },
+      "is_valid_json": true,
+      "findings_count": 4,
+      "extracted_findings": [
+        {
+          "cwe": "22",
+          "line": 76,
+          "type": "PATH_TRAVERSAL",
+          "severity": "HIGH",
+          "description": "The code opens a file using a user-controlled path parameter without proper path validation or sanitization, which could allow an attacker to access arbitrary files on the server."
+        },
+        {
+          "cwe": "209",
+          "line": 219,
+          "type": "INFORMATION_DISCLOSURE",
+          "severity": "MEDIUM",
+          "description": "The code exposes detailed error messages to the user, which could leak sensitive information about the system configuration or database structure."
+        },
+        {
+          "cwe": "209",
+          "line": 356,
+          "type": "INFORMATION_DISCLOSURE",
+          "severity": "MEDIUM",
+          "description": "The code exposes detailed error messages to the user, which could leak sensitive information about the system configuration or database structure."
+        },
+        {
+          "cwe": "209",
+          "line": 497,
+          "type": "INFORMATION_DISCLOSURE",
+          "severity": "MEDIUM",
+          "description": "The code exposes detailed error messages to the user, which could leak sensitive information about the system configuration or database structure."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"PATH_TRAVERSAL\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-22\",\n      \"owasp_category\": \"A05:2021-Security Misconfiguration\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\",\n      \"location\": {\n        \"file_path\": \"datab",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "database_views.py",
+          "line": 1,
+          "cwe": "209",
+          "type": "INFORMATION_DISCLOSURE",
+          "note": "CVE-2024-53948 / CWE-209: Information Disclosure / Metadata leak in DB test connection error reporting"
+        }
+      ],
+      "tp": 1,
+      "fp": 3,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "database_views.py:76 PATH_TRAVERSAL",
+        "database_views.py:219 INFORMATION_DISCLOSURE",
+        "database_views.py:356 INFORMATION_DISCLOSURE"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "query_context_factory.py",
+      "dataset": "superset",
+      "category": "INPUT_VALIDATION / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 19.686,
+      "tokens": {
+        "prompt_tokens": 3791,
+        "completion_tokens": 1917,
+        "reasoning_tokens": 0,
+        "total_tokens": 5708
+      },
+      "is_valid_json": true,
+      "findings_count": 5,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 46,
+          "type": "Improper Input Validation",
+          "severity": "High",
+          "description": "The `datasource` parameter is not properly validated before being used to construct a database query, potentially allowing injection attacks."
+        },
+        {
+          "cwe": "89",
+          "line": 62,
+          "type": "Improper Neutralization of Special Elements used in an SQL Command",
+          "severity": "High",
+          "description": "The `slice_id` parameter is not properly validated before being used in a database query, potentially allowing SQL injection."
+        },
+        {
+          "cwe": "89",
+          "line": 92,
+          "type": "Improper Neutralization of Special Elements used in an SQL Command",
+          "severity": "High",
+          "description": "The `datasource` type and ID are not properly validated before being used in a database query, potentially allowing SQL injection."
+        },
+        {
+          "cwe": "89",
+          "line": 67,
+          "type": "Improper Neutralization of Special Elements used in an SQL Command",
+          "severity": "High",
+          "description": "The `queries` parameter is not properly validated before being used to construct database queries, potentially allowing injection attacks."
+        },
+        {
+          "cwe": "89",
+          "line": 88,
+          "type": "Improper Neutralization of Special Elements used in an SQL Command",
+          "severity": "High",
+          "description": "The `form_data` parameter is not properly validated before being used to construct database queries, potentially allowing injection attacks."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Improper Input Validation\",\n      \"cwe_id\": \"CWE-20\",\n      \"owasp_category\": \"A03:2021-Injection\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\",\n      \"data_flow_analysis\": \"The `datasource` parameter is pass",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "query_context_factory.py",
+          "line": 1,
+          "cwe": "20",
+          "type": "INPUT_VALIDATION",
+          "note": "CVE-2023-25504 / CWE-20: Improper Input Validation in query payload processing"
+        }
+      ],
+      "tp": 1,
+      "fp": 4,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "query_context_factory.py:62 Improper Neutralization of Special Elements used in an SQL Command",
+        "query_context_factory.py:92 Improper Neutralization of Special Elements used in an SQL Command",
+        "query_context_factory.py:67 Improper Neutralization of Special Elements used in an SQL Command",
+        "query_context_factory.py:88 Improper Neutralization of Special Elements used in an SQL Command"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "sql_lab_models.py",
+      "dataset": "superset",
+      "category": "SQL_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 6.013,
+      "tokens": {
+        "prompt_tokens": 14595,
+        "completion_tokens": 637,
+        "reasoning_tokens": 0,
+        "total_tokens": 15232
+      },
+      "is_valid_json": true,
+      "findings_count": 1,
+      "extracted_findings": [
+        {
+          "cwe": "79",
+          "line": 224,
+          "type": "CROSS_SITE_SCRIPTING",
+          "severity": "HIGH",
+          "description": "The code constructs an HTML link using user-controlled data (self.id) without proper sanitization, which could lead to Cross-Site Scripting (XSS) vulnerabilities if self.id contains malicious JavaScri"
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"CROSS_SITE_SCRIPTING\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-79\",\n      \"owasp_category\": \"A03:2021-Injection\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N\",\n      \"location\": {\n        \"file_path\": \"sql_lab_models.",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "sql_lab_models.py",
+          "line": 1,
+          "cwe": "89",
+          "type": "SQL_INJECTION",
+          "note": "CVE-2023-39265 / CWE-89: SQL Injection in SQL Lab query execution"
+        }
+      ],
+      "tp": 0,
+      "fp": 1,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "sql_lab_models.py:1 SQL_INJECTION"
+      ],
+      "spurious": [
+        "sql_lab_models.py:224 CROSS_SITE_SCRIPTING"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "slack_util.py",
+      "dataset": "superset",
+      "category": "COMMAND_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 16.178,
+      "tokens": {
+        "prompt_tokens": 3297,
+        "completion_tokens": 1904,
+        "reasoning_tokens": 0,
+        "total_tokens": 5201
+      },
+      "is_valid_json": true,
+      "findings_count": 5,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 34,
+          "type": "Improper Input Validation",
+          "severity": "High",
+          "description": "The function does not validate the slack_channel, subject, or body parameters before passing them to the Slack API, which could allow injection attacks if the Slack API does not properly sanitize thes"
+        },
+        {
+          "cwe": "798",
+          "line": 42,
+          "type": "Hardcoded Sensitive Information",
+          "severity": "High",
+          "description": "The Slack API token is directly retrieved from Flask's configuration without any validation or protection, which could expose the token if the configuration is not properly secured."
+        },
+        {
+          "cwe": "778",
+          "line": 61,
+          "type": "Insufficient Logging",
+          "severity": "Medium",
+          "description": "The function only logs a success message, which could make it difficult to detect and respond to failures or errors."
+        },
+        {
+          "cwe": "617",
+          "line": 54,
+          "type": "Assertion Misuse",
+          "severity": "Medium",
+          "description": "The function uses assertions to validate the Slack API response, which can be disabled in production environments, potentially leading to silent failures."
+        },
+        {
+          "cwe": "481",
+          "line": 18,
+          "type": "Deprecated Code",
+          "severity": "Low",
+          "description": "The module is marked as deprecated and will be removed in a future version, which could lead to compatibility issues and security vulnerabilities."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Improper Input Validation\",\n      \"cwe_id\": \"CWE-20\",\n      \"owasp_category\": \"A03:2021-Injection\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N\",\n      \"data_flow_analysis\": \"The function `deliver_slack_msg` t",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "slack_util.py",
+          "line": 1,
+          "cwe": "78",
+          "type": "COMMAND_INJECTION",
+          "note": "CVE-2020-13948 / CWE-78: OS Command Injection in slack utility via unsanitized command string"
+        }
+      ],
+      "tp": 0,
+      "fp": 5,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "slack_util.py:1 COMMAND_INJECTION"
+      ],
+      "spurious": [
+        "slack_util.py:34 Improper Input Validation",
+        "slack_util.py:42 Hardcoded Sensitive Information",
+        "slack_util.py:61 Insufficient Logging",
+        "slack_util.py:54 Assertion Misuse",
+        "slack_util.py:18 Deprecated Code"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "clean_date_parser.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 1.068,
+      "tokens": {
+        "prompt_tokens": 18355,
+        "completion_tokens": 15,
+        "reasoning_tokens": 0,
+        "total_tokens": 18370
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": []\n}\n```",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "clean_hashing.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 10.573,
+      "tokens": {
+        "prompt_tokens": 2959,
+        "completion_tokens": 1062,
+        "reasoning_tokens": 0,
+        "total_tokens": 4021
+      },
+      "is_valid_json": true,
+      "findings_count": 2,
+      "extracted_findings": [
+        {
+          "cwe": "327",
+          "line": 23,
+          "type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+          "severity": "High",
+          "description": "The code uses MD5 hashing algorithm which is cryptographically broken and unsuitable for security-sensitive applications. MD5 is vulnerable to collision attacks and should not be used for any security"
+        },
+        {
+          "cwe": "502",
+          "line": 27,
+          "type": "CWE-502: Deserialization of Untrusted Data",
+          "severity": "High",
+          "description": "The code deserializes a dictionary to JSON without any validation or sanitization. If the dictionary contains untrusted data, it could lead to deserialization vulnerabilities if the data is later dese"
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-327: Use of a Broken or Risky Cryptographic Algorithm\",\n      \"owasp_category\": \"A02:2021 - Cryptographic Failures\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\",\n      \"data_flow_analysis\": \"The function ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 2,
+      "fn": 0,
+      "fp_on_clean": 2,
+      "missed": [],
+      "spurious": [
+        "clean_hashing.py:23 CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+        "clean_hashing.py:27 CWE-502: Deserialization of Untrusted Data"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "adyen_plugin.py",
+      "dataset": "saleor310",
+      "category": "TIMING_ATTACK / Sensitive Payment",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 4.973,
+      "tokens": {
+        "prompt_tokens": 13959,
+        "completion_tokens": 608,
+        "reasoning_tokens": 0,
+        "total_tokens": 14567
+      },
+      "is_valid_json": true,
+      "findings_count": 1,
+      "extracted_findings": [
+        {
+          "cwe": "639",
+          "line": 1012,
+          "type": "INSECURE_DIRECT_OBJECT_REFERENCE",
+          "severity": "HIGH",
+          "description": "The handle_additional_actions function processes payment information without verifying that the payment belongs to the authenticated user, allowing for potential IDOR attacks where an attacker can man"
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"INSECURE_DIRECT_OBJECT_REFERENCE\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-639\",\n      \"owasp_category\": \"A01:2021-Broken Access Control\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\",\n      \"location\": {\n        \"fil",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "adyen_plugin.py",
+          "line": 943,
+          "cwe": "208",
+          "type": "TIMING_ATTACK",
+          "note": "GHSA-3rqj-9v87-2x3f / CWE-208 / CWE-385: Timing attack in validate_hmac_signature via standard == string comparison instead of constant-time compare_digest"
+        }
+      ],
+      "tp": 0,
+      "fp": 1,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "adyen_plugin.py:943 TIMING_ATTACK"
+      ],
+      "spurious": [
+        "adyen_plugin.py:1012 INSECURE_DIRECT_OBJECT_REFERENCE"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "refresh_token.py",
+      "dataset": "saleor310",
+      "category": "CSRF_BYPASS / Sensitive Auth",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 18.572,
+      "tokens": {
+        "prompt_tokens": 9209,
+        "completion_tokens": 2380,
+        "reasoning_tokens": 0,
+        "total_tokens": 11589
+      },
+      "is_valid_json": true,
+      "findings_count": 7,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 117,
+          "type": "CWE-20: Improper Input Validation",
+          "severity": "High",
+          "description": "The code accepts raw user credentials and token values without proper validation, which could allow injection attacks or credential stuffing."
+        },
+        {
+          "cwe": "347",
+          "line": 37,
+          "type": "CWE-347: Improper Verification of Cryptographic Signature",
+          "severity": "Critical",
+          "description": "The code uses jwt_decode without proper signature verification, which could allow attackers to forge tokens."
+        },
+        {
+          "cwe": "287",
+          "line": 113,
+          "type": "CWE-287: Improper Authentication",
+          "severity": "High",
+          "description": "The code uses direct string comparison for password verification, which could leak timing information about password correctness."
+        },
+        {
+          "cwe": "312",
+          "line": 157,
+          "type": "CWE-312: Cleartext Storage of Sensitive Information",
+          "severity": "High",
+          "description": "CSRF tokens are stored in plaintext in the JWT payload, which could allow token theft if the JWT is intercepted."
+        },
+        {
+          "cwe": "611",
+          "line": 384,
+          "type": "CWE-611: Improper Restriction of XML External Entity Reference",
+          "severity": "High",
+          "description": "The code processes JSON input from external plugins without proper validation, which could lead to injection attacks."
+        },
+        {
+          "cwe": "306",
+          "line": 352,
+          "type": "CWE-306: Missing Authentication for Critical Function",
+          "severity": "Medium",
+          "description": "The token deactivation function relies solely on the authenticated user context without additional verification."
+        },
+        {
+          "cwe": "200",
+          "line": 37,
+          "type": "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor",
+          "severity": "Medium",
+          "description": "The code returns specific error messages about token validation failures, which could help attackers craft valid tokens."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-20: Improper Input Validation\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\",\n      \"data_flow_analysis\": \"User-controlled input from GraphQL arguments (email, password, refresh_token, csrf_token) flows di",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "refresh_token.py",
+          "line": 218,
+          "cwe": "352",
+          "type": "CSRF_BYPASS",
+          "note": "GHSA-ff69-fwjf-3c9w / CWE-352 / CWE-287: CSRF bypass in get_refresh_token reading refresh token directly from cookies without CSRF validation"
+        }
+      ],
+      "tp": 0,
+      "fp": 7,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "refresh_token.py:218 CSRF_BYPASS"
+      ],
+      "spurious": [
+        "refresh_token.py:117 CWE-20: Improper Input Validation",
+        "refresh_token.py:37 CWE-347: Improper Verification of Cryptographic Signature",
+        "refresh_token.py:113 CWE-287: Improper Authentication",
+        "refresh_token.py:157 CWE-312: Cleartext Storage of Sensitive Information",
+        "refresh_token.py:384 CWE-611: Improper Restriction of XML External Entity Reference",
+        "refresh_token.py:352 CWE-306: Missing Authentication for Critical Function",
+        "refresh_token.py:37 CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "account_mutations.py",
+      "dataset": "saleor310",
+      "category": "AUTHORIZATION_BYPASS",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 30.949,
+      "tokens": {
+        "prompt_tokens": 9469,
+        "completion_tokens": 3038,
+        "reasoning_tokens": 0,
+        "total_tokens": 12507
+      },
+      "is_valid_json": true,
+      "findings_count": 7,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 100,
+          "type": "CWE-20: Improper Input Validation",
+          "severity": "High",
+          "description": "The code does not properly validate or sanitize user-provided email addresses and URLs before processing them, which could lead to injection attacks or data corruption."
+        },
+        {
+          "cwe": "306",
+          "line": 256,
+          "type": "CWE-306: Missing Authentication for Critical Function",
+          "severity": "Critical",
+          "description": "The account deletion functionality does not properly verify the user's identity beyond the initial authentication token, which could allow unauthorized account deletion."
+        },
+        {
+          "cwe": "287",
+          "line": 504,
+          "type": "CWE-287: Improper Authentication",
+          "severity": "High",
+          "description": "The email change confirmation process relies solely on JWT token validation without additional authentication factors, which could allow unauthorized email changes."
+        },
+        {
+          "cwe": "327",
+          "line": 486,
+          "type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+          "severity": "High",
+          "description": "The code uses custom JWT token generation and validation which may not be properly secured against common cryptographic vulnerabilities."
+        },
+        {
+          "cwe": "521",
+          "line": 129,
+          "type": "CWE-521: Weak Password Requirements",
+          "severity": "Medium",
+          "description": "The password validation process does not enforce strong enough password requirements, which could lead to weak passwords being accepted."
+        },
+        {
+          "cwe": "200",
+          "line": 141,
+          "type": "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor",
+          "severity": "High",
+          "description": "User search documents are stored in the database without proper sanitization or encryption, potentially exposing sensitive information."
+        },
+        {
+          "cwe": "352",
+          "line": 1,
+          "type": "CWE-352: Cross-Site Request Forgery (CSRF)",
+          "severity": "High",
+          "description": "The code does not explicitly verify CSRF tokens for all state-changing operations, which could allow CSRF attacks."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-20: Improper Input Validation\",\n      \"owasp_category\": \"A03:2021 - Injection\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N\",\n      \"data_flow_analysis\": {\n        \"source\": \"User-controlled input (email, ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "account_mutations.py",
+          "line": 74,
+          "cwe": "284",
+          "type": "AUTHORIZATION_BYPASS",
+          "note": "GHSA-6whj-8p3f-2xqp / CWE-284 / CWE-863: Account pre-hijacking and authorization bypass in AccountRegister mutation"
+        }
+      ],
+      "tp": 0,
+      "fp": 7,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "account_mutations.py:74 AUTHORIZATION_BYPASS"
+      ],
+      "spurious": [
+        "account_mutations.py:100 CWE-20: Improper Input Validation",
+        "account_mutations.py:256 CWE-306: Missing Authentication for Critical Function",
+        "account_mutations.py:504 CWE-287: Improper Authentication",
+        "account_mutations.py:486 CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+        "account_mutations.py:129 CWE-521: Weak Password Requirements",
+        "account_mutations.py:141 CWE-200: Exposure of Sensitive Information to an Unauthorized Actor",
+        "account_mutations.py:1 CWE-352: Cross-Site Request Forgery (CSRF)"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "clean_core_utils.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 18.801,
+      "tokens": {
+        "prompt_tokens": 4375,
+        "completion_tokens": 2182,
+        "reasoning_tokens": 0,
+        "total_tokens": 6557
+      },
+      "is_valid_json": true,
+      "findings_count": 5,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 37,
+          "type": "CWE-20: Improper Input Validation",
+          "severity": "HIGH",
+          "description": "The function accepts X-Forwarded-For header values without proper validation, which could be exploited to spoof IP addresses"
+        },
+        {
+          "cwe": "352",
+          "line": 24,
+          "type": "CWE-352: Cross-Site Request Forgery (CSRF)",
+          "severity": "MEDIUM",
+          "description": "The function doesn't properly validate domain names when building absolute URIs, which could lead to CSRF vulnerabilities"
+        },
+        {
+          "cwe": "200",
+          "line": 72,
+          "type": "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor",
+          "severity": "HIGH",
+          "description": "Environment variables can be exposed through process inspection, creating a security risk"
+        },
+        {
+          "cwe": "327",
+          "line": 82,
+          "type": "CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+          "severity": "HIGH",
+          "description": "Currency conversion may rely on weak cryptographic algorithms for security"
+        },
+        {
+          "cwe": "1333",
+          "line": 96,
+          "type": "CWE-1333: Insufficient Completion (With Context-Dependent Side Effects)",
+          "severity": "MEDIUM",
+          "description": "The function may not properly handle database transactions during slug generation"
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-20: Improper Input Validation\",\n      \"owasp_category\": \"A03:2021 - Injection\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N\",\n      \"data_flow_analysis\": \"User-controlled input from HTTP headers (X-Forward",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 5,
+      "fn": 0,
+      "fp_on_clean": 5,
+      "missed": [],
+      "spurious": [
+        "clean_core_utils.py:37 CWE-20: Improper Input Validation",
+        "clean_core_utils.py:24 CWE-352: Cross-Site Request Forgery (CSRF)",
+        "clean_core_utils.py:72 CWE-200: Exposure of Sensitive Information to an Unauthorized Actor",
+        "clean_core_utils.py:82 CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+        "clean_core_utils.py:96 CWE-1333: Insufficient Completion (With Context-Dependent Side Effects)"
+      ]
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "file": "clean_taxes.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 9.6,
+      "tokens": {
+        "prompt_tokens": 2950,
+        "completion_tokens": 1204,
+        "reasoning_tokens": 0,
+        "total_tokens": 4154
+      },
+      "is_valid_json": true,
+      "findings_count": 3,
+      "extracted_findings": [
+        {
+          "cwe": "20",
+          "line": 12,
+          "type": "CWE-20: Improper Input Validation",
+          "severity": "Medium",
+          "description": "The code does not validate monetary values and tax rates, which could lead to incorrect calculations or injection of malformed data."
+        },
+        {
+          "cwe": "502",
+          "line": 25,
+          "type": "CWE-502: Deserialization of Untrusted Data",
+          "severity": "High",
+          "description": "The code deserializes data into dataclasses without proper validation, which could lead to deserialization of untrusted data."
+        },
+        {
+          "cwe": "390",
+          "line": 8,
+          "type": "CWE-390: Detection of Error Condition Without Action",
+          "severity": "Low",
+          "description": "The code defines a custom exception but does not handle it, which could lead to unhandled error conditions."
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-20: Improper Input Validation\",\n      \"owasp_category\": \"A03:2021 - Injection\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N\",\n      \"data_flow_analysis\": \"The code processes monetary values and tax rates w",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 3,
+      "fn": 0,
+      "fp_on_clean": 3,
+      "missed": [],
+      "spurious": [
+        "clean_taxes.py:12 CWE-20: Improper Input Validation",
+        "clean_taxes.py:25 CWE-502: Deserialization of Untrusted Data",
+        "clean_taxes.py:8 CWE-390: Detection of Error Condition Without Action"
+      ]
+    }
+  ]
+}

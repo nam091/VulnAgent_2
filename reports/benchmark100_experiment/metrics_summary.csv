@@ -1,0 +1,5 @@
+Configuration,Status,TP,FP,FN,Precision,Recall,F1_Score,FP_Clean_Files,FP_Wrong_Type,Execution_Time_sec,API_Requests,Total_Tokens
+Semgrep only,degraded,9,15,41,0.3750,0.1800,0.2432,10,5,5.97,0,0
+LLM only,completed,50,4,0,0.9259,1.0000,0.9615,4,0,163.01,100,755370
+VulnAgent (hybrid),degraded,50,6,0,0.8929,1.0000,0.9434,5,1,207.45,100,792680
+VulnAgent (3-Tier Full: AST + LLM + Verifier),degraded,49,4,1,0.9245,0.9800,0.9515,3,1,182.05,324,1789366

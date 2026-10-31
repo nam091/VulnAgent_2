@@ -20,6 +20,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from context.project_index import ProjectSymbolIndex
+except ImportError:
+    try:
+        from src.context.project_index import ProjectSymbolIndex
+    except ImportError:
+        ProjectSymbolIndex = None
+
 from evidence.safe_reader import (
     FileTooLargeError,
     MAX_FILE_BYTES,
@@ -34,6 +42,30 @@ class ToolError(Exception):
     """Raised when a tool call cannot be satisfied."""
 
 
+_SYMBOL_INDEX_CACHE: Dict[Path, Any] = {}
+
+
+def get_project_symbol_index(root: Path, force_reload: bool = False) -> Any:
+    """
+    Get or create a cached ProjectSymbolIndex for the given root path.
+    """
+    root_resolved = Path(root).resolve()
+    if force_reload or root_resolved not in _SYMBOL_INDEX_CACHE:
+        if ProjectSymbolIndex is None:
+            raise ToolError("ProjectSymbolIndex is not available")
+        index = ProjectSymbolIndex(root_path=root_resolved, auto_index=True)
+        _SYMBOL_INDEX_CACHE[root_resolved] = index
+    return _SYMBOL_INDEX_CACHE[root_resolved]
+
+
+def clear_symbol_index_cache(root: Optional[Path] = None) -> None:
+    """Clear cached ProjectSymbolIndex instance(s)."""
+    if root is not None:
+        _SYMBOL_INDEX_CACHE.pop(Path(root).resolve(), None)
+    else:
+        _SYMBOL_INDEX_CACHE.clear()
+
+
 class CodeTools:
     """
     Read-only inspection of a scan root, exposed as callable tools.
@@ -43,13 +75,15 @@ class CodeTools:
         self,
         root: Path,
         evidence_store: Optional[Any] = None,
-        snapshot_id: Optional[str] = None
+        snapshot_id: Optional[str] = None,
+        symbol_index: Optional[Any] = None,
     ) -> None:
         """
         Args:
             root: Directory that every path argument is resolved inside
             evidence_store: Optional EvidenceStore for recording inspected code slices
             snapshot_id: Optional snapshot identifier
+            symbol_index: Optional pre-configured or mock ProjectSymbolIndex
         """
 
         self.root = Path(root).resolve()
@@ -58,6 +92,17 @@ class CodeTools:
         self.calls: List[Dict[str, Any]] = []
         self.evidence_store = evidence_store
         self.snapshot_id = snapshot_id
+        self._symbol_index = symbol_index
+
+    @property
+    def symbol_index(self) -> Any:
+        """
+        Lazily initialize or retrieve cached ProjectSymbolIndex for self.root.
+        """
+        if self._symbol_index is not None:
+            return self._symbol_index
+        self._symbol_index = get_project_symbol_index(self.root)
+        return self._symbol_index
 
     def _resolve(self, relative: str) -> Path:
         """
@@ -155,6 +200,118 @@ class CodeTools:
         if not results:
             return {"name": name, "found": False, "note": "no definition found in scope"}
         return {"name": name, "found": True, "definitions": results}
+
+    def read_imported_symbol(
+        self,
+        symbol_name: Optional[str] = None,
+        from_file: Optional[str] = None,
+        max_depth: int = 2,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Resolve and read the definition and source code of an imported symbol.
+
+        Args:
+            symbol_name: Name of symbol to resolve (function, class, variable, or Class.method)
+            from_file: Optional path of the file where symbol is imported or referenced
+            max_depth: Hop depth limit (strictly capped at <= 2 to prevent infinite loops)
+            **kwargs: Extra parameters (e.g. name, file, path) for model compatibility
+
+        Returns:
+            Dict[str, Any]: Resolved symbol info with source code, or not found message
+        """
+        target_symbol = symbol_name or kwargs.get("name") or kwargs.get("symbol")
+        if not target_symbol or not isinstance(target_symbol, str):
+            raise ToolError("symbol_name must be a non-empty string")
+        target_symbol = target_symbol.strip()
+        if not target_symbol:
+            raise ToolError("symbol_name must be a non-empty string")
+
+        source_file = from_file or kwargs.get("file") or kwargs.get("path")
+        norm_from_file = ""
+
+        if source_file:
+            source_file_str = str(source_file).strip()
+            if source_file_str:
+                try:
+                    resolved_target = self._resolve(source_file_str)
+                    norm_from_file = self._relative(resolved_target)
+                except ToolError:
+                    # Allow virtual files from index (e.g., in unit tests)
+                    idx = self._symbol_index
+                    if idx and hasattr(idx, "indexed_files"):
+                        norm_key = idx._normalize_key(source_file_str)
+                        if norm_key in idx.indexed_files or source_file_str in idx.indexed_files:
+                            norm_from_file = norm_key
+                        else:
+                            raise
+                    else:
+                        raise
+
+        # Strictly enforce hop depth <= 2 to prevent infinite recursion
+        hop_limit = min(max(int(max_depth), 0), 2)
+
+        index = self.symbol_index
+        # If from_file was provided and not in indexed files, index it now if it exists
+        if norm_from_file and hasattr(index, "indexed_files") and norm_from_file not in index.indexed_files:
+            file_abs = self.root / norm_from_file
+            if file_abs.is_file():
+                index.add_file(norm_from_file)
+
+        fallback_global = True if not norm_from_file else False
+        resolved = index.resolve_symbol(
+            symbol_name=target_symbol,
+            current_file=norm_from_file,
+            max_depth=hop_limit,
+            fallback_global=fallback_global,
+        )
+
+        if not resolved:
+            return {
+                "name": target_symbol,
+                "symbol": target_symbol,
+                "found": False,
+                "note": f"no definition found for imported symbol '{target_symbol}'"
+                + (f" from '{norm_from_file}'" if norm_from_file else ""),
+            }
+
+        start_line = resolved.get("line", 1)
+        end_line = resolved.get("end_line", start_line)
+        raw_source = resolved.get("source") or resolved.get("source_code") or ""
+        lines = raw_source.splitlines()
+
+        if lines:
+            numbered_lines = "\n".join(
+                f"{start_line + i:>5} | {line}" for i, line in enumerate(lines)
+            )
+        else:
+            numbered_lines = ""
+
+        res_file = resolved.get("file", "")
+        if res_file:
+            try:
+                cand_path = Path(res_file)
+                if not cand_path.is_absolute() and (self.root / cand_path).is_file():
+                    res_file = self._relative(self.root / cand_path)
+                elif cand_path.is_absolute():
+                    res_file = self._relative(cand_path)
+            except Exception:
+                pass
+
+        return {
+            "name": target_symbol,
+            "symbol": target_symbol,
+            "found": True,
+            "file": res_file,
+            "start_line": start_line,
+            "line": start_line,
+            "end_line": end_line,
+            "kind": resolved.get("kind", "definition"),
+            "source": numbered_lines,
+            "source_code": raw_source,
+            "raw_lines": lines,
+            "from_file": norm_from_file or None,
+        }
 
     def search(
         self,
@@ -328,6 +485,7 @@ class CodeTools:
         handlers = {
             "read_lines": self.read_lines,
             "find_definition": self.find_definition,
+            "read_imported_symbol": self.read_imported_symbol,
             "search": self.search,
             "list_files": self.list_files,
         }
@@ -344,6 +502,31 @@ class CodeTools:
         except Exception as e:
             logging.debug(f"Tool {name} failed: {e}")
             return {"error": f"{name} failed: {e}"}
+
+    def execute_tool(
+        self,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Execute a tool by name with supplied arguments or kwargs.
+
+        Args:
+            name: Tool name to execute
+            arguments: Optional dictionary of arguments
+            **kwargs: Extra arguments merged with arguments dict
+
+        Returns:
+            Dict[str, Any]: Result of tool execution or error dict
+        """
+        args = dict(arguments or {})
+        args.update(kwargs)
+        return self.dispatch(name, args)
+
+    def tools_schema(self) -> List[Dict[str, Any]]:
+        """Return the list of OpenAI-compatible tool schemas."""
+        return TOOL_SCHEMAS
 
 
 # OpenAI-compatible tool schemas.
@@ -391,6 +574,32 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "read_imported_symbol",
+            "description": (
+                "Resolve and read the definition and source code of an imported symbol "
+                "(function, class, or variable) across the project workspace. "
+                "Follows import chains up to 2 hops. Optionally specify from_file to trace "
+                "the import from a specific file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol_name": {
+                        "type": "string",
+                        "description": "Name of the symbol (function, class, or variable) to resolve",
+                    },
+                    "from_file": {
+                        "type": "string",
+                        "description": "Optional file path where the symbol is imported or referenced",
+                    },
+                },
+                "required": ["symbol_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search",
             "description": (
                 "Search the project for a regular expression. Use this to trace "
@@ -416,3 +625,13 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
 ]
+
+
+def tools_schema() -> List[Dict[str, Any]]:
+    """Return OpenAI-compatible tool schemas for agent tools."""
+    return TOOL_SCHEMAS
+
+
+def tools_schemas() -> List[Dict[str, Any]]:
+    """Alias for tools_schema."""
+    return TOOL_SCHEMAS

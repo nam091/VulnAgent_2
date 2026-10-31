@@ -1,0 +1,183 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "Six Repositories (10 CWE) Vulnerability Benchmark",
+    "source": "Airflow, SaltStack, Gradio, Django, Ansible, WeasyPrint official release tags",
+    "match_mode": "file",
+    "labels": 10,
+    "files": 10,
+    "partial_labels": false,
+    "labels_sha256": "044f4aa3bb50295694f9d3f2db8d8d17c2fc412a840b23d3d1dc027a71f3a7d3",
+    "samples_sha256": "c8e27b9b2a1ae2984348954e4905f6f455498a69ab46e0cf351870b287636aab",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "044f4aa3bb50295694f9d3f2db8d8d17c2fc412a840b23d3d1dc027a71f3a7d3",
+    "initial_samples_sha256": "c8e27b9b2a1ae2984348954e4905f6f455498a69ab46e0cf351870b287636aab"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 16,
+    "concurrency": 16,
+    "timestamp": 1792945864.91537,
+    "iso_timestamp": "2026-10-25T23:31:04.915372"
+  },
+  "telemetry": {
+    "api_requests": 109,
+    "input_tokens": 920197,
+    "output_tokens": 153652,
+    "total_tokens": 1073849,
+    "execution_latency_seconds": 143.11
+  },
+  "results": [
+    {
+      "name": "VulnAgent DeepVerify",
+      "status": "completed",
+      "degraded": false,
+      "errors": [],
+      "tp": 5,
+      "fp": 3,
+      "fn": 5,
+      "precision": 0.625,
+      "recall": 0.5,
+      "f1": 0.5556,
+      "unmatched": 0,
+      "fp_on_clean_files": 0,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 1,
+      "fp_wrong_type_right_file": 2,
+      "partial_ground_truth": false,
+      "seconds": 143.11,
+      "telemetry": {
+        "api_requests": 109,
+        "input_tokens": 920197,
+        "output_tokens": 153652,
+        "total_tokens": 1073849,
+        "execution_latency_seconds": 143.11
+      },
+      "coverage": {
+        "files_scanned": 16,
+        "files_requested": 16,
+        "completion_rate": 1.0,
+        "total_seconds": 142.99,
+        "cache_hits": 0,
+        "cache_misses": 16,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 5.94,
+        "llm_tier_seconds": 71.34,
+        "verify_seconds": 65.34,
+        "verify_uncertain": 2,
+        "verify_refuted": 5,
+        "api_requests": 109,
+        "input_tokens": 920197,
+        "output_tokens": 153652,
+        "total_tokens": 1073849,
+        "telemetry": {
+          "api_requests": 109,
+          "input_tokens": 920197,
+          "output_tokens": 153652,
+          "total_tokens": 1073849,
+          "prompt_tokens": 920197,
+          "completion_tokens": 153652
+        }
+      },
+      "missed": [
+        "airflow_pathtraversal.py:0 PATH_TRAVERSAL",
+        "ansible_hardcoded_secret.py:0 INFORMATION_DISCLOSURE",
+        "gradio_info_disclosure.py:0 INFORMATION_DISCLOSURE",
+        "salt_auth_bypass.py:0 AUTH_BYPASS",
+        "salt_deserialization.py:0 DESERIALIZATION"
+      ],
+      "spurious": [
+        "gradio_info_disclosure.py:290 SECURE_COOKIE",
+        "gradio_info_disclosure.py:435 UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS",
+        "django_sqli.py:58 SQL_INJECTION"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-614",
+          "file": "gradio_info_disclosure.py",
+          "line": 290
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "gradio_info_disclosure.py",
+          "line": 435
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 378
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "weasyprint_ssrf.py",
+          "line": 211
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 376
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 58
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 245
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "gradio_xss.py",
+          "line": 71
+        }
+      ]
+    }
+  ]
+}

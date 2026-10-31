@@ -33,6 +33,7 @@ docs/
 .pi/
 .pytest_cache/
 test_mcp_agent/
+source_test/
 
 # Third-party evaluation corpora. Regenerate with the prepare_*.py scripts
 # rather than vendoring them: SecurityEval ships a CITATION.cff but no

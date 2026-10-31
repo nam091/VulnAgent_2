@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from models.vulnerability import (
     CodeLocation,
@@ -23,22 +23,143 @@ from models.vulnerability import (
     VulnerabilityType,
 )
 
+# Path to local pinned offline security rules
+PINNED_RULES_PATH = Path(__file__).resolve().parent.parent.parent / "rules" / "pinned_security_rules.yaml"
+
+# Official Semgrep Registry standard packs
+REGISTRY_PACK_PYTHON = "p/python"
+REGISTRY_PACK_SECURITY_AUDIT = "p/security-audit"
+REGISTRY_PACK_OWASP_TOP_TEN = "p/owasp-top-ten"
+
+STANDARD_REGISTRY_PACKS: Tuple[str, ...] = (
+    REGISTRY_PACK_PYTHON,
+    REGISTRY_PACK_SECURITY_AUDIT,
+    REGISTRY_PACK_OWASP_TOP_TEN,
+)
+
 # Default rule packs. p/python covers language pitfalls, p/security-audit
 # adds broader security rules that catch what p/python alone misses.
 DEFAULT_CONFIGS = ("p/python", "p/security-audit")
 
+# Rule pack presets and aliases
+RULE_PACK_PRESETS: Dict[str, Tuple[str, ...]] = {
+    "standard": STANDARD_REGISTRY_PACKS,
+    "registry": STANDARD_REGISTRY_PACKS,
+    "full": STANDARD_REGISTRY_PACKS,
+    "owasp": (REGISTRY_PACK_OWASP_TOP_TEN,),
+    "owasp-top-ten": (REGISTRY_PACK_OWASP_TOP_TEN,),
+    "security-audit": (REGISTRY_PACK_SECURITY_AUDIT,),
+    "python": (REGISTRY_PACK_PYTHON,),
+    "default": DEFAULT_CONFIGS,
+    "pinned": (str(PINNED_RULES_PATH),),
+    "offline": (str(PINNED_RULES_PATH),),
+}
+
+# Pack aliases normalized to official registry identifiers
+PACK_ALIASES: Dict[str, str] = {
+    "owasp": REGISTRY_PACK_OWASP_TOP_TEN,
+    "owasp-top-ten": REGISTRY_PACK_OWASP_TOP_TEN,
+    "owasp_top_ten": REGISTRY_PACK_OWASP_TOP_TEN,
+    "security-audit": REGISTRY_PACK_SECURITY_AUDIT,
+    "security_audit": REGISTRY_PACK_SECURITY_AUDIT,
+    "python": REGISTRY_PACK_PYTHON,
+}
+
+
+def resolve_rule_configs(
+    configs: Optional[Union[Sequence[str], str]] = None,
+    offline: bool = False,
+) -> Tuple[str, ...]:
+    """
+    Resolve rule configurations into a normalized tuple of pack names or file paths.
+
+    Args:
+        configs: Rule pack name, sequence of packs/paths, or comma-separated string
+        offline: If True, forces use of local pinned offline rules
+
+    Returns:
+        Tuple[str, ...]: Normalized Semgrep --config arguments
+    """
+    # 1. Explicit offline mode
+    if offline or os.environ.get("VULNAGENT_OFFLINE", "").lower() in ("1", "true", "yes"):
+        if PINNED_RULES_PATH.is_file():
+            return (str(PINNED_RULES_PATH.resolve()),)
+        return DEFAULT_CONFIGS
+
+    # 2. None or default fallback
+    if configs is None:
+        if os.environ.get("VULNAGENT_SEMGREP_RULES"):
+            configs = os.environ["VULNAGENT_SEMGREP_RULES"]
+        else:
+            return DEFAULT_CONFIGS
+
+    # 3. Environment variable check if default configs provided
+    if configs == DEFAULT_CONFIGS and os.environ.get("VULNAGENT_SEMGREP_RULES"):
+        configs = os.environ["VULNAGENT_SEMGREP_RULES"]
+
+    # 4. Handle single string input (comma-separated or single pack/preset)
+    if isinstance(configs, str):
+        stripped = configs.strip()
+        lower = stripped.lower()
+        if lower in RULE_PACK_PRESETS:
+            return RULE_PACK_PRESETS[lower]
+        raw_items = [c.strip() for c in stripped.split(",") if c.strip()]
+    else:
+        raw_items = [str(c).strip() for c in configs if str(c).strip()]
+
+    if not raw_items:
+        return DEFAULT_CONFIGS
+
+    resolved: List[str] = []
+    for item in raw_items:
+        lower = item.lower()
+        if lower in ("offline", "pinned"):
+            if PINNED_RULES_PATH.is_file():
+                resolved.append(str(PINNED_RULES_PATH.resolve()))
+            else:
+                resolved.extend(DEFAULT_CONFIGS)
+        elif lower in RULE_PACK_PRESETS:
+            resolved.extend(RULE_PACK_PRESETS[lower])
+        elif lower in PACK_ALIASES:
+            resolved.append(PACK_ALIASES[lower])
+        else:
+            # Check local path existence (relative or absolute)
+            p = Path(item)
+            if p.is_file() or p.is_dir():
+                resolved.append(str(p.resolve()))
+            elif (PINNED_RULES_PATH.parent.parent / item).exists():
+                resolved.append(str((PINNED_RULES_PATH.parent.parent / item).resolve()))
+            else:
+                # Keep as-is (e.g. "p/python", "p/owasp-top-ten", or registry pack)
+                resolved.append(item)
+
+    # Deduplicate while preserving order
+    seen = set()
+    deduped: List[str] = []
+    for r in resolved:
+        if r not in seen:
+            seen.add(r)
+            deduped.append(r)
+
+    return tuple(deduped) if deduped else DEFAULT_CONFIGS
+
+
 # Semgrep's CWE metadata is authoritative when present and recognised.
 CWE_TO_TYPE: Dict[str, VulnerabilityType] = {
+    "20": VulnerabilityType.INSUFFICIENT_INPUT_VALIDATION,
     "22": VulnerabilityType.PATH_TRAVERSAL,
     "78": VulnerabilityType.OS_COMMAND_INJECTION,
     "79": VulnerabilityType.CROSS_SITE_SCRIPTING,
     "89": VulnerabilityType.SQL_INJECTION,
+    "90": VulnerabilityType.LDAP_INJECTION,
     "94": VulnerabilityType.CODE_INJECTION,
     "95": VulnerabilityType.CODE_INJECTION,
     "113": VulnerabilityType.HTTP_METHOD_INJECTION,
     "190": VulnerabilityType.INTEGER_OVERFLOW,
     "209": VulnerabilityType.INFORMATION_EXPOSURE_THROUGH_ERROR_MESSAGES,
+    "287": VulnerabilityType.BROKEN_AUTHENTICATION,
     "295": VulnerabilityType.SECURITY_MISCONFIGURATION,
+    "306": VulnerabilityType.MISSING_AUTHENTICATION,
     "319": VulnerabilityType.SENSITIVE_DATA_EXPOSURE,
     "327": VulnerabilityType.WEAK_CRYPTOGRAPHY,
     "328": VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
@@ -52,10 +173,13 @@ CWE_TO_TYPE: Dict[str, VulnerabilityType] = {
     "601": VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
     "611": VulnerabilityType.XML_EXTERNAL_ENTITY,
     "614": VulnerabilityType.SECURE_COOKIE,
+    "639": VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
+    "643": VulnerabilityType.XPATH_INJECTION,
     "732": VulnerabilityType.SECURITY_MISCONFIGURATION,
     "798": VulnerabilityType.HARDCODED_CREDENTIALS,
     "915": VulnerabilityType.UNSAFE_PROPERTY_ACCESS,
     "918": VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
+    "1004": VulnerabilityType.SECURE_COOKIE,
     "1333": VulnerabilityType.REGULAR_EXPRESSION_DENIAL_OF_SERVICE,
 }
 
@@ -65,9 +189,16 @@ CWE_TO_TYPE: Dict[str, VulnerabilityType] = {
 # whenever the CWE lookup does not resolve.
 RULE_KEYWORD_TO_TYPE: Tuple[Tuple[str, VulnerabilityType], ...] = (
     ("sql", VulnerabilityType.SQL_INJECTION),
+    ("sqli", VulnerabilityType.SQL_INJECTION),
+    ("ldap", VulnerabilityType.LDAP_INJECTION),
+    ("ldapi", VulnerabilityType.LDAP_INJECTION),
+    ("xpath", VulnerabilityType.XPATH_INJECTION),
     ("subprocess", VulnerabilityType.OS_COMMAND_INJECTION),
     ("shell", VulnerabilityType.OS_COMMAND_INJECTION),
     ("command", VulnerabilityType.OS_COMMAND_INJECTION),
+    ("commandi", VulnerabilityType.OS_COMMAND_INJECTION),
+    ("code-injection", VulnerabilityType.CODE_INJECTION),
+    ("codei", VulnerabilityType.CODE_INJECTION),
     ("exec", VulnerabilityType.CODE_INJECTION),
     ("eval", VulnerabilityType.CODE_INJECTION),
     ("pickle", VulnerabilityType.INSECURE_DESERIALIZATION),
@@ -83,16 +214,24 @@ RULE_KEYWORD_TO_TYPE: Tuple[Tuple[str, VulnerabilityType], ...] = (
     ("secret", VulnerabilityType.EXPOSED_SECRET),
     ("token", VulnerabilityType.EXPOSED_SECRET),
     ("crypt", VulnerabilityType.WEAK_CRYPTOGRAPHY),
+    ("md5", VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM),
+    ("sha1", VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM),
+    ("weak-hash", VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM),
     ("hash", VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM),
     ("random", VulnerabilityType.SECURE_RANDOMNESS),
+    ("open-redirect", VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS),
     ("redirect", VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS),
     ("ssrf", VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY),
     ("request", VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY),
+    ("xxe", VulnerabilityType.XML_EXTERNAL_ENTITY),
     ("xml", VulnerabilityType.XML_EXTERNAL_ENTITY),
     ("debug", VulnerabilityType.EXPOSED_FLASK_DEBUG),
     ("host", VulnerabilityType.SECURITY_MISCONFIGURATION),
     ("cookie", VulnerabilityType.SECURE_COOKIE),
     ("header", VulnerabilityType.INSECURE_HTTP_HEADERS),
+    ("jwt", VulnerabilityType.BROKEN_AUTHENTICATION),
+    ("auth", VulnerabilityType.BROKEN_AUTHENTICATION),
+    ("idor", VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE),
 )
 
 # Canonical CWE per vulnerability type. Semgrep's own CWE metadata is often
@@ -102,6 +241,7 @@ RULE_KEYWORD_TO_TYPE: Tuple[Tuple[str, VulnerabilityType], ...] = (
 # quote it, so leaving the rule's value in place would propagate the error.
 TYPE_TO_CANONICAL_CWE: Dict[VulnerabilityType, str] = {
     VulnerabilityType.SQL_INJECTION: "89",
+    VulnerabilityType.LDAP_INJECTION: "90",
     VulnerabilityType.OS_COMMAND_INJECTION: "78",
     VulnerabilityType.CODE_INJECTION: "94",
     VulnerabilityType.CROSS_SITE_SCRIPTING: "79",
@@ -118,12 +258,32 @@ TYPE_TO_CANONICAL_CWE: Dict[VulnerabilityType, str] = {
     VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS: "601",
     VulnerabilityType.REGULAR_EXPRESSION_DENIAL_OF_SERVICE: "1333",
     VulnerabilityType.SECURE_COOKIE: "614",
+    VulnerabilityType.XPATH_INJECTION: "643",
     VulnerabilityType.REMOTE_CODE_EXECUTION: "94",
     VulnerabilityType.SECURITY_MISCONFIGURATION: "16",
     VulnerabilityType.EXPOSED_FLASK_DEBUG: "489",
     VulnerabilityType.BROKEN_AUTHENTICATION: "287",
     VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE: "639",
     VulnerabilityType.MISSING_AUTHENTICATION: "306",
+}
+
+# Specific known rule IDs mapped directly to VulnerabilityType
+KNOWN_RULE_MAP: Dict[str, VulnerabilityType] = {
+    # Custom pinned rules
+    "python-insecure-eval": VulnerabilityType.CODE_INJECTION,
+    "python-insecure-subprocess-shell": VulnerabilityType.OS_COMMAND_INJECTION,
+    "python-sql-injection": VulnerabilityType.SQL_INJECTION,
+    "python-flask-render-template-string": VulnerabilityType.CROSS_SITE_SCRIPTING,
+    "python-path-traversal-open": VulnerabilityType.PATH_TRAVERSAL,
+    "python-insecure-deserialization": VulnerabilityType.INSECURE_DESERIALIZATION,
+    "python-ldap-injection": VulnerabilityType.LDAP_INJECTION,
+    "python-xpath-injection": VulnerabilityType.XPATH_INJECTION,
+    "python-xml-external-entity": VulnerabilityType.XML_EXTERNAL_ENTITY,
+    "python-insecure-randomness": VulnerabilityType.SECURE_RANDOMNESS,
+    "python-weak-hashing": VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+    "python-open-redirect": VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
+    "python-insecure-cookie": VulnerabilityType.SECURE_COOKIE,
+    "python-ssrf-requests": VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
 }
 
 # Types severe enough that an ERROR-level rule hit is treated as CRITICAL
@@ -181,27 +341,46 @@ class SemgrepRunner:
 
     def __init__(
         self,
-        configs: Tuple[str, ...] = DEFAULT_CONFIGS,
+        configs: Optional[Union[Sequence[str], str]] = DEFAULT_CONFIGS,
         timeout: int = 300,
-        executable: Optional[str] = None
+        executable: Optional[str] = None,
+        offline: bool = False,
     ) -> None:
         """
         Initialize the runner.
 
         Args:
-            configs: Semgrep rule packs to load
+            configs: Semgrep rule packs, local rules paths, or presets to load
             timeout: Maximum seconds to allow a scan to run
             executable: Path to the semgrep binary (auto-detected if omitted)
+            offline: If True, uses local pinned offline rules
         """
 
-        if configs == DEFAULT_CONFIGS and os.environ.get("VULNAGENT_SEMGREP_RULES"):
-            env_rules = os.environ["VULNAGENT_SEMGREP_RULES"]
-            configs = tuple(r.strip() for r in env_rules.split(",") if r.strip())
-        self.configs = configs
+        self.configs = resolve_rule_configs(configs, offline=offline)
         self.timeout = timeout
         self.executable = executable or shutil.which("semgrep")
+        self.offline = offline
         self.last_errors: List[Dict[str, Any]] = []
         self.last_stats: Dict[str, Any] = {}
+
+    @classmethod
+    def get_standard_packs(cls) -> Tuple[str, ...]:
+        """Return the official standard registry rule packs."""
+        return STANDARD_REGISTRY_PACKS
+
+    @classmethod
+    def get_pinned_rules_path(cls) -> Path:
+        """Return the path to the pinned offline rules YAML file."""
+        return PINNED_RULES_PATH
+
+    @classmethod
+    def resolve_configs(
+        cls,
+        configs: Optional[Union[Sequence[str], str]] = None,
+        offline: bool = False,
+    ) -> Tuple[str, ...]:
+        """Convenience wrapper for resolve_rule_configs."""
+        return resolve_rule_configs(configs, offline=offline)
 
     @property
     def available(self) -> bool:
@@ -301,6 +480,7 @@ class SemgrepRunner:
         cmd = [
             self.executable, "--json", "--metrics=off", "--quiet",
             "--no-git-ignore", "--disable-version-check",
+            "--include=*.py",
         ]
         for config in self.configs:
             cmd.extend(["--config", config])
@@ -543,12 +723,26 @@ class SemgrepRunner:
             Optional[VulnerabilityType]: None when no mapping applies
         """
 
+        # 1. Authoritative CWE lookup
         if cwe_number and cwe_number in CWE_TO_TYPE:
             return CWE_TO_TYPE[cwe_number]
 
+        # 2. Exact or suffix match in KNOWN_RULE_MAP
+        if check_id in KNOWN_RULE_MAP:
+            return KNOWN_RULE_MAP[check_id]
+        rule_tail_exact = check_id.rsplit(".", 1)[-1]
+        if rule_tail_exact in KNOWN_RULE_MAP:
+            return KNOWN_RULE_MAP[rule_tail_exact]
+
+        # 3. Rule ID keyword lookup (tail first, then full id)
         rule_tail = check_id.lower().rsplit(".", 1)[-1]
         for keyword, vuln_type in RULE_KEYWORD_TO_TYPE:
             if keyword in rule_tail:
+                return vuln_type
+
+        check_id_lower = check_id.lower()
+        for keyword, vuln_type in RULE_KEYWORD_TO_TYPE:
+            if keyword in check_id_lower:
                 return vuln_type
 
         return None

@@ -1,0 +1,258 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "Six Repositories (10 CWE) Vulnerability Benchmark",
+    "source": "Airflow, SaltStack, Gradio, Django, Ansible, WeasyPrint official release tags",
+    "match_mode": "file",
+    "labels": 10,
+    "files": 10,
+    "partial_labels": false,
+    "labels_sha256": "9a37c0a501c9284a14d41ce65a2344eac1f00e20170a279d71863e735b24cb10",
+    "samples_sha256": "bd42ae165d7c96a8e9acfad82291692c73183460a33c4f05b736344459d40af1",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "9a37c0a501c9284a14d41ce65a2344eac1f00e20170a279d71863e735b24cb10",
+    "initial_samples_sha256": "bd42ae165d7c96a8e9acfad82291692c73183460a33c4f05b736344459d40af1"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 13,
+    "concurrency": 4,
+    "timestamp": 1792849908.1243365,
+    "iso_timestamp": "2026-10-24T20:51:48.124337"
+  },
+  "results": [
+    {
+      "name": "VulnAgent (hybrid)",
+      "status": "degraded",
+      "degraded": false,
+      "errors": [],
+      "tp": 6,
+      "fp": 17,
+      "fn": 4,
+      "precision": 0.2609,
+      "recall": 0.6,
+      "f1": 0.3636,
+      "unmatched": 0,
+      "fp_on_clean_files": 7,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 4,
+      "fp_wrong_type_right_file": 6,
+      "partial_ground_truth": false,
+      "seconds": 214.48,
+      "coverage": {
+        "files_scanned": 16,
+        "files_requested": [
+          "ansible_hardcoded_secret.py",
+          "gradio_info_disclosure.py",
+          "salt_auth_bypass.py",
+          "salt_cmdi.py",
+          "clean_gradio_media.py",
+          "airflow_pathtraversal.py",
+          "clean_weasyprint_units.py",
+          "salt_deserialization.py",
+          "clean_ansible_display.py",
+          "weasyprint_ssrf.py",
+          "clean_django_crypto.py",
+          "airflow_idor.py",
+          "django_sqli.py",
+          "clean_airflow_dates.py",
+          "clean_salt_units.py",
+          "gradio_xss.py"
+        ],
+        "total_seconds": 214.42,
+        "cache_hits": 0,
+        "cache_misses": 13,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 5.77,
+        "llm_tier_seconds": 208.42
+      },
+      "missed": [
+        "ansible_hardcoded_secret.py:0 INFORMATION_DISCLOSURE",
+        "gradio_info_disclosure.py:0 INFORMATION_DISCLOSURE",
+        "gradio_xss.py:0 XSS",
+        "salt_deserialization.py:0 DESERIALIZATION"
+      ],
+      "spurious": [
+        "ansible_hardcoded_secret.py:870 CWE-78",
+        "ansible_hardcoded_secret.py:426 CWE-22",
+        "ansible_hardcoded_secret.py:801 CWE-22",
+        "ansible_hardcoded_secret.py:1038 CWE-22",
+        "gradio_info_disclosure.py:844 CWE-22",
+        "salt_auth_bypass.py:1147 CWE-22",
+        "salt_cmdi.py:49 CWE-78",
+        "salt_cmdi.py:286 CWE-78",
+        "salt_cmdi.py:383 CWE-78",
+        "clean_gradio_media.py:102 CWE-22",
+        "clean_gradio_media.py:193 CWE-22",
+        "clean_gradio_media.py:222 CWE-22",
+        "clean_weasyprint_units.py:137 CWE-918",
+        "clean_weasyprint_units.py:590 CWE-22",
+        "clean_weasyprint_units.py:365 CWE-674",
+        "clean_weasyprint_units.py:498 CWE-94",
+        "django_sqli.py:53 CWE-89"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-78",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 870
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 426
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 801
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 1038
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "gradio_info_disclosure.py",
+          "line": 844
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "salt_auth_bypass.py",
+          "line": 1147
+        },
+        {
+          "cwe": "CWE-287",
+          "file": "salt_auth_bypass.py",
+          "line": 1866
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 286
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 299
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 383
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 102
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 193
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 222
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "airflow_pathtraversal.py",
+          "line": 209
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "clean_weasyprint_units.py",
+          "line": 137
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_weasyprint_units.py",
+          "line": 590
+        },
+        {
+          "cwe": "CWE-674",
+          "file": "clean_weasyprint_units.py",
+          "line": 365
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "clean_weasyprint_units.py",
+          "line": 498
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "weasyprint_ssrf.py",
+          "line": 211
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 333
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 237
+        }
+      ]
+    }
+  ]
+}

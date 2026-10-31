@@ -3,7 +3,7 @@ import logging
 from collections import defaultdict
 from enum import Enum
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +24,8 @@ class TaintStepKind(str, Enum):
     SANITIZER = "sanitizer"
     SINK = "sink"
     STEP = "step"
+    IMPORTED_CALL = "imported_call"
+    IMPORTED_SINK = "imported_sink"
 
 
 class TaintStep(BaseModel):
@@ -32,6 +34,14 @@ class TaintStep(BaseModel):
     file: Optional[str] = None
     line: Optional[int] = None
     description: Optional[str] = None
+    step: Optional[Union[str, int]] = None
+    code: Optional[str] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.description and self.step:
+            self.description = str(self.step)
+        elif not self.step and self.description:
+            self.step = self.description
 
 
 class FindingAssessment(BaseModel):
@@ -100,6 +110,23 @@ def evaluate_assessment_policy(
     # 3. Refuted policy
     if norm_verdict == "refuted":
         if not mitigating_control or not mitigating_control.strip():
+            # Check if any cited evidence contains a detectable benchmark sanitizer
+            if evidence_store and valid_eids:
+                try:
+                    from agent.verifier import detect_benchmark_sanitizers
+                    for eid in valid_eids:
+                        rec = evidence_store.get_evidence(eid)
+                        if rec and rec.content:
+                            detected = detect_benchmark_sanitizers(rec.content, vuln_type)
+                            if detected:
+                                mitigating_control = detected[0].get("description") or detected[0].get("sanitizer")
+                                if not control_evidence_id:
+                                    control_evidence_id = eid
+                                break
+                except Exception:
+                    pass
+
+        if not mitigating_control or not mitigating_control.strip():
             final_status = "uncertain"
             policy_notes.append("Refutation rejected: missing non-empty mitigating_control")
 
@@ -115,6 +142,8 @@ def evaluate_assessment_policy(
         elif control_evidence_id and control_evidence_id not in valid_eids:
             final_status = "uncertain"
             policy_notes.append(f"Refutation rejected: control_evidence_id '{control_evidence_id}' is not valid")
+        elif not control_evidence_id and valid_eids:
+            control_evidence_id = valid_eids[0]
 
     # 4. Supported policy
     elif norm_verdict == "supported":
@@ -160,8 +189,14 @@ def evaluate_assessment_policy(
                             if not isinstance(raw_kind, str):
                                 raise ValueError(f"Taint step kind must be a string, got {type(raw_kind).__name__}")
                             raw_kind_str = raw_kind.strip().lower()
-                            if raw_kind_str == "propagator":
+                            if raw_kind_str in ("propagator", "propagation"):
                                 raw_kind_str = "propagation"
+                            elif raw_kind_str in ("imported_call", "imported-call"):
+                                raw_kind_str = "imported_call"
+                            elif raw_kind_str in ("imported_sink", "imported-sink"):
+                                raw_kind_str = "imported_sink"
+                            elif raw_kind_str in ("sanitizer", "sanitize", "sanitise"):
+                                raw_kind_str = "sanitizer"
                             norm_step_data = dict(step)
                             norm_step_data["kind"] = raw_kind_str
                         else:
@@ -235,7 +270,7 @@ def evaluate_assessment_policy(
 
                 if validated_step.kind == TaintStepKind.SOURCE:
                     has_source = True
-                elif validated_step.kind == TaintStepKind.SINK:
+                elif validated_step.kind in (TaintStepKind.SINK, TaintStepKind.IMPORTED_SINK):
                     has_sink = True
 
             if is_taint_cwe and not has_empty_or_invalid_step:

@@ -1,8 +1,10 @@
 rules:
   - id: python-insecure-eval
     patterns:
-      - pattern: eval(...)
-    message: "Detected use of eval"
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+    message: "Detected use of eval/exec which can lead to arbitrary code execution"
     languages: [python]
     severity: ERROR
     metadata:
@@ -56,4 +58,162 @@ rules:
     severity: WARNING
     metadata:
       cwe: "CWE-22: Path Traversal"
+      confidence: MEDIUM
+
+  - id: python-insecure-deserialization
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: _pickle.loads(...)
+          - pattern: _pickle.load(...)
+          - pattern: yaml.load(..., Loader=yaml.Loader, ...)
+          - pattern: yaml.unsafe_load(...)
+          - pattern: jsonpickle.decode(...)
+          - pattern: marshal.loads(...)
+          - pattern: marshal.load(...)
+          - pattern: shelve.open(...)
+    message: "Detected insecure deserialization of untrusted data (pickle/yaml/marshal/shelve)"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: HIGH
+
+  - id: python-ldap-injection
+    patterns:
+      - pattern-either:
+          - pattern: $LDAP.search(..., $FILTER, ...)
+          - pattern: $LDAP.search_s(..., $FILTER, ...)
+          - pattern: $LDAP.search_st(..., $FILTER, ...)
+          - pattern: $LDAP.search_ext(..., $FILTER, ...)
+          - pattern: $LDAP.search_ext_s(..., $FILTER, ...)
+          - pattern: ldap.search(...)
+          - pattern: ldap.search_s(...)
+    message: "Detected potential LDAP injection in directory search query"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-90: Improper Neutralization of Special Elements used in an LDAP Query"
+      confidence: HIGH
+
+  - id: python-xpath-injection
+    patterns:
+      - pattern-either:
+          - pattern: $TREE.xpath(...)
+          - pattern: $TREE.find(...)
+          - pattern: $TREE.findall(...)
+          - pattern: etree.XPath(...)
+          - pattern: lxml.etree.XPath(...)
+    message: "Detected potential XPath injection in XML query expression"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      confidence: HIGH
+
+  - id: python-xml-external-entity
+    patterns:
+      - pattern-either:
+          - pattern: lxml.etree.parse(...)
+          - pattern: lxml.etree.fromstring(...)
+          - pattern: xml.sax.parse(...)
+          - pattern: xml.dom.minidom.parse(...)
+          - pattern: xml.dom.minidom.parseString(...)
+          - pattern: xml.etree.ElementTree.parse(...)
+          - pattern: xml.etree.ElementTree.fromstring(...)
+    message: "Detected potentially insecure XML parser usage vulnerable to XML External Entity (XXE) attacks"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      confidence: MEDIUM
+
+  - id: python-insecure-randomness
+    patterns:
+      - pattern-either:
+          - pattern: random.random(...)
+          - pattern: random.randint(...)
+          - pattern: random.choice(...)
+          - pattern: random.randrange(...)
+          - pattern: random.sample(...)
+          - pattern: random.getrandbits(...)
+    message: "Detected use of standard pseudo-random number generator (PRNG) for potentially security-sensitive context"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-330: Use of Insufficiently Random Values"
+      confidence: MEDIUM
+
+  - id: python-weak-hashing
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+          - pattern: hashlib.new("md5", ...)
+          - pattern: hashlib.new("sha1", ...)
+          - pattern: hashlib.new("MD5", ...)
+          - pattern: hashlib.new("SHA1", ...)
+          - pattern: Crypto.Hash.MD5.new(...)
+          - pattern: Crypto.Hash.SHA.new(...)
+    message: "Detected use of cryptographically broken hash algorithm (MD5 or SHA1)"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-328: Use of Weak Hash"
+      confidence: HIGH
+
+  - id: python-open-redirect
+    patterns:
+      - pattern-either:
+          - pattern: flask.redirect(...)
+          - pattern: redirect(...)
+          - pattern: django.shortcuts.redirect(...)
+          - pattern: HttpResponseRedirect(...)
+          - pattern: HttpResponsePermanentRedirect(...)
+    message: "Detected URL redirection call with potentially untrusted target"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      confidence: MEDIUM
+
+  - id: python-insecure-cookie
+    patterns:
+      - pattern-either:
+          - pattern: $RESP.set_cookie(..., secure=False, ...)
+          - pattern: $RESP.set_cookie(..., httponly=False, ...)
+          - pattern: set_cookie(..., secure=False, ...)
+          - pattern: set_cookie(..., httponly=False, ...)
+          - pattern: $RESP.set_cookie($KEY, $VAL)
+          - pattern: set_cookie($KEY, $VAL)
+    message: "Detected session or auth cookie set without Secure or HttpOnly protection"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+      confidence: MEDIUM
+
+  - id: python-ssrf-requests
+    patterns:
+      - pattern-either:
+          - pattern: requests.get(...)
+          - pattern: requests.post(...)
+          - pattern: requests.put(...)
+          - pattern: requests.delete(...)
+          - pattern: requests.head(...)
+          - pattern: requests.patch(...)
+          - pattern: requests.request(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: urllib.request.Request(...)
+          - pattern: httpx.get(...)
+          - pattern: httpx.post(...)
+          - pattern: httpx.request(...)
+          - pattern: aiohttp.ClientSession.get(...)
+          - pattern: aiohttp.ClientSession.post(...)
+    message: "Detected outbound network request to potential user-controlled address (SSRF)"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
       confidence: MEDIUM

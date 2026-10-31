@@ -64,12 +64,30 @@ function severityStack(counts) {
 
 /* Risk arc. Drawn as a stroked path so the sweep animates from a dash
    offset rather than needing a library. */
-function riskGauge(score, max = 100) {
+function riskGauge(score, max = 100, levelOverride = null) {
   const pct = Math.max(0, Math.min(1, score / max));
   const R = 62, CX = 78, CY = 78;
   const arc = Math.PI * R;            // half circle
-  const band = score >= 60 ? 'var(--crit)' : score >= 30 ? 'var(--high)' : 'var(--low)';
-  const level = score >= 60 ? 'ELEVATED' : score >= 30 ? 'MODERATE' : 'LOW';
+
+  let band = 'var(--low)';
+  let level = 'LOW';
+  if (score >= 90 || levelOverride === 'CRITICAL') {
+    band = 'var(--crit)';
+    level = 'CRITICAL';
+  } else if (score >= 70 || levelOverride === 'HIGH') {
+    band = 'var(--high)';
+    level = 'HIGH';
+  } else if (score >= 40 || levelOverride === 'MODERATE' || levelOverride === 'MEDIUM') {
+    band = 'var(--med)';
+    level = 'MODERATE';
+  } else if (score > 0 || levelOverride === 'LOW') {
+    band = 'var(--low)';
+    level = 'LOW';
+  } else {
+    band = 'var(--low)';
+    level = 'CLEAN';
+  }
+  if (levelOverride) level = levelOverride;
 
   return `
     <div class="gauge-wrap">
@@ -89,7 +107,7 @@ function riskGauge(score, max = 100) {
       </svg>
       <div class="gauge-read">
         <div class="gauge-value" style="color:${band}">${score}</div>
-        <div class="gauge-label">Risk score · ${level}</div>
+        <div class="gauge-label">Peak risk · ${level}</div>
       </div>
     </div>`;
 }
@@ -120,6 +138,23 @@ async function renderDashboard() {
   const sourceTotal = Object.values(sources).reduce((a, b) => a + b, 0) || 1;
   const confirmedPct = Math.round(((sources.confirmed || 0) / sourceTotal) * 100);
 
+  const sev = stats.severity || {};
+  let peakScore = 0;
+  let peakLevel = 'CLEAN';
+  if ((sev.CRITICAL || 0) > 0) {
+    peakScore = 100;
+    peakLevel = 'CRITICAL';
+  } else if ((sev.HIGH || 0) > 0) {
+    peakScore = 80;
+    peakLevel = 'HIGH';
+  } else if ((sev.MEDIUM || 0) > 0) {
+    peakScore = 55;
+    peakLevel = 'MODERATE';
+  } else if ((sev.LOW || 0) > 0) {
+    peakScore = 25;
+    peakLevel = 'LOW';
+  }
+
   view.innerHTML = `
     <div class="page-head">
       <h1>Dashboard</h1>
@@ -145,7 +180,7 @@ async function renderDashboard() {
     <div class="grid-2">
       <div class="card">
         <div class="card-title">Threat level</div>
-        ${riskGauge(Math.round((stats.severity || {}).CRITICAL * 10 + ((stats.severity || {}).HIGH || 0) * 6))}
+        ${riskGauge(peakScore, 100, peakLevel)}
         <div style="margin-top:20px">${severityStack(stats.severity || {})}</div>
       </div>
       <div class="card">
@@ -202,7 +237,7 @@ function jobRow(job) {
   const badges = SEV_ORDER.filter(s => counts[s])
     .map(s => `<span class="pill ${s}">${counts[s]}</span>`).join(' ');
   return `
-    <a class="job" href="#/job/${esc(job.id)}">
+    <div class="job" onclick="location.hash='#/job/${esc(job.id)}'">
       <span class="job-status ${esc(job.status)}"></span>
       <div style="min-width:0">
         <div class="job-label">${esc(job.label)}</div>
@@ -211,8 +246,10 @@ function jobRow(job) {
       </div>
       <div class="job-right">
         ${badges || `<span class="muted">${job.status === 'done' ? 'clean' : ''}</span>`}
+        <button class="btn-edit-label" title="Rename scan" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}', event)">✎</button>
+        <button class="btn-del" title="Delete scan" onclick="deleteJob('${esc(job.id)}', event)">🗑</button>
       </div>
-    </a>`;
+    </div>`;
 }
 
 /* ---------------- new scan ---------------- */
@@ -260,10 +297,15 @@ function renderScan() {
       <div class="controls">
         <button class="btn" id="go">Start scan</button>
         <select id="mode" style="width:auto">
-          <option value="deep">Deep — rule engine + LLM</option>
-          <option value="fast">Fast — rule engine only</option>
+          <option value="deep-verify" selected>VulnAgent DeepVerify — AST Slicer + LLM + Verifier</option>
+          <option value="llm">LLM only — Semantic analysis</option>
+          <option value="semgrep">Semgrep only — Rule engine only</option>
         </select>
-        <label class="check"><input type="checkbox" id="verify"> Verification agent</label>
+        <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--text-dim);margin-left:4px">
+          <span>Threads:</span>
+          <input type="number" id="concurrency" value="16" min="1" max="50" style="width:58px;padding:6px 8px;font:600 12px/1 var(--mono);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
+        </label>
         <div class="spacer"></div>
         <span id="scan-msg" class="muted"></span>
       </div>
@@ -281,6 +323,29 @@ function renderScan() {
     ['folder', 'snippet', 'repo'].forEach(p =>
       document.getElementById('pane-' + p).classList.toggle('hide', p !== pane));
   });
+
+  const modeSelect = document.getElementById('mode');
+  const verifyCheck = document.getElementById('verify');
+  modeSelect.onchange = () => {
+    const m = modeSelect.value;
+    if (m === 'deep-verify') {
+      verifyCheck.checked = true;
+      verifyCheck.disabled = false;
+    } else if (m === 'llm') {
+      verifyCheck.checked = false;
+      verifyCheck.disabled = false;
+    } else if (m === 'semgrep') {
+      verifyCheck.checked = false;
+      verifyCheck.disabled = true;
+    }
+  };
+  verifyCheck.onchange = () => {
+    if (verifyCheck.checked && modeSelect.value === 'llm') {
+      modeSelect.value = 'deep-verify';
+    } else if (!verifyCheck.checked && modeSelect.value === 'deep-verify') {
+      modeSelect.value = 'llm';
+    }
+  };
 
   const drop = document.getElementById('drop');
   const picker = document.getElementById('picker');
@@ -367,7 +432,8 @@ async function submit(pane) {
   const button = document.getElementById('go');
   const msg = document.getElementById('scan-msg');
   const mode = document.getElementById('mode').value;
-  const verify = document.getElementById('verify').checked;
+  const verify = (mode === 'deep-verify') || document.getElementById('verify').checked;
+  const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 16;
 
   button.disabled = true;
   msg.innerHTML = '<span class="spinner"></span>Submitting';
@@ -382,6 +448,7 @@ async function submit(pane) {
       pendingFiles.forEach(f => form.append('files', f, f.webkitRelativePath || f.name));
       form.append('mode', mode);
       form.append('verify', String(verify));
+      form.append('concurrency', String(concurrency));
       job = await api('/api/jobs/folder', { method: 'POST', body: form });
     } else if (pane === 'snippet') {
       const code = document.getElementById('code').value;
@@ -390,7 +457,7 @@ async function submit(pane) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code, filename: document.getElementById('snippet-name').value || 'snippet.py',
-          mode, verify
+          mode, verify, concurrency
         })
       });
     } else {
@@ -401,7 +468,7 @@ async function submit(pane) {
         body: JSON.stringify({
           repository_url: url,
           branch: document.getElementById('repo-branch').value.trim() || 'main',
-          mode, verify
+          mode, verify, concurrency
         })
       });
     }
@@ -419,7 +486,16 @@ async function renderJobs() {
     <div class="empty"><span class="spinner"></span>Loading</div>`;
   const { jobs } = await api('/api/jobs?limit=100');
   view.innerHTML = `
-    <div class="page-head"><h1>Scans</h1><p>Every scan this server has run.</p></div>
+    <div class="page-head">
+      <div class="row">
+        <div>
+          <h1>Scans</h1>
+          <p>Every scan this server has run across all benchmarks and targets.</p>
+        </div>
+        <div class="spacer"></div>
+        ${jobs.length ? `<button class="btn ghost sm danger" onclick="clearAllJobs()">Clear history</button>` : ''}
+      </div>
+    </div>
     <div class="card">
       ${jobs.length ? jobs.map(jobRow).join('')
         : emptyState('No scans yet', 'Start one from the New scan tab.')}
@@ -451,10 +527,13 @@ function paintJob(job) {
     <div class="page-head">
       <div class="row">
         <div style="min-width:0">
-          <h1>${esc(job.label)}</h1>
+          <h1 id="job-title-header">${esc(job.label)}</h1>
           <p>${esc(job.kind)} · ${esc(job.status)} · started ${ago(job.created_at)}</p>
         </div>
         <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">✎ Rename</button>
+        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">✨ AI Name</button>
+        <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">Delete scan</button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
     </div>
@@ -482,12 +561,67 @@ function paintJob(job) {
   const counts = result.counts || {};
   const sources = result.sources || {};
   const stats = result.stats || {};
-  const findings = [...(result.findings || [])]
-    .sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
+
+  function getTrustRank(f) {
+    const isConfirmed = f.source === 'confirmed' || f.corroborated;
+    const isAgentVerified = f.verification && f.verification.verdict === 'confirmed';
+    if (isConfirmed && isAgentVerified) return 1;
+    if (isConfirmed) return 2;
+    if (isAgentVerified) return 3;
+    if (f.source === 'rule-only' || f.source === 'semgrep') return 4;
+    return 5;
+  }
+
+  const findings = [...(result.findings || [])].sort((a, b) => {
+    const rankA = getTrustRank(a);
+    const rankB = getTrustRank(b);
+    if (rankA !== rankB) return rankA - rankB; // Confirmed & Agent-Verified ALWAYS at the top!
+    const sevA = SEV_ORDER.indexOf(a.severity);
+    const sevB = SEV_ORDER.indexOf(b.severity);
+    if (sevA !== sevB) return sevA - sevB;
+    return (a.file || '').localeCompare(b.file || '') || ((a.start_line || 0) - (b.start_line || 0));
+  });
+
+  const totalFindings = findings.length;
+  const countConfirmed = findings.filter(f => f.source === 'confirmed' || f.corroborated).length;
+  const countVerified = findings.filter(f => f.verification && f.verification.verdict === 'confirmed').length;
+  const countLlm = findings.filter(f => f.source === 'llm-only' || f.source === 'llm').length;
+  const countRule = findings.filter(f => f.source === 'rule-only' || f.source === 'semgrep').length;
+
+  let peakScore = 0;
+  let peakLevel = 'CLEAN';
+  if (findings.length > 0) {
+    const maxCvss = Math.max(...findings.map(f => typeof f.cvss === 'number' ? f.cvss : 0), 0);
+    if ((counts.CRITICAL || 0) > 0) {
+      peakScore = Math.max(90, Math.round((maxCvss || 9.5) * 10));
+      peakLevel = 'CRITICAL';
+    } else if ((counts.HIGH || 0) > 0) {
+      peakScore = Math.max(70, Math.round((maxCvss || 8.0) * 10));
+      peakLevel = 'HIGH';
+    } else if ((counts.MEDIUM || 0) > 0) {
+      peakScore = Math.max(40, Math.round((maxCvss || 5.0) * 10));
+      peakLevel = 'MODERATE';
+    } else if ((counts.LOW || 0) > 0) {
+      peakScore = Math.max(15, Math.round((maxCvss || 2.5) * 10));
+      peakLevel = 'LOW';
+    } else {
+      peakScore = 10;
+      peakLevel = 'INFO';
+    }
+    peakScore = Math.min(100, peakScore);
+  }
+
+  const degradedFiles = (result.files || []).filter(f => {
+    const tiers = f.tiers || {};
+    return Object.values(tiers).some(st => {
+      const code = String(st).split(':')[0].trim();
+      return !['ok', 'disabled', 'not routed', 'not_routed', 'completed', 'syntax_skipped'].includes(code);
+    });
+  });
 
   body.innerHTML = `
-    ${result.degraded ? `<div class="banner warn">
-      One analysis tier did not complete, so these results are incomplete.</div>` : ''}
+    ${(result.degraded && degradedFiles.length) ? `<div class="banner warn" style="margin-bottom:18px">
+      <b>Analysis Coverage Note:</b> ${degradedFiles.length} file(s) encountered a local tier limitation (e.g., syntax or timeout), while remaining tiers completed and guarded results.</div>` : ''}
 
     <div class="metrics">
       <div class="metric ${findings.length ? 'high' : 'ok'}">
@@ -524,7 +658,7 @@ function paintJob(job) {
 
     <div class="grid-2">
       <div class="card"><div class="card-title">Threat level</div>
-        ${riskGauge(Math.round(result.risk_score || 0))}
+        ${riskGauge(peakScore, 100, peakLevel)}
         <div style="margin-top:20px">${severityStack(counts)}</div></div>
       <div class="card"><div class="card-title">Files</div>
         ${bars((result.files || []).filter(f => f.findings)
@@ -537,10 +671,67 @@ function paintJob(job) {
       ${result.chains.map(chainCard).join('')}</div>` : ''}
 
     <div class="card">
-      <div class="card-title">Findings</div>
-      ${findings.length ? findings.map(findingCard).join('')
-        : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
+      <div class="row" style="margin-bottom:12px;align-items:baseline">
+        <div class="card-title" style="margin:0">Findings</div>
+        <div class="spacer"></div>
+        <span id="findings-counter-badge" class="filter-status-text">Showing ${totalFindings} of ${totalFindings} findings</span>
+      </div>
+
+      <div class="findings-toolbar">
+        <div class="search-wrap">
+          <svg class="search-svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="finding-search-input" class="search-input" placeholder="Search by file, type, CWE, line, description..." autocomplete="off">
+          <button type="button" id="finding-search-clear" class="search-clear-btn hide" onclick="clearFindingSearch()" title="Clear search">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="filter-pills" id="finding-filter-pills">
+          <button type="button" class="filter-pill active" data-filter="all" onclick="setFindingFilter('all')">
+            All <span class="pill-count">${totalFindings}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="confirmed" onclick="setFindingFilter('confirmed')">
+            <span class="dot-indicator green"></span> Confirmed <span class="pill-count">${countConfirmed}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="verified" onclick="setFindingFilter('verified')">
+            <span class="dot-indicator teal"></span> Agent-Verified <span class="pill-count">${countVerified}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="llm" onclick="setFindingFilter('llm')">
+            <span class="dot-indicator purple"></span> LLM-only <span class="pill-count">${countLlm}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="rule" onclick="setFindingFilter('rule')">
+            <span class="dot-indicator slate"></span> Rule-only <span class="pill-count">${countRule}</span>
+          </button>
+        </div>
+
+        <div class="filter-select-wrap">
+          <select id="finding-severity-select" onchange="applyFindingsFilter()">
+            <option value="all">All Severities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+            <option value="INFO">Info</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="findings-list">
+        ${findings.length ? findings.map(f => findingCard(f, job.id)).join('')
+          : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
+      </div>
     </div>`;
+
+  const searchInput = body.querySelector('#finding-search-input');
+  if (searchInput) {
+    searchInput.oninput = () => applyFindingsFilter();
+  }
 
   body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
     head.nextElementSibling.classList.toggle('hide'));
@@ -572,7 +763,7 @@ function partialResults(job) {
     <div class="card">
       <div class="card-title">Found so far &mdash; scan still running</div>
       ${severityStack(counts)}
-      <div style="margin-top:16px">${sorted.map(findingCard).join('')}</div>
+      <div style="margin-top:16px">${sorted.map(f => findingCard(f, job.id)).join('')}</div>
       <p class="muted" style="margin-top:12px">
         These are merged results. The verification agent may still remove some
         of them, and later phases may add more.</p>
@@ -633,12 +824,28 @@ function phaseNote(job, phase) {
   return '';
 }
 
-function findingCard(f) {
+function findingCard(f, jobId = '') {
   const verified = f.verification && f.verification.verdict === 'confirmed';
   const assessmentStatus = f.assessment_status || (f.assessment && f.assessment.status);
   const corroborated = f.corroborated || (f.provenance && f.provenance.corroborated);
+  const isConfirmed = f.source === 'confirmed' || corroborated;
+  const isLlm = f.source === 'llm-only' || f.source === 'llm';
+  const isRule = f.source === 'rule-only' || f.source === 'semgrep';
+
+  const searchText = [
+    f.file, f.type, f.cwe, f.severity, f.source, f.description, f.impact, f.remediation, f.start_line, f.end_line,
+    ...(f.taint_path || []).map(s => `${s.kind} ${s.step} ${s.symbol} ${s.file} ${s.line}`)
+  ].join(' ').toLowerCase();
+
   return `
-    <div class="finding ${esc(f.severity)}">
+    <div class="finding ${esc(f.severity)}"
+         data-severity="${esc(f.severity)}"
+         data-source="${esc(f.source)}"
+         data-confirmed="${isConfirmed ? 'true' : 'false'}"
+         data-verified="${verified ? 'true' : 'false'}"
+         data-llm="${isLlm ? 'true' : 'false'}"
+         data-rule="${isRule ? 'true' : 'false'}"
+         data-search="${esc(searchText)}">
       <div class="f-head">
         <span class="pill ${esc(f.severity)}">${esc(f.severity)}</span>
         <span class="f-type">${esc(f.type)}</span>
@@ -660,13 +867,37 @@ function findingCard(f) {
           ${f.assessment.mitigating_control ? `<div><b>Mitigating Control:</b> ${esc(f.assessment.mitigating_control)}</div>` : ''}
           ${(f.assessment.evidence_ids || []).length ? `<div><b>Evidence IDs:</b> ${esc(f.assessment.evidence_ids.join(', '))}</div>` : ''}
         ` : ''}
-        ${(f.taint_path || []).length ? `<h4>Traced dataflow</h4><div class="taint">
-          ${f.taint_path.map(s => `
-            <div class="taint-step">
-              <span class="taint-kind ${esc(s.kind || '')}">${esc(s.kind || 'step')}</span>
-              <span>${esc(s.step || '')}</span>
-              <span class="taint-loc">${esc(s.file || '')}:${esc(s.line || '')}</span>
-            </div>`).join('')}</div>` : ''}
+        ${(f.taint_path || []).length ? `
+          <div class="taint-header">
+            <h4>Traced dataflow</h4>
+            <span class="taint-hint">Click any step to inspect source code line</span>
+          </div>
+          <div class="taint">
+            ${f.taint_path.map((s, idx) => {
+              const stepFile = s.file || f.file || '';
+              const stepLine = s.line || f.start_line || 1;
+              const stepKind = (s.kind || 'step').toLowerCase();
+              const stepDesc = s.description || s.step || s.symbol || '';
+              const embeddedCode = s.code || '';
+              return `
+                <div class="taint-step-wrapper">
+                  <div class="taint-step clickable" onclick="toggleTaintStepCode(this)"
+                       data-file="${esc(stepFile)}"
+                       data-line="${stepLine}"
+                       data-job-id="${esc(jobId)}">
+                    <span class="taint-kind ${esc(stepKind)}">${esc(stepKind)}</span>
+                    <span class="taint-desc">${esc(stepDesc)}</span>
+                    <span class="taint-loc">
+                      ${esc(stepFile)}:${stepLine}
+                      <span class="taint-code-badge">Code ▾</span>
+                    </span>
+                  </div>
+                  <div class="taint-step-code-box hide">
+                    ${embeddedCode ? `<pre class="taint-code-view"><code>${esc(embeddedCode)}</code></pre>` : `<div class="taint-code-loading"><span class="spinner"></span>Loading code...</div>`}
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>` : ''}
         ${f.verification && f.verification.reason ? `
           <h4>Verification</h4>
           <div><b>${esc(f.verification.verdict)}</b> — ${esc(f.verification.reason)}</div>` : ''}
@@ -702,6 +933,111 @@ function fixBlock(f) {
         Copy fix</button>
       <span class="muted">Apply with <b>vulnagent fix</b> to get validation and rollback.</span>
     </div>`;
+}
+
+/* ---------------- findings search & filtering ---------------- */
+
+let currentFindingFilter = 'all';
+
+function setFindingFilter(filterName) {
+  currentFindingFilter = filterName;
+  document.querySelectorAll('#finding-filter-pills .filter-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filterName);
+  });
+  applyFindingsFilter();
+}
+
+function clearFindingSearch() {
+  const input = document.getElementById('finding-search-input');
+  if (input) {
+    input.value = '';
+    applyFindingsFilter();
+  }
+}
+
+function applyFindingsFilter() {
+  const searchInput = document.getElementById('finding-search-input');
+  const clearBtn = document.getElementById('finding-search-clear');
+  const sevSelect = document.getElementById('finding-severity-select');
+  const counterBadge = document.getElementById('findings-counter-badge');
+  const container = document.getElementById('findings-list');
+  if (!container) return;
+
+  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+  if (clearBtn) clearBtn.classList.toggle('hide', !query);
+
+  const selectedSev = sevSelect ? sevSelect.value : 'all';
+  const cards = container.querySelectorAll('.finding');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const sev = card.dataset.severity;
+    const isConfirmed = card.dataset.confirmed === 'true';
+    const isVerified = card.dataset.verified === 'true';
+    const isLlm = card.dataset.llm === 'true';
+    const isRule = card.dataset.rule === 'true';
+    const searchText = card.dataset.search || '';
+
+    // Check filter pill
+    let matchesPill = true;
+    if (currentFindingFilter === 'confirmed') matchesPill = isConfirmed;
+    else if (currentFindingFilter === 'verified') matchesPill = isVerified;
+    else if (currentFindingFilter === 'llm') matchesPill = isLlm;
+    else if (currentFindingFilter === 'rule') matchesPill = isRule;
+
+    // Check severity
+    let matchesSev = true;
+    if (selectedSev !== 'all') matchesSev = (sev === selectedSev);
+
+    // Check search query
+    let matchesSearch = true;
+    if (query) {
+      matchesSearch = searchText.includes(query);
+    }
+
+    const show = matchesPill && matchesSev && matchesSearch;
+    card.classList.toggle('hide', !show);
+    if (show) visibleCount++;
+  });
+
+  if (counterBadge) {
+    counterBadge.textContent = `Showing ${visibleCount} of ${cards.length} findings`;
+  }
+}
+
+/* ---------------- interactive taint step code viewer ---------------- */
+
+async function toggleTaintStepCode(stepEl) {
+  const wrapper = stepEl.closest('.taint-step-wrapper');
+  if (!wrapper) return;
+  const box = wrapper.querySelector('.taint-step-code-box');
+  const badge = stepEl.querySelector('.taint-code-badge');
+  if (!box) return;
+
+  const isHidden = box.classList.contains('hide');
+  if (isHidden) {
+    box.classList.remove('hide');
+    if (badge) badge.textContent = 'Code ▴';
+    const pre = box.querySelector('pre');
+    if (!pre) {
+      const file = stepEl.dataset.file || '';
+      const line = stepEl.dataset.line || '1';
+      const jobId = stepEl.dataset.jobId || '';
+      try {
+        const res = await api(`/api/file_context?file=${encodeURIComponent(file)}&line=${line}&job_id=${encodeURIComponent(jobId)}`);
+        if (res && res.code) {
+          box.innerHTML = `<pre class="taint-code-view"><code>${esc(res.code)}</code></pre>`;
+        } else {
+          box.innerHTML = `<div class="taint-code-err">Line ${line} not available in local workspace</div>`;
+        }
+      } catch (err) {
+        box.innerHTML = `<div class="taint-code-err">Could not load code for ${esc(file)}:${line}</div>`;
+      }
+    }
+  } else {
+    box.classList.add('hide');
+    if (badge) badge.textContent = 'Code ▾';
+  }
 }
 
 const chainCard = c => `
@@ -747,6 +1083,14 @@ function follow(id) {
       if (pct) pct.textContent = Math.round(update.percent) + '%';
     }
 
+    // Update job title live if AI renamed it automatically
+    if (update.label) {
+      const headerTitle = document.getElementById('job-title-header');
+      if (headerTitle && headerTitle.textContent !== update.label) {
+        headerTitle.textContent = update.label;
+      }
+    }
+
     // A phase boundary changes the log, the phase strip and possibly the
     // partial results, so re-fetch rather than patching each piece.
     if (update.phase !== lastPhase) {
@@ -768,6 +1112,407 @@ function follow(id) {
   pollTimer = setInterval(() => refresh().catch(() => {}), 6000);
 }
 
+/* ---------------- job management, rename & deletion ---------------- */
+
+let currentRenameJobId = null;
+
+function openRenameModal(jobId, currentLabel, e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  currentRenameJobId = jobId;
+  closeRenameModal();
+
+  const modalHtml = `
+    <div class="modal-backdrop" id="rename-modal" onclick="onModalBackdropClick(event)">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Rename Scan</h3>
+          <button type="button" class="modal-close" onclick="closeRenameModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <label class="field" style="font-weight:700">Scan Label</label>
+          <div style="margin-bottom:14px">
+            <input type="text" id="rename-input" value="${esc(currentLabel)}" placeholder="Enter scan title..." autocomplete="off">
+          </div>
+          <div class="row" style="align-items:center;gap:10px">
+            <button type="button" class="btn ghost sm" id="modal-ai-btn" onclick="aiSuggestInModal('${esc(jobId)}')">
+              ✨ Auto-Generate with AI
+            </button>
+            <span id="modal-ai-status" class="muted"></span>
+          </div>
+          <p class="muted" style="margin-top:10px">
+            Click <b>Auto-Generate with AI</b> to automatically generate a concise, professional title based on the scanned files and discovered defects.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost sm" onclick="closeRenameModal()">Cancel</button>
+          <button type="button" class="btn sm" id="modal-save-btn" onclick="saveRenameFromModal('${esc(jobId)}')">Save Title</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const input = document.getElementById('rename-input');
+  if (input) {
+    input.focus();
+    input.select();
+    input.onkeydown = (ev) => {
+      if (ev.key === 'Enter') saveRenameFromModal(jobId);
+      else if (ev.key === 'Escape') closeRenameModal();
+    };
+  }
+}
+
+function closeRenameModal() {
+  const modal = document.getElementById('rename-modal');
+  if (modal) modal.remove();
+  currentRenameJobId = null;
+}
+
+function onModalBackdropClick(e) {
+  if (e.target && e.target.id === 'rename-modal') {
+    closeRenameModal();
+  }
+}
+
+async function aiSuggestInModal(jobId) {
+  const aiBtn = document.getElementById('modal-ai-btn');
+  const statusEl = document.getElementById('modal-ai-status');
+  const input = document.getElementById('rename-input');
+  if (!input) return;
+
+  if (aiBtn) aiBtn.disabled = true;
+  if (statusEl) statusEl.innerHTML = '<span class="spinner"></span>Analyzing code with AI...';
+
+  try {
+    const res = await api(`/api/jobs/${jobId}/suggest_name`, { method: 'POST' });
+    if (res && res.suggested_label) {
+      input.value = res.suggested_label;
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--low)">✓ AI title generated</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--crit)">Could not generate title</span>';
+    }
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--crit)">Error: ${esc(err.message)}</span>`;
+  } finally {
+    if (aiBtn) aiBtn.disabled = false;
+  }
+}
+
+async function saveRenameFromModal(jobId) {
+  const input = document.getElementById('rename-input');
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (!input) return;
+
+  const newLabel = input.value.trim();
+  if (!newLabel) {
+    alert('Please enter a valid title.');
+    return;
+  }
+
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    await api(`/api/jobs/${jobId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: newLabel })
+    });
+    closeRenameModal();
+
+    const headerTitle = document.getElementById('job-title-header');
+    if (headerTitle) {
+      headerTitle.textContent = newLabel;
+    }
+    if (location.hash === '#/jobs' || location.hash === '#/' || location.hash === '') {
+      route();
+    }
+  } catch (err) {
+    alert('Failed to save title: ' + err.message);
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function aiAutoNameAndSave(jobId) {
+  const btn = document.getElementById('detail-ai-name-btn');
+  const wasText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Naming with AI...';
+  }
+
+  try {
+    const res = await api(`/api/jobs/${jobId}/suggest_name`, { method: 'POST' });
+    if (res && res.suggested_label) {
+      await api(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: res.suggested_label })
+      });
+      const headerTitle = document.getElementById('job-title-header');
+      if (headerTitle) {
+        headerTitle.textContent = res.suggested_label;
+      }
+      if (btn) btn.innerHTML = '✓ Renamed!';
+      setTimeout(() => { if (btn) { btn.innerHTML = wasText; btn.disabled = false; } }, 1500);
+    }
+  } catch (err) {
+    alert('AI naming failed: ' + err.message);
+    if (btn) { btn.innerHTML = wasText; btn.disabled = false; }
+  }
+}
+
+async function deleteJob(id, e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  if (!confirm('Are you sure you want to delete this scan from the system?')) return;
+  try {
+    await api(`/api/jobs/${id}`, { method: 'DELETE' });
+    if (location.hash.startsWith('#/job/')) {
+      location.hash = '#/jobs';
+    } else {
+      await renderJobs();
+    }
+  } catch (err) {
+    alert('Failed to delete scan: ' + err.message);
+  }
+}
+
+async function clearAllJobs() {
+  if (!confirm('WARNING: Are you sure you want to clear ALL scan history? This action cannot be undone.')) return;
+  try {
+    await api('/api/jobs/clear', { method: 'POST' });
+    await renderJobs();
+  } catch (err) {
+    alert('Failed to clear scans: ' + err.message);
+  }
+}
+
+/* ---------------- settings view ---------------- */
+
+async function renderSettings() {
+  view.innerHTML = `
+    <div class="page-head">
+      <h1>AI Model &amp; API Settings</h1>
+      <p>Configure model connection: Base URL, Model identifier, and API Key (securely masked).</p>
+    </div>
+    <div class="empty"><span class="spinner"></span>Loading configuration...</div>`;
+
+  let currentSettings = {
+    openai_base_url: 'http://127.0.0.1:20128/v1',
+    openai_model: 'cmc/reflection/beam:free',
+    openai_api_key: '',
+    masked_api_key: '',
+    is_configured: false
+  };
+
+  try {
+    const res = await api('/api/settings');
+    if (res) currentSettings = res;
+  } catch (e) {
+    // fallback
+  }
+
+  view.innerHTML = `
+    <div class="page-head">
+      <h1>AI Model &amp; API Settings</h1>
+      <p>Configure model connection: Base URL, Model identifier, and API Key (securely masked).</p>
+    </div>
+
+    <div class="card" style="max-width:760px">
+      <div id="settings-banner"></div>
+
+      <div style="margin-bottom:20px">
+        <label class="field" style="font-weight:700">OpenAI-Compatible Base URL</label>
+        <input type="text" id="setting-url" value="${esc(currentSettings.openai_base_url || '')}" placeholder="http://127.0.0.1:20128/v1">
+        <p class="muted" style="margin-top:6px">
+          Inference server endpoint (9Router, local Ollama, vLLM, or official OpenAI API).
+        </p>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label class="field" style="font-weight:700">Model Identifier</label>
+        <input type="text" id="setting-model" value="${esc(currentSettings.openai_model || '')}" placeholder="cmc/reflection/beam:free">
+        <p class="muted" style="margin-top:6px">
+          Model ID string (e.g. <code>cmc/reflection/beam:free</code>, <code>cx/gpt-5.6-luna</code>, <code>ollama/gemma4</code>).
+        </p>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <label class="field" style="font-weight:700">API Key</label>
+        <div class="password-wrap">
+          <input type="password" id="setting-key" value="${esc(currentSettings.openai_api_key || '')}" placeholder="sk-..." autocomplete="off">
+          <button type="button" class="password-toggle-btn" id="toggle-key-btn" onclick="toggleKeyVisibility()">Show</button>
+        </div>
+        <p class="muted" style="margin-top:6px">
+          API key is masked by default as a password field for security during demos and presentations.
+        </p>
+      </div>
+
+      <div style="margin-bottom:24px;padding:14px;background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm)">
+        <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;color:var(--text)">Quick Presets:</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn ghost sm" onclick="applyPreset('9router')">⚡ 9Router Local (beam:free)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('solar')">☀️ Solar Mini (solar-mini4:free)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53')">🔮 GLM-5.3 Proxy (Default)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash')">⚡ GLM-5.3 Flash Proxy (8080)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash9r')">⚡ 9Router (glm-5.3-flash-free)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('luna')">🌙 Codex Luna (gpt-5.6-luna)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('ollama')">🦙 9Router (ollama/gemma4)</button>
+        </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:var(--border) solid var(--edge);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:5px">
+          <div>
+            <b>Local Proxy Info:</b>
+            <span style="margin-left:6px">Endpoint: <code>http://localhost:8080/v1</code> (OpenAI) · <code>http://127.0.0.1:8080</code> (Anthropic)</span>
+          </div>
+          <div>
+            <b>Web Chat UI:</b>
+            <a href="http://localhost:8080/webui" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;margin-left:6px">
+              http://localhost:8080/webui ↗
+            </a>
+            <span style="opacity:0.75;margin-left:8px">(Interactive chat interface for GLM models)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="gap:12px;align-items:center">
+        <button class="btn" id="save-settings-btn" onclick="saveSettings()">Save Configuration</button>
+        <button class="btn ghost" id="test-settings-btn" onclick="testConnection()">Test Connection</button>
+        <div class="spacer"></div>
+        <span id="settings-status" class="muted"></span>
+      </div>
+    </div>`;
+}
+
+function toggleKeyVisibility() {
+  const input = document.getElementById('setting-key');
+  const btn = document.getElementById('toggle-key-btn');
+  if (!input || !btn) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = 'Hide';
+  } else {
+    input.type = 'password';
+    btn.textContent = 'Show';
+  }
+}
+
+function applyPreset(preset) {
+  const urlEl = document.getElementById('setting-url');
+  const modelEl = document.getElementById('setting-model');
+  const keyEl = document.getElementById('setting-key');
+  if (!urlEl || !modelEl) return;
+
+  if (preset === '9router') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'cmc/reflection/beam:free';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  } else if (preset === 'solar') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'nous/upstage/solar-mini4:free';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  } else if (preset === 'glm53') {
+    urlEl.value = 'http://localhost:8080/v1';
+    modelEl.value = 'glm-5.3';
+    keyEl.value = 'your-proxy-secret';
+  } else if (preset === 'glm53flash') {
+    urlEl.value = 'http://localhost:8080/v1';
+    modelEl.value = 'glm-5.3-flash';
+    keyEl.value = 'your-proxy-secret';
+  } else if (preset === 'glm53flash9r') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'oc/glm-5.3-flash-free';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  } else if (preset === 'ollama') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'ollama/gemma4';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  } else if (preset === 'luna') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'cx/gpt-5.6-luna';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  }
+}
+
+async function saveSettings() {
+  const saveBtn = document.getElementById('save-settings-btn');
+  const statusEl = document.getElementById('settings-status');
+  const banner = document.getElementById('settings-banner');
+  const url = document.getElementById('setting-url').value.trim();
+  const model = document.getElementById('setting-model').value.trim();
+  const key = document.getElementById('setting-key').value.trim();
+
+  saveBtn.disabled = true;
+  statusEl.innerHTML = '<span class="spinner"></span>Saving...';
+
+  try {
+    await api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        openai_base_url: url,
+        openai_model: model,
+        openai_api_key: key
+      })
+    });
+    statusEl.innerHTML = '<span style="color:var(--low)">✓ Saved successfully</span>';
+    banner.innerHTML = `<div class="banner" style="background:rgba(16,185,129,0.1);border-color:var(--low);color:var(--text);margin-bottom:16px">
+      <b>Configuration saved!</b> Active model: <code>${esc(model)}</code> (Endpoint: <code>${esc(url)}</code>)
+    </div>`;
+    await checkHealth();
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:var(--crit)">Error: ${esc(err.message)}</span>`;
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function testConnection() {
+  const testBtn = document.getElementById('test-settings-btn');
+  const statusEl = document.getElementById('settings-status');
+  const url = document.getElementById('setting-url').value.trim();
+  const model = document.getElementById('setting-model').value.trim();
+  const key = document.getElementById('setting-key').value.trim();
+
+  testBtn.disabled = true;
+  statusEl.innerHTML = '<span class="spinner"></span>Testing connection...';
+
+  try {
+    const res = await api('/api/settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        openai_base_url: url,
+        openai_model: model,
+        openai_api_key: key
+      })
+    });
+    if (res.status === 'ok') {
+      statusEl.innerHTML = `<span style="color:var(--low)">✓ ${esc(res.message)}</span>`;
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--crit)">✗ ${esc(res.message)}</span>`;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:var(--crit)">✗ Connection failed: ${esc(err.message)}</span>`;
+  } finally {
+    testBtn.disabled = false;
+  }
+}
+
 /* ---------------- routing ---------------- */
 
 async function route() {
@@ -787,6 +1532,7 @@ async function route() {
     if (page === 'scan') renderScan();
     else if (page === 'jobs') await renderJobs();
     else if (page === 'job' && parts[1]) await renderJob(parts[1]);
+    else if (page === 'settings') await renderSettings();
     else await renderDashboard();
   } catch (e) {
     view.innerHTML = `<div class="banner err">${esc(e.message)}</div>`;

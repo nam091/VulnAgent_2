@@ -9,6 +9,7 @@ can be refreshed, closed or reopened without losing one.
 """
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -31,10 +32,18 @@ from pydantic import BaseModel, Field
 
 from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner
+from evidence.safe_reader import enrich_taint_path, read_code_snippet
 from jobs import Job, JobStore, run_job
-from models.vulnerability import FindingSource, Vulnerability
+from models.vulnerability import (
+    FindingSource,
+    StandardFindingOutput,
+    StandardScanOutput,
+    Vulnerability,
+    normalize_posix_path,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "web"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Cloning arbitrary URLs on request is a server-side request forgery
 # primitive, so only well-known code hosts over https are accepted.
@@ -87,56 +96,108 @@ if STATIC_DIR.is_dir():
 class SnippetRequest(BaseModel):
     code: str = Field(..., description="Source code to analyse")
     filename: str = Field("snippet.py", description="Name used for language detection")
-    mode: str = Field("deep", description="'fast' for rules only, 'deep' for both tiers")
-    verify: bool = Field(False, description="Run the adversarial verification agent")
+    mode: str = Field("deep-verify", description="'deep-verify', 'llm', or 'semgrep'")
+    verify: bool = Field(True, description="Run the adversarial verification agent")
+    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
 
 
 class RepositoryRequest(BaseModel):
     repository_url: str
     branch: str = "main"
-    mode: str = "deep"
-    verify: bool = False
+    mode: str = "deep-verify"
+    verify: bool = True
+    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
     max_files: int = Field(40, ge=1, le=200)
 
 
-def _serialise(vuln: Vulnerability) -> Dict[str, Any]:
+class SettingsRequest(BaseModel):
+    openai_base_url: Optional[str] = Field(None, description="OpenAI-compatible Base URL")
+    openai_model: Optional[str] = Field(None, description="Model identifier")
+    openai_api_key: Optional[str] = Field(None, description="API Key")
+
+
+class RenameJobRequest(BaseModel):
+    label: str = Field(..., min_length=1, max_length=200, description="New job label")
+
+
+def _resolve_file_on_disk(file_str: str, workspace: Optional[Path] = None) -> Optional[Path]:
+    """Find a source file on disk across workspace, repository, and standard benchmark datasets."""
+    if not file_str:
+        return None
+    p = Path(file_str)
+    if workspace:
+        w_cand = Path(workspace) / file_str
+        if w_cand.is_file():
+            return w_cand
+        w_name = Path(workspace) / p.name
+        if w_name.is_file():
+            return w_name
+
+    if p.is_file():
+        return p
+    if (PROJECT_ROOT / file_str).is_file():
+        return PROJECT_ROOT / file_str
+
+    datasets_dir = PROJECT_ROOT / "eval" / "datasets"
+    if datasets_dir.is_dir():
+        for d in datasets_dir.iterdir():
+            cand = d / "samples" / p.name
+            if cand.is_file():
+                return cand
+
+    source_test_dir = PROJECT_ROOT / "source_test"
+    if source_test_dir.is_dir():
+        cand = source_test_dir / file_str
+        if cand.is_file():
+            return cand
+
+    return None
+
+
+def _read_code_snippet(file_str: str, line: int, workspace: Optional[Path] = None, context_lines: int = 2) -> Optional[str]:
+    """Extract code lines around target line with line numbering and current line marker."""
+    snippet = read_code_snippet(file_str, line, root_dir=workspace, context_lines=context_lines)
+    if snippet:
+        return snippet
+    p = _resolve_file_on_disk(file_str, workspace=workspace)
+    if not p:
+        return None
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        if not lines:
+            return None
+        start = max(1, line - context_lines)
+        end = min(len(lines), line + context_lines)
+        snippet_lines = []
+        for i in range(start, end + 1):
+            marker = ">" if i == line else " "
+            snippet_lines.append(f"{marker} {i:>4} | {lines[i-1]}")
+        return "\n".join(snippet_lines)
+    except Exception:
+        return None
+
+
+def _enrich_taint_path(taint_path: List[Dict[str, Any]], fallback_file: str, workspace: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Proactively populate step['code'] for each taint path step and ensure unified schema compliance."""
+    return enrich_taint_path(taint_path, default_file=fallback_file, root_dir=workspace)
+
+
+def _serialise(vuln: Vulnerability, workspace: Optional[Path] = None) -> Dict[str, Any]:
     """
-    Render a finding for the web client.
+    Render a finding conforming to StandardFindingOutput schema.
 
     Args:
         vuln: The finding
+        workspace: Optional scan root path for file context resolution
 
     Returns:
         Dict[str, Any]: JSON-safe representation
     """
-
-    label = {
-        FindingSource.CONFIRMED: "confirmed",
-        FindingSource.SEMGREP: "rule-only",
-        FindingSource.LLM: "llm-only",
-    }.get(vuln.source, vuln.source.value)
-
-    return {
-        "id": vuln.id,
-        "type": vuln.type.value,
-        "severity": vuln.severity.value,
-        "source": label,
-        "confidence": round(vuln.confidence, 2),
-        "file": vuln.location.file_path,
-        "start_line": vuln.location.start_line,
-        "end_line": vuln.location.end_line,
-        "cwe": vuln.cwe_id,
-        "owasp": vuln.owasp_category,
-        "cvss": vuln.cvss_score,
-        "description": vuln.description,
-        "impact": vuln.impact,
-        "remediation": vuln.remediation,
-        "secure_code_example": vuln.secure_code_example,
-        "snippet": vuln.location.context,
-        "verification": vuln.verification,
-        "taint_path": vuln.taint_path,
-        "fix": _fix_payload(vuln),
-    }
+    std = StandardFindingOutput.from_vulnerability(vuln, workspace=workspace)
+    data = std.model_dump()
+    data["taint_path"] = _enrich_taint_path(data.get("taint_path") or [], data.get("file") or "", workspace=workspace)
+    data["fix"] = _fix_payload(vuln)
+    return data
 
 
 def _fix_payload(vuln: Vulnerability) -> Optional[Dict[str, Any]]:
@@ -176,68 +237,89 @@ def _fix_payload(vuln: Vulnerability) -> Optional[Dict[str, Any]]:
 
 def _package(result: Any) -> Dict[str, Any]:
     """
-    Build the response body shared by every scan.
+    Build the response body shared by every scan adhering to StandardScanOutput.
 
     Args:
-        result: A ScanResult
+        result: A ScanResult or _PartialResult
 
     Returns:
         Dict[str, Any]: The response payload
     """
 
-    vulns = result.vulnerabilities
+    vulns = getattr(result, "vulnerabilities", [])
+    ws = getattr(result, "root", None)
+    findings = [_serialise(v, workspace=ws) for v in vulns]
+    refuted = [_serialise(v, workspace=ws) for v in getattr(result, "refuted_vulnerabilities", [])]
+
     counts: Dict[str, int] = {}
     sources: Dict[str, int] = {}
-    for vuln in vulns:
-        counts[vuln.severity.value] = counts.get(vuln.severity.value, 0) + 1
-        label = _serialise(vuln)["source"]
-        sources[label] = sources.get(label, 0) + 1
+    for f in findings:
+        sev = f.get("severity", "")
+        counts[sev] = counts.get(sev, 0) + 1
+        src = f.get("source", "")
+        sources[src] = sources.get(src, 0) + 1
 
+    reports = getattr(result, "reports", [])
     chains = [
         {
-            "severity": chain.combined_severity.value,
+            "severity": chain.combined_severity.value if hasattr(chain.combined_severity, "value") else str(chain.combined_severity),
             "likelihood": chain.likelihood,
             "mitigation_priority": chain.mitigation_priority,
             "prerequisites": chain.prerequisites,
             "steps": [
                 {
-                    "type": v.type.value,
-                    "severity": v.severity.value,
-                    "file": v.location.file_path,
-                    "line": v.location.start_line,
+                    "type": v.type.value if hasattr(v.type, "value") else str(v.type),
+                    "severity": v.severity.value if hasattr(v.severity, "value") else str(v.severity),
+                    "file": normalize_posix_path(v.location.file_path, root=ws) if v.location and v.location.file_path else "",
+                    "line": v.location.start_line if v.location else 0,
                 }
                 for v in chain.vulnerabilities
             ],
         }
-        for report in result.reports
-        for chain in report.chained_vulnerabilities
+        for report in reports
+        for chain in getattr(report, "chained_vulnerabilities", [])
     ]
 
     files = [
         {
-            "file": report.file_name,
-            "findings": len(report.vulnerabilities),
-            "refuted": len(report.refuted_vulnerabilities),
-            "risk_score": report.risk_score or 0,
-            "tiers": report.tiers,
+            "file": normalize_posix_path(report.file_name, root=ws) if getattr(report, "file_name", None) else "",
+            "findings": len(getattr(report, "vulnerabilities", [])),
+            "refuted": len(getattr(report, "refuted_vulnerabilities", [])),
+            "risk_score": getattr(report, "risk_score", 0) or 0,
+            "tiers": getattr(report, "tiers", {}),
             "status": getattr(report, "status", "completed"),
             "engine_status": getattr(report, "engine_status", {}),
         }
-        for report in result.reports
+        for report in reports
     ]
 
-    return {
-        "findings": [_serialise(v) for v in vulns],
-        "refuted_findings": [_serialise(v) for v in getattr(result, "refuted_vulnerabilities", [])],
-        "status": getattr(result, "status", "completed"),
-        "counts": counts,
-        "sources": sources,
-        "chains": chains,
-        "files": files,
-        "risk_score": round(sum(r.risk_score or 0 for r in result.reports), 2),
-        "stats": result.stats,
-        "degraded": result.degraded,
-    }
+    target_str = normalize_posix_path(ws) if ws else ""
+    opts = getattr(result, "options", None)
+    if opts is None:
+        opts = result.stats.get("options", {}) if isinstance(getattr(result, "stats", None), dict) else {}
+    if not isinstance(opts, dict):
+        opts = {}
+
+    stats_dict = dict(result.stats) if getattr(result, "stats", None) and isinstance(result.stats, dict) else {}
+
+    std_out = StandardScanOutput(
+        schema_version="1.0.0",
+        scanner="VulnAgent",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        target=target_str,
+        options=opts,
+        stats=stats_dict,
+        files=files,
+        findings=findings,
+        refuted_findings=refuted,
+        chains=chains,
+        status=getattr(result, "status", "completed"),
+        degraded=getattr(result, "degraded", False),
+        counts=counts,
+        sources=sources,
+        risk_score=round(sum(getattr(r, "risk_score", 0) or 0 for r in reports), 2),
+    )
+    return std_out.model_dump(mode="json")
 
 
 def _safe_label(name: str) -> str:
@@ -291,6 +373,24 @@ def _safe_relative(name: str) -> Optional[str]:
     return "/".join(cleaned)
 
 
+def _resolve_mode(mode: str, verify: bool = False) -> tuple[bool, bool, bool]:
+    """
+    Resolve (use_semgrep, use_llm, verify) from mode name and optional verify flag.
+
+    Supported modes:
+        - 'deep-verify' / 'deepverify' / 'verify' / '3-tier' / '3tier': VulnAgent DeepVerify (Semgrep + LLM + Verifier)
+        - 'llm' / 'llm-only': LLM only (No Semgrep)
+        - 'semgrep' / 'semgrep-only' / 'fast': Semgrep rules only (No LLM)
+    """
+    m = (mode or "").strip().lower()
+    if m in ("semgrep", "semgrep-only", "semgrep_only", "fast"):
+        return True, False, False
+    elif m in ("llm", "llm-only", "llm_only"):
+        return False, True, verify
+    else:  # "deep-verify", "deepverify", "verify", "3-tier", "3tier", or default
+        return True, True, True
+
+
 def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[str, Any]:
     """
     Attach progress reporting and queue the scan.
@@ -317,7 +417,25 @@ def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[
     options.on_partial = publish_partial
 
     async def execute() -> None:
-        await run_job(store, job, lambda: Scanner(options).scan(), _package)
+        async def scan_and_auto_name() -> Any:
+            res = await Scanner(options).scan()
+            if not job.options.get("custom_name"):
+                try:
+                    smart_title = await generate_smart_scan_title(
+                        files=getattr(res, "reports", []),
+                        findings=getattr(res, "vulnerabilities", []),
+                        kind=job.kind,
+                        fallback_seed=job.label,
+                        mode=job.options.get("mode", "deep-verify"),
+                    )
+                    if smart_title and smart_title != job.label:
+                        job.label = smart_title
+                        store.update(job, label=smart_title)
+                except Exception as e:
+                    logging.debug(f"Failed to auto-name job with AI: {e}")
+            return res
+
+        await run_job(store, job, scan_and_auto_name, _package)
 
     background.add_task(execute)
     return job.as_summary()
@@ -380,12 +498,13 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         raise HTTPException(status_code=400, detail=f"Could not read the upload: {e}")
 
     files = [v for v in form.getlist("files") if isinstance(v, StarletteUploadFile)]
-    mode = str(form.get("mode") or "deep")
-    verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
+    mode = str(form.get("mode") or "deep-verify")
+    raw_verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
+    use_semgrep, use_llm, verify = _resolve_mode(mode, raw_verify)
     try:
-        concurrency = int(form.get("concurrency") or 5)
+        concurrency = int(form.get("concurrency") or 16)
     except (TypeError, ValueError):
-        concurrency = 5
+        concurrency = 16
 
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
@@ -456,15 +575,16 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         label=f"{root_name or 'upload'} ({written} files)",
         options={
             "mode": mode, "verify": verify, "files": written,
+            "concurrency": concurrency,
             "skipped_oversized": oversized,
         },
         workspace=str(workspace),
     )
     options = ScanOptions(
         target=str(workspace),
-        use_llm=(mode != "fast"),
-        use_semgrep=True,
-        concurrency=max(1, min(concurrency, 10)),
+        use_llm=use_llm,
+        use_semgrep=use_semgrep,
+        concurrency=max(1, min(concurrency, 50)),
         verify=verify,
     )
     return _start(job, options, background)
@@ -500,20 +620,22 @@ async def scan_snippet(
     suffix = Path(request.filename or "snippet.py").suffix or ".py"
     (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
+    use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     job = store.create(
         kind="snippet",
         # Client text that ends up on disk and on screen. Only the basename
         # is meaningful, and keeping the rest lets a caller write "../../.."
         # into the job list for no benefit.
         label=_safe_label(request.filename),
-        options={"mode": request.mode, "verify": request.verify},
+        options={"mode": request.mode, "verify": verify, "concurrency": request.concurrency},
         workspace=str(workspace),
     )
     options = ScanOptions(
         target=str(workspace),
-        use_llm=(request.mode != "fast"),
-        use_semgrep=True,
-        verify=request.verify,
+        use_llm=use_llm,
+        use_semgrep=use_semgrep,
+        concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
+        verify=verify,
     )
     return _start(job, options, background)
 
@@ -566,20 +688,21 @@ async def scan_repository(
         raise HTTPException(status_code=400, detail="Invalid branch name")
 
     workspace = Path(tempfile.mkdtemp(prefix="vulnagent_repo_"))
+    use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     job = store.create(
         kind="repository",
         label=f"{url.rstrip('/').split('/')[-1]}@{request.branch}",
-        options={"mode": request.mode, "verify": request.verify, "url": url},
+        options={"mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency},
         workspace=str(workspace),
     )
 
     options = ScanOptions(
         target=str(workspace),
-        use_llm=(request.mode != "fast"),
-        use_semgrep=True,
-        concurrency=5,
+        use_llm=use_llm,
+        use_semgrep=use_semgrep,
+        concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
         max_llm_files=request.max_files,
-        verify=request.verify,
+        verify=verify,
     )
     options.progress = lambda event: store.record_event(job, event)
     options.on_partial = lambda reports: store.update(job, result={
@@ -669,6 +792,160 @@ async def delete_job(job_id: str) -> Dict[str, Any]:
     return {"deleted": job_id}
 
 
+@app.patch("/api/jobs/{job_id}")
+@app.put("/api/jobs/{job_id}/rename")
+@app.post("/api/jobs/{job_id}/rename")
+async def rename_job(job_id: str, req: RenameJobRequest) -> Dict[str, Any]:
+    """
+    Rename an existing scan job.
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+    new_label = (req.label or "").strip()
+    if not new_label:
+        raise HTTPException(status_code=400, detail="Label cannot be blank")
+    job.options["custom_name"] = True
+    store.update(job, label=new_label, options=job.options)
+    return {"status": "ok", "id": job_id, "label": job.label}
+
+
+async def generate_smart_scan_title(
+    files: Any,
+    findings: Any,
+    kind: str = "folder",
+    fallback_seed: str = "Scan",
+    mode: str = "deep-verify"
+) -> str:
+    """
+    Generate a smart, concise, professional report title (4 to 7 words)
+    using AI reasoning or intelligent heuristics based on target files and detected security defects.
+    """
+    file_names = []
+    for f in (files or [])[:6]:
+        if isinstance(f, dict):
+            fn = f.get("file") or f.get("file_name") or ""
+        elif hasattr(f, "file_name"):
+            fn = f.file_name or ""
+        elif hasattr(f, "location") and getattr(f.location, "file_path", None):
+            fn = f.location.file_path or ""
+        else:
+            fn = Path(str(f)).name
+        if fn:
+            file_names.append(Path(fn).name)
+    file_names = [f for f in file_names if f]
+
+    findings_summary = []
+    for f in (findings or [])[:6]:
+        if isinstance(f, dict):
+            f_type = f.get("type") or "Vulnerability"
+            f_cwe = f.get("cwe") or ""
+            f_file = Path(f.get("file", "")).name
+        elif hasattr(f, "type"):
+            f_type = f.type.value if hasattr(f.type, "value") else str(f.type)
+            f_cwe = getattr(f, "cwe_id", "") or ""
+            f_file = Path(getattr(f.location, "file_path", "")).name
+        else:
+            continue
+        findings_summary.append(f"{f_type} {f_cwe} in {f_file}".strip())
+
+    files_str = ", ".join(file_names) if file_names else str(fallback_seed)
+    findings_str = "; ".join(findings_summary) if findings_summary else "Clean code / No vulnerabilities detected"
+
+    clean_seed = Path(fallback_seed).stem if fallback_seed else "Application"
+    fallback_title = f"{clean_seed.replace('_', ' ').title()} Security Audit"
+    if findings:
+        first_f = findings[0]
+        first_type = (first_f.get("type") if isinstance(first_f, dict) else getattr(first_f.type, "value", str(first_f.type))).replace("_", " ").title()
+        target_fn = Path((first_f.get("file") if isinstance(first_f, dict) else getattr(first_f.location, "file_path", ""))).stem
+        if target_fn and target_fn.lower() not in ("app", "main", "test", "snippet"):
+            fallback_title = f"{target_fn.replace('_', ' ').title()} {first_type} Audit"
+        else:
+            fallback_title = f"{first_type} Security Audit"
+
+    prompt = f"""You are a senior security engineer and audit report specialist.
+Generate a concise, highly professional, descriptive title (maximum 4 to 7 words) for a security scan report based on the audited components and detected defects:
+
+Scanned Target / Components: {files_str}
+Security Findings / Flaws: {findings_str}
+Scan Type: {kind} ({mode})
+
+Requirements:
+1. Clearly identify the primary subject, service, or component being audited (e.g. 'Django ORM Datetime SQLi Audit', 'Airflow Task Instance IDOR Scan', 'FastAPI User Authentication Security Review', 'OWASP Benchmark Suite Evaluation', 'Clean Application Security Verification').
+2. Keep it strictly between 4 and 7 words.
+3. Return ONLY the exact title text string. Do not include quotes, markdown bold, labels like 'Title:', or trailing punctuation."""
+
+    try:
+        from utils.ai_client import AIClient
+        client = AIClient()
+        model = os.getenv("OPENAI_MODEL", "cmc/reflection/beam:free")
+        messages = [
+            {"role": "system", "content": "You are a professional security report naming assistant. Respond with ONLY the concise title."},
+            {"role": "user", "content": prompt}
+        ]
+        kwargs = {"model": model, "messages": messages, "stream": False}
+        if not client._is_reasoning_model(model):
+            kwargs["temperature"] = 0.2
+
+        response = await asyncio.wait_for(
+            asyncio.to_thread(lambda: client.openai_client.chat.completions.create(**kwargs)),
+            timeout=8.0
+        )
+        raw_title = response.choices[0].message.content or ""
+        raw_title = re.sub(r'<(?:think|thought)>[\s\S]*?</(?:think|thought)>', '', raw_title, flags=re.I).strip()
+        clean_title = raw_title.strip("\"'`").split("\n")[0].strip()
+        clean_title = re.sub(r'^(Title|Suggested Title|Report Name):\s*', '', clean_title, flags=re.I).strip()
+        if clean_title and len(clean_title) >= 3:
+            return clean_title
+    except Exception as e:
+        logging.debug(f"AI auto-naming failed ({e}); falling back to heuristic title")
+
+    return fallback_title
+
+
+@app.post("/api/jobs/{job_id}/suggest_name")
+async def suggest_job_name(job_id: str) -> Dict[str, Any]:
+    """
+    Use AI or intelligent heuristics to generate a concise, fitting name for a scan based on its target and findings.
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+
+    result = job.result or {}
+    files_list = result.get("files", [])
+    findings = result.get("findings", [])
+    mode = job.options.get("mode", "deep-verify")
+
+    smart_title = await generate_smart_scan_title(
+        files=files_list,
+        findings=findings,
+        kind=job.kind,
+        fallback_seed=job.label,
+        mode=mode
+    )
+
+    return {"status": "ok", "suggested_label": smart_title, "model": os.getenv("OPENAI_MODEL", "ai")}
+
+
+@app.post("/api/jobs/clear")
+@app.delete("/api/jobs")
+async def clear_all_jobs() -> Dict[str, Any]:
+    """
+    Delete all stored jobs and clean up their workspaces.
+    """
+    deleted_ids = []
+    for job in list(store._jobs.values()):
+        JobStore.cleanup_workspace(job)
+        try:
+            (store.directory / f"{job.id}.json").unlink(missing_ok=True)
+            deleted_ids.append(job.id)
+        except OSError:
+            pass
+    store._jobs.clear()
+    return {"status": "ok", "deleted_count": len(deleted_ids), "deleted": deleted_ids}
+
+
 @app.get("/api/jobs/{job_id}/events")
 async def stream_job(job_id: str) -> StreamingResponse:
     """
@@ -723,6 +1000,177 @@ async def stats() -> Dict[str, Any]:
     """
 
     return store.aggregate()
+
+
+@app.get("/api/file_context")
+@app.get("/api/jobs/{job_id}/file")
+async def get_file_context(
+    file: str,
+    line: int = 1,
+    job_id: Optional[str] = None,
+    context_lines: int = 3
+) -> Dict[str, Any]:
+    """
+    Fetch exact code lines around a target line for dataflow step inspection.
+    """
+    ws = None
+    if job_id:
+        job = store.get(job_id)
+        if job and job.workspace:
+            ws = Path(job.workspace)
+    code = _read_code_snippet(file, line, workspace=ws, context_lines=context_lines)
+    if not code:
+        return {"status": "error", "message": f"Could not locate {file} or line {line}", "code": ""}
+    return {
+        "status": "ok",
+        "file": file,
+        "line": line,
+        "code": code
+    }
+
+
+@app.get("/api/settings")
+async def get_settings() -> Dict[str, Any]:
+    """
+    Get current AI model and backend configuration.
+    """
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    masked_key = ""
+    if api_key:
+        if len(api_key) <= 8:
+            masked_key = "****"
+        else:
+            masked_key = api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
+    return {
+        "openai_base_url": os.getenv("OPENAI_BASE_URL", "http://127.0.0.1:20128/v1"),
+        "openai_model": os.getenv("OPENAI_MODEL", "cmc/reflection/beam:free"),
+        "openai_api_key": api_key,
+        "masked_api_key": masked_key,
+        "is_configured": bool(api_key),
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(req: SettingsRequest) -> Dict[str, Any]:
+    """
+    Update AI model configuration in-memory and persist to .env file.
+    """
+    new_base_url = (req.openai_base_url or "").strip()
+    new_model = (req.openai_model or "").strip()
+    new_key = (req.openai_api_key or "").strip()
+
+    if new_base_url:
+        os.environ["OPENAI_BASE_URL"] = new_base_url
+    if new_model:
+        os.environ["OPENAI_MODEL"] = new_model
+    if new_key and not new_key.startswith("****"):
+        os.environ["OPENAI_API_KEY"] = new_key
+
+    # Update or append to .env file
+    env_path = Path(".env")
+    env_lines = []
+    if env_path.is_file():
+        env_lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    env_dict = {}
+    for line in env_lines:
+        line_s = line.strip()
+        if line_s and not line_s.startswith("#") and "=" in line_s:
+            k, v = line_s.split("=", 1)
+            env_dict[k.strip()] = v.strip()
+
+    if new_base_url:
+        env_dict["OPENAI_BASE_URL"] = new_base_url
+    if new_model:
+        env_dict["OPENAI_MODEL"] = new_model
+    if new_key and not new_key.startswith("****"):
+        env_dict["OPENAI_API_KEY"] = new_key
+
+    lines_to_write = []
+    for k in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]:
+        if k in env_dict:
+            lines_to_write.append(f"{k}={env_dict.pop(k)}")
+    for k, v in env_dict.items():
+        lines_to_write.append(f"{k}={v}")
+
+    try:
+        env_path.write_text("\n".join(lines_to_write) + "\n", encoding="utf-8")
+    except Exception as e:
+        logging.warning(f"Failed to persist settings to .env: {e}")
+
+    return {
+        "status": "ok",
+        "message": "Settings updated successfully",
+        "settings": {
+            "openai_base_url": os.getenv("OPENAI_BASE_URL"),
+            "openai_model": os.getenv("OPENAI_MODEL"),
+            "is_configured": bool(os.getenv("OPENAI_API_KEY")),
+        }
+    }
+
+
+@app.post("/api/settings/test")
+async def test_settings_connection(req: SettingsRequest) -> Dict[str, Any]:
+    """
+    Probe the specified model endpoint to test responsiveness.
+    """
+    base_url = (req.openai_base_url or os.getenv("OPENAI_BASE_URL") or "http://127.0.0.1:20128/v1").strip()
+    model = (req.openai_model or os.getenv("OPENAI_MODEL") or "cmc/reflection/beam:free").strip()
+    api_key = (req.openai_api_key or os.getenv("OPENAI_API_KEY") or "").strip()
+    if api_key.startswith("****"):
+        api_key = os.getenv("OPENAI_API_KEY", "")
+
+    import urllib.request, urllib.error, time
+    base_clean = base_url.rstrip("/")
+    if not base_clean.endswith("/v1") and "/v1" not in base_clean:
+        test_url = f"{base_clean}/v1/chat/completions"
+    else:
+        test_url = f"{base_clean}/chat/completions"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}" if api_key else ""
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "Respond with OK"}],
+        "stream": False
+    }
+    t0 = time.time()
+    try:
+        req_obj = urllib.request.Request(test_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req_obj, timeout=12) as res:
+            dur = time.time() - t0
+            raw_body = json.loads(res.read().decode("utf-8", errors="replace"))
+            choices = raw_body.get("choices", [])
+            reply = choices[0].get("message", {}).get("content", "OK") if choices else "Connected"
+            return {
+                "status": "ok",
+                "latency_sec": round(dur, 2),
+                "reply": reply[:100],
+                "message": f"Connection successful ({dur:.2f}s)"
+            }
+    except urllib.error.HTTPError as e:
+        dur = time.time() - t0
+        err_msg = str(e)
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+            err_json = json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message") or err_json.get("message") or err_body
+        except Exception:
+            pass
+        return {
+            "status": "error",
+            "latency_sec": round(dur, 2),
+            "message": f"HTTP {e.code}: {err_msg[:120]}"
+        }
+    except Exception as e:
+        dur = time.time() - t0
+        return {
+            "status": "error",
+            "latency_sec": round(dur, 2),
+            "message": f"Connection failed ({dur:.2f}s): {str(e)}"
+        }
 
 
 @app.get("/health")

@@ -1,0 +1,579 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "Six Repositories (10 CWE) Vulnerability Benchmark",
+    "source": "Airflow, SaltStack, Gradio, Django, Ansible, WeasyPrint official release tags",
+    "match_mode": "file",
+    "labels": 10,
+    "files": 10,
+    "partial_labels": false,
+    "labels_sha256": "9a37c0a501c9284a14d41ce65a2344eac1f00e20170a279d71863e735b24cb10",
+    "samples_sha256": "c8e27b9b2a1ae2984348954e4905f6f455498a69ab46e0cf351870b287636aab",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "9a37c0a501c9284a14d41ce65a2344eac1f00e20170a279d71863e735b24cb10",
+    "initial_samples_sha256": "c8e27b9b2a1ae2984348954e4905f6f455498a69ab46e0cf351870b287636aab"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 13,
+    "concurrency": 8,
+    "timestamp": 1792852198.2980525,
+    "iso_timestamp": "2026-10-24T21:29:58.298054"
+  },
+  "results": [
+    {
+      "name": "LLM only",
+      "status": "degraded",
+      "degraded": false,
+      "errors": [],
+      "tp": 10,
+      "fp": 68,
+      "fn": 0,
+      "precision": 0.1282,
+      "recall": 1.0,
+      "f1": 0.2273,
+      "unmatched": 0,
+      "fp_on_clean_files": 21,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 20,
+      "fp_wrong_type_right_file": 20,
+      "partial_ground_truth": false,
+      "seconds": 117.47,
+      "coverage": {
+        "files_scanned": 16,
+        "files_requested": [
+          "ansible_hardcoded_secret.py",
+          "gradio_info_disclosure.py",
+          "salt_auth_bypass.py",
+          "salt_cmdi.py",
+          "clean_gradio_media.py",
+          "airflow_pathtraversal.py",
+          "clean_weasyprint_units.py",
+          "salt_deserialization.py",
+          "clean_ansible_display.py",
+          "weasyprint_ssrf.py",
+          "clean_django_crypto.py",
+          "airflow_idor.py",
+          "django_sqli.py",
+          "clean_airflow_dates.py",
+          "clean_salt_units.py",
+          "gradio_xss.py"
+        ],
+        "total_seconds": 117.46,
+        "cache_hits": 0,
+        "cache_misses": 13,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 0.0,
+        "llm_tier_seconds": 117.15
+      },
+      "missed": [],
+      "spurious": [
+        "ansible_hardcoded_secret.py:57 CWE-1104",
+        "ansible_hardcoded_secret.py:638 CWE-532",
+        "ansible_hardcoded_secret.py:732 CWE-532",
+        "ansible_hardcoded_secret.py:736 CWE-532",
+        "ansible_hardcoded_secret.py:745 CWE-532",
+        "ansible_hardcoded_secret.py:1001 CWE-532",
+        "ansible_hardcoded_secret.py:1030 CWE-532",
+        "ansible_hardcoded_secret.py:1173 CWE-916",
+        "ansible_hardcoded_secret.py:1190 CWE-916",
+        "ansible_hardcoded_secret.py:430 CWE-209",
+        "ansible_hardcoded_secret.py:805 CWE-338",
+        "gradio_info_disclosure.py:692 CWE-913",
+        "gradio_info_disclosure.py:207 CWE-942",
+        "gradio_info_disclosure.py:283 CWE-614",
+        "gradio_info_disclosure.py:435 CWE-601",
+        "gradio_info_disclosure.py:524 CWE-862",
+        "gradio_info_disclosure.py:713 CWE-639",
+        "gradio_info_disclosure.py:317 CWE-20",
+        "gradio_info_disclosure.py:816 CWE-306",
+        "salt_auth_bypass.py:1081 CWE-306",
+        "salt_cmdi.py:46 CWE-78",
+        "salt_cmdi.py:204 CWE-78",
+        "salt_cmdi.py:222 CWE-78",
+        "salt_cmdi.py:250 CWE-78",
+        "salt_cmdi.py:285 CWE-78",
+        "salt_cmdi.py:386 CWE-78",
+        "salt_cmdi.py:323 CWE-532",
+        "clean_gradio_media.py:45 CWE-200",
+        "clean_gradio_media.py:137 CWE-22",
+        "clean_gradio_media.py:154 CWE-22",
+        "clean_gradio_media.py:177 CWE-200",
+        "clean_gradio_media.py:183 CWE-918",
+        "clean_gradio_media.py:696 CWE-22",
+        "clean_gradio_media.py:48 CWE-400",
+        "clean_gradio_media.py:183 CWE-400",
+        "clean_gradio_media.py:100 CWE-328",
+        "clean_gradio_media.py:258 CWE-617",
+        "airflow_pathtraversal.py:118 CWE-502",
+        "clean_weasyprint_units.py:137 CWE-918",
+        "clean_weasyprint_units.py:498 CWE-20",
+        "clean_weasyprint_units.py:604 CWE-754",
+        "clean_weasyprint_units.py:143 CWE-209",
+        "clean_weasyprint_units.py:560 CWE-617",
+        "salt_deserialization.py:544 CWE-502",
+        "salt_deserialization.py:730 CWE-502",
+        "salt_deserialization.py:765 CWE-306",
+        "salt_deserialization.py:554 CWE-754",
+        "salt_deserialization.py:774 CWE-209",
+        "weasyprint_ssrf.py:69 CWE-22",
+        "weasyprint_ssrf.py:245 CWE-209",
+        "clean_django_crypto.py:76 CWE-94",
+        "clean_django_crypto.py:31 CWE-20",
+        "clean_django_crypto.py:39 CWE-327",
+        "clean_django_crypto.py:69 CWE-400",
+        "clean_django_crypto.py:33 CWE-209",
+        "clean_django_crypto.py:60 CWE-400",
+        "airflow_idor.py:443 CWE-639",
+        "airflow_idor.py:477 CWE-480",
+        "airflow_idor.py:510 CWE-639",
+        "airflow_idor.py:581 CWE-639",
+        "airflow_idor.py:627 CWE-639",
+        "airflow_idor.py:114 CWE-639",
+        "airflow_idor.py:167 CWE-639",
+        "airflow_idor.py:306 CWE-639",
+        "airflow_idor.py:384 CWE-639",
+        "airflow_idor.py:645 CWE-639",
+        "django_sqli.py:27 CWE-89",
+        "django_sqli.py:53 CWE-89"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-1104",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 57
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 636
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 638
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 732
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 736
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 745
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 1001
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 1030
+        },
+        {
+          "cwe": "CWE-916",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 1173
+        },
+        {
+          "cwe": "CWE-916",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 1190
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 430
+        },
+        {
+          "cwe": "CWE-338",
+          "file": "ansible_hardcoded_secret.py",
+          "line": 805
+        },
+        {
+          "cwe": "CWE-913",
+          "file": "gradio_info_disclosure.py",
+          "line": 692
+        },
+        {
+          "cwe": "CWE-942",
+          "file": "gradio_info_disclosure.py",
+          "line": 207
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "gradio_info_disclosure.py",
+          "line": 231
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "gradio_info_disclosure.py",
+          "line": 283
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "gradio_info_disclosure.py",
+          "line": 435
+        },
+        {
+          "cwe": "CWE-862",
+          "file": "gradio_info_disclosure.py",
+          "line": 524
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "gradio_info_disclosure.py",
+          "line": 713
+        },
+        {
+          "cwe": "CWE-20",
+          "file": "gradio_info_disclosure.py",
+          "line": 317
+        },
+        {
+          "cwe": "CWE-306",
+          "file": "gradio_info_disclosure.py",
+          "line": 816
+        },
+        {
+          "cwe": "CWE-306",
+          "file": "salt_auth_bypass.py",
+          "line": 1081
+        },
+        {
+          "cwe": "CWE-306",
+          "file": "salt_auth_bypass.py",
+          "line": 2196
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 46
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 204
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 222
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 250
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 285
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 356
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "salt_cmdi.py",
+          "line": 386
+        },
+        {
+          "cwe": "CWE-532",
+          "file": "salt_cmdi.py",
+          "line": 323
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "clean_gradio_media.py",
+          "line": 45
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 137
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 154
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "clean_gradio_media.py",
+          "line": 177
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "clean_gradio_media.py",
+          "line": 183
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "clean_gradio_media.py",
+          "line": 696
+        },
+        {
+          "cwe": "CWE-400",
+          "file": "clean_gradio_media.py",
+          "line": 48
+        },
+        {
+          "cwe": "CWE-400",
+          "file": "clean_gradio_media.py",
+          "line": 183
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "clean_gradio_media.py",
+          "line": 100
+        },
+        {
+          "cwe": "CWE-617",
+          "file": "clean_gradio_media.py",
+          "line": 258
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "airflow_pathtraversal.py",
+          "line": 118
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "airflow_pathtraversal.py",
+          "line": 606
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "clean_weasyprint_units.py",
+          "line": 137
+        },
+        {
+          "cwe": "CWE-20",
+          "file": "clean_weasyprint_units.py",
+          "line": 498
+        },
+        {
+          "cwe": "CWE-754",
+          "file": "clean_weasyprint_units.py",
+          "line": 604
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "clean_weasyprint_units.py",
+          "line": 143
+        },
+        {
+          "cwe": "CWE-617",
+          "file": "clean_weasyprint_units.py",
+          "line": 560
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "salt_deserialization.py",
+          "line": 544
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "salt_deserialization.py",
+          "line": 730
+        },
+        {
+          "cwe": "CWE-306",
+          "file": "salt_deserialization.py",
+          "line": 765
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "salt_deserialization.py",
+          "line": 1221
+        },
+        {
+          "cwe": "CWE-754",
+          "file": "salt_deserialization.py",
+          "line": 554
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "salt_deserialization.py",
+          "line": 774
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "weasyprint_ssrf.py",
+          "line": 69
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "weasyprint_ssrf.py",
+          "line": 205
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "weasyprint_ssrf.py",
+          "line": 245
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "clean_django_crypto.py",
+          "line": 76
+        },
+        {
+          "cwe": "CWE-20",
+          "file": "clean_django_crypto.py",
+          "line": 31
+        },
+        {
+          "cwe": "CWE-327",
+          "file": "clean_django_crypto.py",
+          "line": 39
+        },
+        {
+          "cwe": "CWE-400",
+          "file": "clean_django_crypto.py",
+          "line": 69
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "clean_django_crypto.py",
+          "line": 33
+        },
+        {
+          "cwe": "CWE-400",
+          "file": "clean_django_crypto.py",
+          "line": 60
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 443
+        },
+        {
+          "cwe": "CWE-480",
+          "file": "airflow_idor.py",
+          "line": 477
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 510
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 581
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 627
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 66
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 114
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 167
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 306
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 384
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "airflow_idor.py",
+          "line": 645
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 27
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "django_sqli.py",
+          "line": 237
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "gradio_xss.py",
+          "line": 71
+        }
+      ]
+    }
+  ]
+}

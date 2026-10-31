@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import logging
 import os
@@ -10,7 +11,18 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import git
 
 from analyzer import fusion
+from analyzer.prompt_manager import PromptManager
 from analyzer.semgrep_runner import SemgrepRunner, SemgrepUnavailable
+from evidence.safe_reader import enrich_taint_path, read_code_snippet
+from context.ast_slicer import (
+    ASTSlicer,
+    COMPLETENESS_FAILED,
+    _dotted_name,
+    _is_sink_call_name,
+    find_sink_anchors,
+    find_call_site_sink_anchors,
+    SinkAnchor,
+)
 from models.vulnerability import (
     CodeLocation,
     FindingSource,
@@ -29,14 +41,36 @@ class CodeAnalyzer:
     CodeAnalyzer class for analyzing code for security vulnerabilities
     """
 
-    def __init__(self, use_semgrep: bool = True, use_llm: bool = True) -> None:
+    def __init__(
+        self,
+        use_semgrep: Any = True,
+        use_llm: bool = True,
+        use_ast_slicer: bool = True,
+        options: Optional[Any] = None,
+    ) -> None:
         """
         Initialize the code analyzer.
 
         Args:
-            use_semgrep: Run the rule tier alongside the LLM tier.
+            use_semgrep: Run the rule tier alongside the LLM tier (or ScanOptions object).
             use_llm: Enable the LLM tier. When False, AIClient makes zero outbound calls.
+            use_ast_slicer: Enable AST backward slicing to enrich LLM prompts with structural facts.
+            options: Optional ScanOptions or configuration object.
         """
+        if not isinstance(use_semgrep, bool) and hasattr(use_semgrep, "use_ast_slicer"):
+            options = use_semgrep
+            use_semgrep = getattr(options, "use_semgrep", True)
+            use_llm = getattr(options, "use_llm", True)
+            use_ast_slicer = getattr(options, "use_ast_slicer", True)
+        elif options is not None:
+            use_ast_slicer = getattr(options, "use_ast_slicer", use_ast_slicer)
+            use_semgrep = getattr(options, "use_semgrep", use_semgrep)
+            use_llm = getattr(options, "use_llm", use_llm)
+
+        self.options = options
+        self.use_ast_slicer = use_ast_slicer
+        self.ast_slicer = ASTSlicer()
+        self.prompt_manager = PromptManager()
 
         self.ai_client = AIClient(disabled=not use_llm)
         self.code_parser = CodeParser()
@@ -107,7 +141,7 @@ class CodeAnalyzer:
             raise ValueError(f"Invalid code content: {str(e)}")
 
         # Generate and validate the security analysis prompt
-        analysis_prompt = self._generate_security_prompt(parsed_code)
+        analysis_prompt = self._generate_security_prompt(parsed_code, filename=filename)
         if not analysis_prompt:
             raise ValueError("Failed to generate analysis prompt")
 
@@ -120,7 +154,7 @@ class CodeAnalyzer:
         llm_vulnerabilities: List[Vulnerability] = []
         try:
             analysis_result = await self._get_analysis_with_retry(analysis_prompt)
-            llm_vulnerabilities = self._process_ai_response(analysis_result, filename)
+            llm_vulnerabilities = self._process_ai_response(analysis_result, filename, code_content=code_content)
             tiers["llm"] = "ok"
         except Exception as e:
             # Degrade rather than fail: rule-tier findings are still worth
@@ -355,54 +389,145 @@ class CodeAnalyzer:
             timestamp=datetime.now()
         )
 
-    def _generate_security_prompt(self, parsed_code: Dict[str, Any]) -> str:
+    def _extract_ast_slices(self, code_content: str) -> List[Any]:
         """
-        Generate a prompt for security analysis
+        Extract intra-procedural backward slices for candidate dangerous sinks in the code.
+        Scans calls, module/function-level static string assignments for sensitive keys (CWE-798),
+        and decorator/access control points (CWE-287/CWE-639).
+
+        Args:
+            code_content: Source code to analyze.
+
+        Returns:
+            List of up to 10 valid SliceResult objects sorted by logical line order.
         """
+        if not isinstance(code_content, str) or not code_content.strip():
+            return []
 
-        return f"""Perform a comprehensive security analysis of this {parsed_code['language']} code. Follow this methodology:
-1. Identify vulnerabilities from these categories:
-    - OWASP Top 10 2023
-    - SANS/CWE Top 25
-    - Language-specific security pitfalls
-    - Framework-specific misconfigurations
+        try:
+            tree = ast.parse(code_content)
+        except Exception:
+            return []
 
-2. For each finding include:
-    - Vulnerability type (use exact CWE/OWASP names)
-    - CVSS 3.1 vector string
-    - Data flow analysis of the vulnerability
-    - Taint propagation path
-    - Secure alternative implementation
-    - Severity level
-    - Location in code
-    - Description of the issue
-    - Potential impact
-    - Recommended fixes with secure code example
+        candidate_sinks = self.ast_slicer.find_sink_anchors(tree)
 
-3. Code Context:
-    - Imports: {parsed_code.get('imports', [])}
-    - Functions: {[f['name'] for f in parsed_code.get('functions', [])]}
-    - Classes: {[c['name'] for c in parsed_code.get('classes', [])]}
-    - File type: {parsed_code['file_type']}
+        valid_slices: List[Any] = []
+        seen_slice_keys = set()
 
-4. Analysis Requirements:
-    - Validate user input sources
-    - Check data sanitization flows
-    - Verify proper authz checks
-    - Confirm secure defaults
-    - Ensure error handling doesn't leak secrets
+        for lineno, target_var in candidate_sinks:
+            if len(valid_slices) >= 10:
+                break
+            try:
+                res = self.ast_slicer.slice_from_sink(code_content, lineno, target_var=target_var)
+                if res.completeness_status == COMPLETENESS_FAILED and target_var is not None:
+                    fallback_res = self.ast_slicer.slice_from_sink(code_content, lineno, target_var=None)
+                    if fallback_res.completeness_status != COMPLETENESS_FAILED:
+                        res = fallback_res
+                if res.completeness_status != COMPLETENESS_FAILED and res.sliced_lines:
+                    slice_key = (res.target_sink_line, tuple(res.sliced_lines))
+                    if slice_key not in seen_slice_keys:
+                        seen_slice_keys.add(slice_key)
+                        valid_slices.append(res)
+            except Exception as e:
+                logging.debug(f"Failed to slice candidate sink at line {lineno}: {e}")
 
-5. Line numbers:
-    - The source below is prefixed with its real line numbers.
-    - Report start_line and end_line using EXACTLY those numbers.
-    - Do not count lines yourself; read the prefix.
+        valid_slices.sort(key=lambda s: getattr(s, "target_sink_line", 0))
+        return valid_slices[:10]
 
---- BEGIN SOURCE ---
-{self._number_lines(parsed_code['content'])}
---- END SOURCE ---
+    @staticmethod
+    def _extract_module_constants(code_content: str) -> List[str]:
+        """
+        Extract module-level constant declarations (e.g. SECRET_KEY = ..., DEBUG = ...).
 
-Format response as JSON matching the Vulnerability model structure.
-"""
+        Preserves top-level configuration variables in the reference source code context.
+        """
+        if not isinstance(code_content, str) or not code_content.strip():
+            return []
+        constants: List[str] = []
+        try:
+            tree = ast.parse(code_content)
+            for node in tree.body:
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            constants.append(target.id)
+                elif isinstance(node, ast.AnnAssign):
+                    if isinstance(node.target, ast.Name):
+                        constants.append(node.target.id)
+        except Exception:
+            pass
+        return constants
+
+    @staticmethod
+    def _generate_adaptive_reference_content(
+        full_content: str,
+        slices: list,
+        max_full_lines: int = 500
+    ) -> str:
+        """Adaptive context slicing delegate to PromptManager."""
+        return PromptManager._generate_adaptive_reference_content(
+            full_content=full_content,
+            slices=slices,
+            max_full_lines=max_full_lines,
+        )
+
+    def _generate_security_prompt(
+        self,
+        parsed_code: Any,
+        filename: str = "",
+        max_full_lines: int = 500,
+    ) -> str:
+        """
+        Generate a prompt for security analysis.
+
+        If `use_ast_slicer` is True, extracts backward AST slices for candidate
+        dangerous sinks and generates a structured Dual-Scope prompt with AST-verified
+        structural facts and semantic taint reasoning rules. Falls back to a general
+        security prompt if no slices are found or if AST slicing is disabled.
+        """
+        resolved_filename = filename or (
+            parsed_code.get("filename") if isinstance(parsed_code, dict) else ""
+        ) or getattr(parsed_code, "filename", "") or ""
+
+        if self.use_ast_slicer:
+            if isinstance(parsed_code, dict):
+                content = parsed_code.get("content", "")
+            elif isinstance(parsed_code, str):
+                content = parsed_code
+            else:
+                content = getattr(parsed_code, "content", "")
+
+            slices = self._extract_ast_slices(content)
+            if slices:
+                # Dual-Scope Prompting: Ensure the reference source code passed to
+                # PromptManager retains the complete module content with all top-level
+                # constant declarations (e.g., SECRET_KEY = ..., DEBUG = ...) intact.
+                if isinstance(parsed_code, dict):
+                    parsed_payload = dict(parsed_code)
+                    if not parsed_payload.get("content"):
+                        parsed_payload["content"] = content
+                    if "constants" not in parsed_payload:
+                        parsed_payload["constants"] = self._extract_module_constants(content)
+                elif isinstance(parsed_code, str):
+                    parsed_payload = {
+                        "content": content,
+                        "language": "python",
+                        "filename": resolved_filename,
+                        "constants": self._extract_module_constants(content),
+                    }
+                else:
+                    parsed_payload = parsed_code
+
+                return self.prompt_manager.generate_sliced_security_prompt(
+                    parsed_payload,
+                    slices,
+                    resolved_filename,
+                    max_full_lines=max_full_lines,
+                )
+
+        return self.prompt_manager.generate_general_security_prompt(
+            parsed_code, resolved_filename
+        )
 
     @staticmethod
     def _number_lines(content: str) -> str:
@@ -429,7 +554,8 @@ Format response as JSON matching the Vulnerability model structure.
     def _process_ai_response(
         self,
         analysis_result: Dict[str, Any],
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        code_content: Optional[str] = None
     ) -> List[Vulnerability]:
         """
         Process and validate the AI analysis response into Vulnerability objects.
@@ -437,6 +563,7 @@ Format response as JSON matching the Vulnerability model structure.
         Args:
             analysis_result: Raw analysis result from AI
             filename: File under analysis, used when the model omits the path
+            code_content: Optional source code content of the analyzed file
 
         Returns:
             List[Vulnerability]: List of validated vulnerabilities
@@ -506,8 +633,14 @@ Format response as JSON matching the Vulnerability model structure.
                         'REMOTE_CODE_EXEC': VulnerabilityType.REMOTE_CODE_EXECUTION,
                         'COMMAND_EXEC': VulnerabilityType.OS_COMMAND_INJECTION,
                         'OS_COMMAND_EXEC': VulnerabilityType.OS_COMMAND_INJECTION,
+                        'COMMAND_INJECTION': VulnerabilityType.OS_COMMAND_INJECTION,
+                        'CMDI': VulnerabilityType.OS_COMMAND_INJECTION,
                         'PATH_TRAVERSAL_VULNERABILITY': VulnerabilityType.PATH_TRAVERSAL,
                         'DIRECTORY_TRAVERSAL': VulnerabilityType.PATH_TRAVERSAL,
+                        'PATHTRAVER': VulnerabilityType.PATH_TRAVERSAL,
+                        'CODEINJ': VulnerabilityType.CODE_INJECTION,
+                        'DESERIALIZATION': VulnerabilityType.INSECURE_DESERIALIZATION,
+                        'SQLI': VulnerabilityType.SQL_INJECTION,
                         'IDOR': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
                         'DIRECT_OBJECT_REFERENCE': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
                         # Four enum values carry a parenthetical suffix; models
@@ -518,10 +651,61 @@ Format response as JSON matching the Vulnerability model structure.
                         'SERVER_SIDE_REQUEST_FORGERY': VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
                         'REMOTE_CODE_EXECUTION': VulnerabilityType.REMOTE_CODE_EXECUTION,
                         'INSECURE_DIRECT_OBJECT_REFERENCE': VulnerabilityType.INSECURE_DIRECT_OBJECT_REFERENCE,
+                        # Additional benchmark and CWE mappings
+                        'LDAP_INJECTION': VulnerabilityType.LDAP_INJECTION,
+                        'LDAPI': VulnerabilityType.LDAP_INJECTION,
+                        'LDAP': VulnerabilityType.LDAP_INJECTION,
+                        'XPATH_INJECTION': VulnerabilityType.XPATH_INJECTION,
+                        'XPATHI': VulnerabilityType.XPATH_INJECTION,
+                        'XPATH': VulnerabilityType.XPATH_INJECTION,
+                        'WEAK_RANDOMNESS': VulnerabilityType.SECURE_RANDOMNESS,
+                        'INSECURE_RANDOMNESS': VulnerabilityType.SECURE_RANDOMNESS,
+                        'WEAKRAND': VulnerabilityType.SECURE_RANDOMNESS,
+                        'WEAK_HASHING': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                        'WEAK_HASH': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                        'HASH': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                        'USE_OF_A_ONE_WAY_HASH_WITHOUT_A_SALT': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                        'USE_OF_ONE_WAY_HASH_WITHOUT_SALT': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                        'OPEN_REDIRECT': VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
+                        'REDIRECT': VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
+                        'UNVALIDATED_REDIRECT': VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
+                        'XXE': VulnerabilityType.XML_EXTERNAL_ENTITY,
+                        'XML_EXTERNAL_ENTITY_INJECTION': VulnerabilityType.XML_EXTERNAL_ENTITY,
+                        'TRUST_BOUNDARY_VIOLATION': VulnerabilityType.INSUFFICIENT_INPUT_VALIDATION,
+                        'INSECURE_COOKIE': VulnerabilityType.SECURE_COOKIE,
+                        'INSECURE_COOKIE_FLAG': VulnerabilityType.SECURE_COOKIE,
+                        'SECURECOOKIE': VulnerabilityType.SECURE_COOKIE,
                     }
 
-                    original_type = vuln_data['type']
+                    original_type = str(vuln_data.get('type', '')).strip()
                     mapped_type = type_mapping.get(original_type)
+                    if mapped_type is None:
+                        mapped_type = type_mapping.get(original_type.upper())
+
+                    # CWE-based fallback if type name is unfamiliar
+                    if mapped_type is None and vuln_data.get('cwe_id'):
+                        cwe_num = str(vuln_data['cwe_id']).upper().replace('CWE-', '').strip()
+                        cwe_to_type = {
+                            '90': VulnerabilityType.LDAP_INJECTION,
+                            '643': VulnerabilityType.XPATH_INJECTION,
+                            '330': VulnerabilityType.SECURE_RANDOMNESS,
+                            '338': VulnerabilityType.SECURE_RANDOMNESS,
+                            '328': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                            '327': VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM,
+                            '601': VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS,
+                            '611': VulnerabilityType.XML_EXTERNAL_ENTITY,
+                            '614': VulnerabilityType.SECURE_COOKIE,
+                            '94': VulnerabilityType.CODE_INJECTION,
+                            '502': VulnerabilityType.INSECURE_DESERIALIZATION,
+                            '22': VulnerabilityType.PATH_TRAVERSAL,
+                            '78': VulnerabilityType.OS_COMMAND_INJECTION,
+                            '89': VulnerabilityType.SQL_INJECTION,
+                            '79': VulnerabilityType.CROSS_SITE_SCRIPTING,
+                            '918': VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY,
+                            '798': VulnerabilityType.HARDCODED_CREDENTIALS,
+                            '352': VulnerabilityType.CSRF,
+                        }
+                        mapped_type = cwe_to_type.get(cwe_num)
 
                     if mapped_type is None:
                         logging.warning(f"Unknown vulnerability type encountered: {original_type}")
@@ -537,15 +721,34 @@ Format response as JSON matching the Vulnerability model structure.
                 # plausible name such as "app.py", which would scatter
                 # findings across files that do not exist and break both
                 # fusion and grouping.
+                def _safe_int(val, default=0):
+                    try:
+                        return int(val)
+                    except (ValueError, TypeError):
+                        return default
+
                 location_data = vuln_data.get('location', {})
                 location = CodeLocation(
                     file_path=filename or location_data.get('file_path') or '',
-                    start_line=location_data.get('start_line', 0),
-                    end_line=location_data.get('end_line', 0),
-                    start_col=location_data.get('start_col', 0),
-                    end_col=location_data.get('end_col', 0),
-                    context=location_data.get('context', '')
+                    start_line=_safe_int(location_data.get('start_line'), 0),
+                    end_line=_safe_int(location_data.get('end_line'), 0),
+                    start_col=_safe_int(location_data.get('start_col'), 0),
+                    end_col=_safe_int(location_data.get('end_col'), 0),
+                    context=str(location_data.get('context', '') or '')
                 )
+
+                # Process and normalize taint path with code snippets
+                raw_taint = vuln_data.get('taint_path') or []
+                enriched_taint = []
+                if raw_taint and isinstance(raw_taint, list):
+                    target_file = filename or location.file_path or ''
+                    enriched_taint = enrich_taint_path(
+                        raw_taint,
+                        default_file=target_file,
+                        default_line=location.start_line,
+                        infer_kind=True,
+                        fallback_content=code_content,
+                    )
 
                 # Create Vulnerability object with validated data
                 vulnerability = Vulnerability(
@@ -559,8 +762,9 @@ Format response as JSON matching the Vulnerability model structure.
                     owasp_category=vuln_data.get('owasp_category', ''),
                     cvss_score=float(vuln_data.get('cvss_score', 5.0)),
                     references=vuln_data.get('references', []),
-                    proof_of_concept=vuln_data.get('proof_of_concept', ''),
-                    secure_code_example=vuln_data.get('secure_code_example', '')
+                    proof_of_concept=vuln_data.get('defect_replication_notes') or vuln_data.get('proof_of_concept', ''),
+                    secure_code_example=vuln_data.get('secure_code_example', ''),
+                    taint_path=enriched_taint,
                 )
 
                 vulnerabilities.append(vulnerability)

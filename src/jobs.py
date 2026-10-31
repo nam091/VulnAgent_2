@@ -174,7 +174,27 @@ class JobStore:
             Optional[Job]: The job, or None
         """
 
+        if job_id not in self._jobs:
+            path = self.directory / f"{job_id}.json"
+            if path.is_file():
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    self._jobs[job_id] = Job(**payload)
+                except Exception:
+                    pass
+
         return self._jobs.get(job_id)
+
+    def _sync_disk_jobs(self) -> None:
+        """Discover new jobs saved to disk by other processes (e.g. CLI scans)."""
+        for path in self.directory.glob("*.json"):
+            job_id = path.stem
+            if job_id not in self._jobs:
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    self._jobs[job_id] = Job(**payload)
+                except Exception:
+                    pass
 
     def list(self, limit: int = 50) -> List[Job]:
         """
@@ -187,6 +207,7 @@ class JobStore:
             List[Job]: Recent jobs
         """
 
+        self._sync_disk_jobs()
         # A negative or zero limit would slice from the wrong end and drop
         # jobs silently rather than returning nothing.
         limit = max(1, int(limit))
@@ -300,7 +321,8 @@ class JobStore:
     @staticmethod
     def cleanup_workspace(job: Job) -> None:
         """
-        Remove a job's uploaded files.
+        Remove temporary workspace directories created during upload/snippet/repo scans.
+        Guards against deleting directories inside the project or dataset repositories.
 
         Args:
             job: The job whose workspace should be deleted
@@ -308,8 +330,17 @@ class JobStore:
 
         if not job.workspace:
             return
+        ws_path = Path(job.workspace).resolve()
+        name = ws_path.name
+        is_temp_workspace = any(
+            name.startswith(prefix)
+            for prefix in ("vulnagent_upload_", "vulnagent_snippet_", "vulnagent_repo_")
+        )
+        if not is_temp_workspace:
+            # Protect repository files, benchmark datasets, and user project directories
+            return
         try:
-            shutil.rmtree(job.workspace, ignore_errors=True)
+            shutil.rmtree(ws_path, ignore_errors=True)
         except OSError as e:
             logging.debug(f"Could not clean workspace for {job.id}: {e}")
 
@@ -321,6 +352,7 @@ class JobStore:
             Dict[str, Any]: Totals across all stored jobs
         """
 
+        self._sync_disk_jobs()
         severity_totals: Dict[str, int] = {}
         source_totals: Dict[str, int] = {}
         type_totals: Dict[str, int] = {}

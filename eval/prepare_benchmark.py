@@ -153,6 +153,12 @@ def build(source: Path, out: Path, limit: int = 0) -> Dict:
         json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
+    try:
+        from eval.enrich_benchmark_metadata import enrich_dataset
+        enrich_dataset(out)
+    except Exception as e:
+        print(f"warning: metadata enrichment skipped: {e}", file=sys.stderr)
+
     return {
         "copied": copied,
         "vulnerable": len(labels),

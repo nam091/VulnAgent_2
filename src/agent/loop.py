@@ -321,6 +321,42 @@ class ToolCallingAgent:
                                 "evidence_id": evidence_id,
                             })
 
+        elif name == "read_imported_symbol":
+            if result.get("found") is True:
+                rfile = result.get("file")
+                rstart = result.get("start_line", result.get("line"))
+                rend = result.get("end_line", rstart)
+                rsource = result.get("source", "")
+                draw = result.get("raw_lines") or (result.get("source_code", "").splitlines() if result.get("source_code") else [])
+                if rfile and rstart is not None and rend is not None:
+                    vis_lines = [
+                        int(m.group(1))
+                        for m in re.finditer(r"^\s*(\d+)\s*\|", rsource, re.MULTILINE)
+                    ]
+                    start_line = min(vis_lines) if vis_lines else rstart
+                    end_line = max(vis_lines) if vis_lines else rend
+
+                    evidence_id = ""
+                    if self.evidence_store and self.snapshot_id:
+                        rec = self.evidence_store.record_evidence(
+                            snapshot_id=self.snapshot_id,
+                            path=rfile,
+                            start_line=start_line,
+                            end_line=end_line,
+                            content="\n".join(draw) if draw else None,
+                            origin="read_imported_symbol",
+                        )
+                        evidence_id = rec.evidence_id if rec.read_succeeded else ""
+
+                    if evidence_id:
+                        reads.append({
+                            "tool": name,
+                            "path": rfile,
+                            "start_line": start_line,
+                            "end_line": end_line,
+                            "evidence_id": evidence_id,
+                        })
+
         elif name == "search":
             matches = result.get("matches")
             if isinstance(matches, list) and matches:
@@ -368,6 +404,7 @@ class ToolCallingAgent:
         """
 
         kwargs: Dict[str, Any] = {"model": self.model, "messages": messages}
+        kwargs["stream"] = False
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
         if with_tools and self.tool_schemas:
@@ -389,8 +426,19 @@ class ToolCallingAgent:
                 response = await asyncio.to_thread(
                     lambda: self.client.chat.completions.create(**kwargs)
                 )
+                try:
+                    from utils.telemetry import TelemetryTracker
+                    TelemetryTracker.get_instance().record_call(getattr(response, "usage", None))
+                except Exception:
+                    pass
                 return response.choices[0].message
             raise
+
+        try:
+            from utils.telemetry import TelemetryTracker
+            TelemetryTracker.get_instance().record_call(getattr(response, "usage", None))
+        except Exception:
+            pass
 
         return response.choices[0].message
 

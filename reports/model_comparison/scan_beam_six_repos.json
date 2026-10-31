@@ -1,0 +1,3160 @@
+{
+  "status": "partial",
+  "degraded": false,
+  "coverage": {
+    "requested_count": 16,
+    "scanned_count": 16,
+    "completed_count": 13,
+    "failed_count": 0,
+    "partial_count": 3,
+    "status": "partial",
+    "degraded": false,
+    "file_statuses": {
+      "ansible_hardcoded_secret.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "gradio_info_disclosure.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 4
+          }
+        }
+      },
+      "salt_auth_bypass.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          }
+        }
+      },
+      "salt_cmdi.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 4
+          }
+        }
+      },
+      "clean_gradio_media.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 4
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "airflow_pathtraversal.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "clean_weasyprint_units.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "salt_deserialization.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "clean_ansible_display.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "weasyprint_ssrf.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "clean_django_crypto.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "airflow_idor.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "django_sqli.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          }
+        }
+      },
+      "clean_airflow_dates.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      },
+      "clean_salt_units.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      },
+      "gradio_xss.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      }
+    },
+    "semgrep": {
+      "analyzed_files": [
+        "ansible_hardcoded_secret.py",
+        "gradio_info_disclosure.py",
+        "salt_auth_bypass.py",
+        "salt_cmdi.py",
+        "clean_gradio_media.py",
+        "airflow_pathtraversal.py",
+        "clean_weasyprint_units.py",
+        "salt_deserialization.py",
+        "clean_ansible_display.py",
+        "weasyprint_ssrf.py",
+        "clean_django_crypto.py",
+        "airflow_idor.py",
+        "django_sqli.py",
+        "clean_airflow_dates.py",
+        "clean_salt_units.py",
+        "gradio_xss.py"
+      ],
+      "failed_files": []
+    },
+    "llm": {
+      "analyzed_files": [
+        "ansible_hardcoded_secret.py",
+        "gradio_info_disclosure.py",
+        "salt_auth_bypass.py",
+        "salt_cmdi.py",
+        "clean_gradio_media.py",
+        "airflow_pathtraversal.py",
+        "clean_weasyprint_units.py",
+        "salt_deserialization.py",
+        "clean_ansible_display.py",
+        "weasyprint_ssrf.py",
+        "clean_django_crypto.py",
+        "airflow_idor.py",
+        "django_sqli.py"
+      ],
+      "failed_files": []
+    }
+  },
+  "stats": {
+    "files_discovered": 16,
+    "files_requested": [
+      "ansible_hardcoded_secret.py",
+      "gradio_info_disclosure.py",
+      "salt_auth_bypass.py",
+      "salt_cmdi.py",
+      "clean_gradio_media.py",
+      "airflow_pathtraversal.py",
+      "clean_weasyprint_units.py",
+      "salt_deserialization.py",
+      "clean_ansible_display.py",
+      "weasyprint_ssrf.py",
+      "clean_django_crypto.py",
+      "airflow_idor.py",
+      "django_sqli.py",
+      "clean_airflow_dates.py",
+      "clean_salt_units.py",
+      "gradio_xss.py"
+    ],
+    "files_scanned": 16,
+    "files_sent_to_llm": 13,
+    "rule_tier_seconds": 29.2,
+    "llm_tier_seconds": 0.13,
+    "total_seconds": 107.46,
+    "cache_hits": 13,
+    "cache_misses": 0,
+    "rule_error": "",
+    "file_hashes": {
+      "ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8"
+    },
+    "snapshot_hashes": {
+      "ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8"
+    },
+    "api_requests": 122,
+    "input_tokens": 840714,
+    "output_tokens": 48150,
+    "total_tokens": 888864,
+    "telemetry": {
+      "api_requests": 122,
+      "input_tokens": 840714,
+      "output_tokens": 48150,
+      "total_tokens": 888864,
+      "prompt_tokens": 840714,
+      "completion_tokens": 48150
+    },
+    "verified_candidates": 16,
+    "verify_confirmed": 7,
+    "verify_refuted": 6,
+    "verify_uncertain": 3,
+    "verify_dropped": 6,
+    "verify_tool_calls": 103,
+    "chains_proposed": 2,
+    "chains_upheld": 0,
+    "chains_rejected": 2,
+    "verify_seconds": 77.82
+  },
+  "reports": [
+    {
+      "timestamp": "2026-10-25T23:39:29.638800",
+      "file_name": "ansible_hardcoded_secret.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [
+        {
+          "id": "5c03a94e01ffedff",
+          "type": "PATH_TRAVERSAL",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "ansible_hardcoded_secret.py",
+            "start_line": 426,
+            "end_line": 426,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "f = open(filename, \"rb\")"
+          },
+          "description": "FileVaultSecret._read_file uses the caller-controlled filename parameter directly in open() without validating that it resolves within a trusted directory or restricting it to a base path. This allows an attacker who can influence filename to read arbitrary files accessible to the Ansible process.",
+          "impact": "Sensitive local files, such as credentials, private keys, or configuration files, may be disclosed or processed as vault password input.",
+          "remediation": "Validate the supplied path before opening it. Restrict access to an allowed base directory and verify containment with a resolved path check, or use os.path.basename() when only a filename is expected.",
+          "cwe_id": "CWE-22",
+          "owasp_category": "A01:2021-Broken Access Control",
+          "cvss_score": 5.3,
+          "references": [
+            "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+            "https://cwe.mitre.org/data/definitions/22.html"
+          ],
+          "proof_of_concept": "Call FileVaultSecret._read_file('/etc/passwd') or another sensitive path. The method directly opens the supplied path and reads its contents without a containment or allowlist check.",
+          "secure_code_example": "from pathlib import Path\n\nbase_dir = Path('/trusted/vault_password_dirs').resolve()\ncandidate = Path(filename).resolve()\nif not candidate.is_relative_to(base_dir):\n    raise AnsibleError('Vault password file path is not allowed: %s' % filename)\nwith open(candidate, 'rb') as f:\n    vault_pass = f.read().strip()",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The path is canonicalized in get_file_vault_secret via os.path.realpath(os.path.expanduser(filename)) before being stored and passed to _read_file; it is an operator-supplied vault password file path rather than an untrusted external input boundary.",
+            "evidence_file": "ansible_hardcoded_secret.py",
+            "evidence_line": 377,
+            "taint_path": [],
+            "mitigating_control": "Trusted internal context / no external untrusted input boundary; canonicalization in get_file_vault_secret",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 40.7,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 1,
+                "end_line": 140,
+                "evidence_id": "ev_3eb2e67f94f889"
+              },
+              {
+                "tool": "search",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 395,
+                "end_line": 395,
+                "evidence_id": "ev_3113c656db2774"
+              },
+              {
+                "tool": "read_lines",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 395,
+                "end_line": 470,
+                "evidence_id": "ev_86e32ba21e6546"
+              },
+              {
+                "tool": "search",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 395,
+                "end_line": 395,
+                "evidence_id": "ev_3113c656db2774"
+              },
+              {
+                "tool": "search",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 447,
+                "end_line": 447,
+                "evidence_id": "ev_3172d54c13769d"
+              },
+              {
+                "tool": "read_lines",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 350,
+                "end_line": 400,
+                "evidence_id": "ev_51c2818b2f6ffd"
+              },
+              {
+                "tool": "search",
+                "path": "ansible_hardcoded_secret.py",
+                "start_line": 376,
+                "end_line": 376,
+                "evidence_id": "ev_0493b268feb3d3"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 418,
+              "symbol": "filename",
+              "description": "Function parameter carrying a caller-controlled file path."
+            },
+            {
+              "step": 2,
+              "kind": "sink",
+              "line": 426,
+              "symbol": "open",
+              "description": "Arbitrary file is opened without containment or allowlist validation."
+            }
+          ]
+        }
+      ],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 1
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.641587",
+      "file_name": "gradio_info_disclosure.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "62a704dbf76e8c01",
+          "type": "SENSITIVE_DATA_EXPOSURE",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "gradio_info_disclosure.py",
+            "start_line": 233,
+            "end_line": 235,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "return {\"token\": token, \"user\": app.tokens.get(token)}"
+          },
+          "description": "The /token endpoint returns the raw access-token cookie value in a JSON response without requiring authentication. This exposes a sensitive session/authentication token to client-side JavaScript and undermines the protection intended by the HttpOnly cookie flag.",
+          "impact": "An attacker able to execute JavaScript in the application origin, or any party able to read the endpoint response, can steal the active session token and impersonate the authenticated user.",
+          "remediation": "Do not return the raw session token to the client. Remove the token field from the response or protect the endpoint with login_check and return only non-sensitive session metadata.",
+          "cwe_id": "CWE-200",
+          "owasp_category": "A07:2021-Identification and Authentication Failures",
+          "cvss_score": 5.3,
+          "references": [
+            "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+          ],
+          "proof_of_concept": "Send a request to /token while a valid access-token cookie is present. The response body contains the cookie's token value and associated username.",
+          "secure_code_example": "@app.get(\"/token\", dependencies=[Depends(login_check)])\ndef get_token(request: fastapi.Request) -> dict:\n    token = request.cookies.get(f\"access-token-{app.cookie_id}\")\n    return {\"user\": app.tokens.get(token)}",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "The /token handler reads the access-token cookie and returns its raw value in a JSON response with no authentication, authorization, or redaction control, allowing client-side JavaScript to recover the HttpOnly session token.",
+            "evidence_file": "gradio_info_disclosure.py",
+            "evidence_line": 235,
+            "taint_path": [
+              {
+                "step": "attacker-controlled session cookie is read from the request",
+                "file": "gradio_info_disclosure.py",
+                "line": 234,
+                "kind": "source",
+                "description": "attacker-controlled session cookie is read from the request",
+                "evidence_id": "ev_8eacdc1f4df1b9"
+              },
+              {
+                "step": "cookie value is placed into the response dictionary",
+                "file": "gradio_info_disclosure.py",
+                "line": 235,
+                "kind": "propagator",
+                "description": "cookie value is placed into the response dictionary",
+                "evidence_id": "ev_8eacdc1f4df1b9"
+              },
+              {
+                "step": "raw token is returned in the JSON response",
+                "file": "gradio_info_disclosure.py",
+                "line": 235,
+                "kind": "sink",
+                "description": "raw token is returned in the JSON response",
+                "evidence_id": "ev_8eacdc1f4df1b9"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 7,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 44.43,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 1,
+                "end_line": 155,
+                "evidence_id": "ev_1e0c583d50e2d8"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 200,
+                "end_line": 300,
+                "evidence_id": "ev_8eacdc1f4df1b9"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 98,
+                "end_line": 98,
+                "evidence_id": "ev_272db7edbbe3e5"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 117,
+                "end_line": 117,
+                "evidence_id": "ev_a35266a536d872"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 130,
+                "end_line": 130,
+                "evidence_id": "ev_b0dc72c437feef"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 162,
+                "end_line": 162,
+                "evidence_id": "ev_4476851ff64256"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 172,
+                "end_line": 172,
+                "evidence_id": "ev_bd5507369760e0"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 182,
+                "end_line": 182,
+                "evidence_id": "ev_bf9345ea35be91"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 205,
+                "end_line": 205,
+                "evidence_id": "ev_b2acfe943c3be0"
+              },
+              {
+                "tool": "search",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 229,
+                "end_line": 229,
+                "evidence_id": "ev_d30dd987e337ba"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 153,
+                "end_line": 200,
+                "evidence_id": "ev_494c829f9031ed"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "attacker-controlled session cookie is read from the request",
+              "file": "gradio_info_disclosure.py",
+              "line": 234,
+              "kind": "source",
+              "description": "attacker-controlled session cookie is read from the request",
+              "evidence_id": "ev_8eacdc1f4df1b9"
+            },
+            {
+              "step": "cookie value is placed into the response dictionary",
+              "file": "gradio_info_disclosure.py",
+              "line": 235,
+              "kind": "propagator",
+              "description": "cookie value is placed into the response dictionary",
+              "evidence_id": "ev_8eacdc1f4df1b9"
+            },
+            {
+              "step": "raw token is returned in the JSON response",
+              "file": "gradio_info_disclosure.py",
+              "line": 235,
+              "kind": "sink",
+              "description": "raw token is returned in the JSON response",
+              "evidence_id": "ev_8eacdc1f4df1b9"
+            }
+          ]
+        },
+        {
+          "id": "b281dcb5193a7e8a",
+          "type": "SECURE_COOKIE",
+          "severity": "MEDIUM",
+          "location": {
+            "file_path": "gradio_info_disclosure.py",
+            "start_line": 290,
+            "end_line": 294,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "response.set_cookie(\n    key=f\"access-token-unsecure-{app.cookie_id}\",\n    value=token,\n    httponly=True,\n)"
+          },
+          "description": "A second cookie containing the same access token is set with HttpOnly but without the Secure flag. This allows the sensitive token to be transmitted over unencrypted HTTP connections.",
+          "impact": "Network attackers can intercept the authentication token when the application is accessed over HTTP or through a misconfigured proxy.",
+          "remediation": "Set secure=True on every cookie containing an authentication token, or remove the redundant unsecure cookie entirely.",
+          "cwe_id": "CWE-614",
+          "owasp_category": "A07:2021-Identification and Authentication Failures",
+          "cvss_score": 6.6,
+          "references": [
+            "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+            "https://cwe.mitre.org/data/definitions/614.html"
+          ],
+          "proof_of_concept": "Complete a successful login and inspect Set-Cookie headers. The access-token-unsecure cookie lacks the Secure attribute while containing the same bearer token.",
+          "secure_code_example": "response.set_cookie(\n    key=f\"access-token-unsecure-{app.cookie_id}\",\n    value=token,\n    httponly=True,\n    secure=True,\n    samesite=\"lax\",\n)",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "At login, the same secret access token is written to a second cookie (access-token-unsecure-...) via set_cookie with httponly=True but no secure=True flag, so browsers will transmit it over plaintext HTTP. No conditional HTTPS check or other control restricts this cookie to secure transport.",
+            "evidence_file": "gradio_info_disclosure.py",
+            "evidence_line": 290,
+            "taint_path": [
+              {
+                "step": "secrets.token_urlsafe generates the access token",
+                "file": "gradio_info_disclosure.py",
+                "line": 280,
+                "kind": "source",
+                "description": "secrets.token_urlsafe generates the access token",
+                "evidence_id": "ev_daedf15fbe3a2c"
+              },
+              {
+                "step": "token stored in app.tokens and reused for the unsecure cookie",
+                "file": "gradio_info_disclosure.py",
+                "line": 281,
+                "kind": "propagator",
+                "description": "token stored in app.tokens and reused for the unsecure cookie",
+                "evidence_id": "ev_daedf15fbe3a2c"
+              },
+              {
+                "step": "set_cookie writes token without secure flag",
+                "file": "gradio_info_disclosure.py",
+                "line": 290,
+                "kind": "sink",
+                "description": "set_cookie writes token without secure flag",
+                "evidence_id": "ev_daedf15fbe3a2c"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 8,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 29.92,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 260,
+                "end_line": 320,
+                "evidence_id": "ev_daedf15fbe3a2c"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 190,
+                "end_line": 260,
+                "evidence_id": "ev_606670e16cddd4"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 1,
+                "end_line": 140,
+                "evidence_id": "ev_4d278a1d474dda"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "secrets.token_urlsafe generates the access token",
+              "file": "gradio_info_disclosure.py",
+              "line": 280,
+              "kind": "source",
+              "description": "secrets.token_urlsafe generates the access token",
+              "evidence_id": "ev_daedf15fbe3a2c"
+            },
+            {
+              "step": "token stored in app.tokens and reused for the unsecure cookie",
+              "file": "gradio_info_disclosure.py",
+              "line": 281,
+              "kind": "propagator",
+              "description": "token stored in app.tokens and reused for the unsecure cookie",
+              "evidence_id": "ev_daedf15fbe3a2c"
+            },
+            {
+              "step": "set_cookie writes token without secure flag",
+              "file": "gradio_info_disclosure.py",
+              "line": 290,
+              "kind": "sink",
+              "description": "set_cookie writes token without secure flag",
+              "evidence_id": "ev_daedf15fbe3a2c"
+            }
+          ]
+        },
+        {
+          "id": "3ed68dd47f34bc17",
+          "type": "UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS",
+          "severity": "MEDIUM",
+          "location": {
+            "file_path": "gradio_info_disclosure.py",
+            "start_line": 435,
+            "end_line": 438,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "return RedirectResponse(\n    url=path_or_url, status_code=status.HTTP_302_FOUND\n)"
+          },
+          "description": "The /file endpoint redirects directly to a user-supplied HTTP URL when is_http_url_like(path_or_url) is true. The destination is not validated against an allowlist, enabling an open redirect.",
+          "impact": "Attackers can craft links on the trusted application domain that redirect victims to malicious or phishing sites.",
+          "remediation": "Validate redirect destinations against a strict allowlist or reject arbitrary external URLs. If external file URLs are required, use a server-side allowlist of trusted hosts.",
+          "cwe_id": "CWE-601",
+          "owasp_category": "A01:2021-Broken Access Control",
+          "cvss_score": 3.0,
+          "references": [
+            "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+          ],
+          "proof_of_concept": "Request /file=http://example.com/ (or another external URL). The application responds with a 302 redirect to that unvalidated destination.",
+          "secure_code_example": "if client_utils.is_http_url_like(path_or_url):\n    parsed = urllib.parse.urlparse(path_or_url)\n    if parsed.netloc not in ALLOWED_FILE_HOSTS:\n        raise HTTPException(status_code=400, detail=\"Redirect destination not allowed.\")\n    return RedirectResponse(url=path_or_url, status_code=status.HTTP_302_FOUND)",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "The route parameter path_or_url is taken directly from the request path and, when is_http_url_like(path_or_url) is true, is passed unchanged to RedirectResponse with no host allowlist or relative-path validation.",
+            "evidence_file": "gradio_info_disclosure.py",
+            "evidence_line": 435,
+            "taint_path": [
+              {
+                "step": "attacker-controlled path parameter enters the /file endpoint",
+                "file": "gradio_info_disclosure.py",
+                "line": 433,
+                "kind": "source",
+                "description": "attacker-controlled path parameter enters the /file endpoint",
+                "evidence_id": "ev_e2489b0aebb899"
+              },
+              {
+                "step": "value is checked only for HTTP-URL-likeness, not validated against an allowlist",
+                "file": "gradio_info_disclosure.py",
+                "line": 435,
+                "kind": "propagator",
+                "description": "value is checked only for HTTP-URL-likeness, not validated against an allowlist",
+                "evidence_id": "ev_e2489b0aebb899"
+              },
+              {
+                "step": "unvalidated value is used as the redirect destination",
+                "file": "gradio_info_disclosure.py",
+                "line": 436,
+                "kind": "sink",
+                "description": "unvalidated value is used as the redirect destination",
+                "evidence_id": "ev_e2489b0aebb899"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 7,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 58.85,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 1,
+                "end_line": 155,
+                "evidence_id": "ev_1e0c583d50e2d8"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 380,
+                "end_line": 500,
+                "evidence_id": "ev_e2489b0aebb899"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "attacker-controlled path parameter enters the /file endpoint",
+              "file": "gradio_info_disclosure.py",
+              "line": 433,
+              "kind": "source",
+              "description": "attacker-controlled path parameter enters the /file endpoint",
+              "evidence_id": "ev_e2489b0aebb899"
+            },
+            {
+              "step": "value is checked only for HTTP-URL-likeness, not validated against an allowlist",
+              "file": "gradio_info_disclosure.py",
+              "line": 435,
+              "kind": "propagator",
+              "description": "value is checked only for HTTP-URL-likeness, not validated against an allowlist",
+              "evidence_id": "ev_e2489b0aebb899"
+            },
+            {
+              "step": "unvalidated value is used as the redirect destination",
+              "file": "gradio_info_disclosure.py",
+              "line": 436,
+              "kind": "sink",
+              "description": "unvalidated value is used as the redirect destination",
+              "evidence_id": "ev_e2489b0aebb899"
+            }
+          ]
+        },
+        {
+          "id": "bf6b817e5105bf1c",
+          "type": "IMPROPER_ERROR_HANDLING",
+          "severity": "MEDIUM",
+          "location": {
+            "file_path": "gradio_info_disclosure.py",
+            "start_line": 650,
+            "end_line": 656,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "\"message\": str(e)"
+          },
+          "description": "The queue data stream catches all exceptions and sends str(e) to the client. This can disclose internal exception messages, filesystem paths, dependency details, or application state to untrusted users.",
+          "impact": "Attackers can trigger error conditions and collect internal implementation details that may aid further attacks.",
+          "remediation": "Return a generic error message to the client and log the detailed exception server-side only.",
+          "cwe_id": "CWE-209",
+          "owasp_category": "A04:2021-Insecure Design",
+          "cvss_score": 2.0,
+          "references": [
+            "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+            "https://cwe.mitre.org/data/definitions/209.html"
+          ],
+          "proof_of_concept": "Trigger an exception while connected to /queue/data. The SSE stream emits an unexpected_error event whose message field contains the raw exception text.",
+          "secure_code_example": "except BaseException as e:\n    logger.exception(\"Queue stream failed\")\n    message = {\"msg\": \"unexpected_error\", \"success\": False, \"message\": \"Internal server error.\"}\n    yield f\"data: {json.dumps(message)}\\n\\n\"",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 41.84,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 630,
+                "end_line": 680,
+                "evidence_id": "ev_c3dd073eb5ea08"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 580,
+                "end_line": 660,
+                "evidence_id": "ev_fddebcd287bd07"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 1,
+                "end_line": 60,
+                "evidence_id": "ev_7c28909c80c6d1"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 200,
+                "end_line": 260,
+                "evidence_id": "ev_52be835c42b4e6"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 650,
+              "symbol": "e",
+              "description": "Caught exception object."
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 654,
+              "symbol": "str(e)",
+              "description": "Exception converted to user-facing string."
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 656,
+              "symbol": "yield",
+              "description": "Raw exception text sent in SSE response."
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 4
+        }
+      },
+      "summary": {
+        "total": 4,
+        "critical": 0,
+        "high": 1,
+        "medium": 3,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 23.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.642356",
+      "file_name": "salt_auth_bypass.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "f1e399fcfcbc3464",
+          "type": "BROKEN_AUTHENTICATION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "salt_auth_bypass.py",
+            "start_line": 1866,
+            "end_line": 2361,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "class ClearFuncs exposes runner, wheel, _send_pub, _prep_jid, and _prep_auth_info through the unauthenticated clear request channel"
+          },
+          "description": "ClearFuncs is reachable through Salt's unauthenticated clear ZeroMQ request channel. Privileged operations such as runner, wheel, _send_pub, _prep_jid, and _prep_auth_info are not gated by minion authentication or an explicit command allowlist. A remote unauthenticated client can invoke these methods and execute master-side or minion-side commands, publish jobs, or obtain sensitive authentication material.",
+          "impact": "Unauthenticated remote command execution, arbitrary job publication, unauthorized file operations through wheel, and potential disclosure or misuse of master authentication secrets.",
+          "remediation": "Restrict the clear channel to an explicit allowlist of unauthenticated operations such as _auth, ping, mk_token, and get_token. Move runner, wheel, publish, and _send_pub into the authenticated AES function path or require and validate a valid authenticated session token before dispatching them. Enforce authorization checks for all privileged master operations.",
+          "cwe_id": "CWE-287",
+          "owasp_category": "A07:2021-Identification and Authentication Failures",
+          "cvss_score": 10.0,
+          "references": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2020-11651"
+          ],
+          "proof_of_concept": "Connect to the Salt master request server clear channel and send a payload such as {'cmd': 'runner', 'fun': 'salt.cmd', 'arg': ['id'], 'kwarg': {}, 'user': 'root', 'tok': ''}. The master processes the request without authenticating the caller.",
+          "secure_code_example": "ALLOWED_CLEAR_COMMANDS = {'_auth', 'ping', 'mk_token', 'get_token'}\nif payload.get('cmd') not in ALLOWED_CLEAR_COMMANDS:\n    return {'error': 'Unauthorized clear command'}\n# Dispatch only after authentication/authorization checks for privileged commands",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 7,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 25.66,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1,
+                "end_line": 161,
+                "evidence_id": "ev_7989e604e07b01"
+              },
+              {
+                "tool": "search",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1866,
+                "end_line": 1866,
+                "evidence_id": "ev_5af4631ec91c12"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1000,
+                "end_line": 1131,
+                "evidence_id": "ev_05f122d9559620"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1850,
+                "end_line": 1971,
+                "evidence_id": "ev_48638b97a58c2a"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1971,
+                "end_line": 2087,
+                "evidence_id": "ev_17381c8d8a7edd"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 2087,
+                "end_line": 2211,
+                "evidence_id": "ev_29f88ba6a715c1"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 0,
+              "symbol": "ZeroMQ clear request payload",
+              "description": "Remote unauthenticated client supplies cmd and function arguments"
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 0,
+              "symbol": "MWorker._handle_clear",
+              "description": "Clear request is dispatched to ClearFuncs"
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 1866,
+              "symbol": "ClearFuncs.runner/wheel",
+              "description": "Privileged master operation executes without authentication"
+            }
+          ]
+        },
+        {
+          "id": "aecbd3a2a03ab5b8",
+          "type": "PATH_TRAVERSAL",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "salt_auth_bypass.py",
+            "start_line": 1866,
+            "end_line": 2361,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "ClearFuncs.wheel file_roots read/write operations"
+          },
+          "description": "The wheel file_roots read and write operations do not adequately validate that requested paths remain within configured file roots. Path traversal sequences can escape the intended root directory, allowing unauthorized file read or write access on the Salt master.",
+          "impact": "Arbitrary file read or write on the Salt master, potentially leading to secret disclosure, configuration tampering, or remote code execution.",
+          "remediation": "Resolve each requested path against the configured file root and verify containment using a canonical path check before reading or writing. Reject paths containing traversal sequences, absolute paths, or symlink escapes.",
+          "cwe_id": "CWE-22",
+          "owasp_category": "A01:2021-Broken Access Control",
+          "cvss_score": 7.6,
+          "references": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2020-11652"
+          ],
+          "proof_of_concept": "After reaching the unauthenticated wheel interface, send a request using a traversal path such as '../../etc/passwd' or a write path outside the configured file root. The master performs the file operation without containment validation.",
+          "secure_code_example": "from pathlib import Path\nroot = Path(configured_root).resolve()\ntarget = (root / user_path).resolve()\nif not target.is_relative_to(root):\n    raise ValueError('Path traversal detected')",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 26.06,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1866,
+                "end_line": 1984,
+                "evidence_id": "ev_4ba9a7962a9726"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 1984,
+                "end_line": 2103,
+                "evidence_id": "ev_95435108584c7d"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 2103,
+                "end_line": 2228,
+                "evidence_id": "ev_f71b585ccfbcea"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_auth_bypass.py",
+                "start_line": 2228,
+                "end_line": 2345,
+                "evidence_id": "ev_562ed6521c4bf4"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 0,
+              "symbol": "wheel file path argument",
+              "description": "Client supplies a file path"
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 0,
+              "symbol": "file_roots handler",
+              "description": "Path is joined to configured root without canonical containment check"
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 1866,
+              "symbol": "file read/write",
+              "description": "Filesystem operation occurs outside intended root"
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        }
+      },
+      "summary": {
+        "total": 2,
+        "critical": 1,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 19.8
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645212",
+      "file_name": "salt_cmdi.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "5e14bea7e9043c48",
+          "type": "OS_COMMAND_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "salt_cmdi.py",
+            "start_line": 49,
+            "end_line": 49,
+            "start_col": 32,
+            "end_col": 36,
+            "context": "subprocess.call(cmd, shell=True)"
+          },
+          "description": "gen_key() interpolates the caller-supplied path into a shell command string and executes it with shell=True. No quoting, allowlisting, or safe argument-list execution is applied, so shell metacharacters in path can execute arbitrary commands.",
+          "impact": "An attacker who can influence the key path can achieve arbitrary command execution in the Salt process context.",
+          "remediation": "Execute ssh-keygen with an argument list and shell=False, and validate path before use. Example: subprocess.run(['ssh-keygen', '-P', '', '-f', path, '-t', 'rsa', '-q'], shell=False, check=True).",
+          "cwe_id": "CWE-78",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html",
+            "https://owasp.org/Top10/A03_2021-Injection/",
+            "https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess",
+            "https://docs.python.org/3/library/subprocess.html"
+          ],
+          "proof_of_concept": "Calling gen_key('/tmp/key; id') causes the injected command to be parsed and executed by the local shell.",
+          "secure_code_example": "subprocess.run(['ssh-keygen', '-P', '', '-f', path, '-t', 'rsa', '-q'], shell=False, check=True)",
+          "source": "CONFIRMED",
+          "engine_sources": [
+            "SEMGREP",
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+          "merged_rule_ids": [
+            "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true"
+          ],
+          "file_hash": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "gen_key builds cmd with unquoted path interpolation and executes it via subprocess.call(..., shell=True); no shlex quoting, allowlist, or argument-list execution is present.",
+            "evidence_file": "salt_cmdi.py",
+            "evidence_line": 49,
+            "taint_path": [
+              {
+                "step": "caller-supplied path enters gen_key",
+                "file": "salt_cmdi.py",
+                "line": 42,
+                "kind": "source",
+                "description": "caller-supplied path enters gen_key",
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "step": "path interpolated into shell command string",
+                "file": "salt_cmdi.py",
+                "line": 46,
+                "kind": "propagator",
+                "description": "path interpolated into shell command string",
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "step": "command executed with shell=True",
+                "file": "salt_cmdi.py",
+                "line": 49,
+                "kind": "sink",
+                "description": "command executed with shell=True",
+                "evidence_id": "ev_862dcfa66e3777"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 43.68,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 1,
+                "end_line": 162,
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "tool": "search",
+                "path": "salt_cmdi.py",
+                "start_line": 42,
+                "end_line": 42,
+                "evidence_id": "ev_d980e630b68710"
+              },
+              {
+                "tool": "search",
+                "path": "salt_cmdi.py",
+                "start_line": 42,
+                "end_line": 42,
+                "evidence_id": "ev_d980e630b68710"
+              },
+              {
+                "tool": "search",
+                "path": "salt_cmdi.py",
+                "start_line": 42,
+                "end_line": 42,
+                "evidence_id": "ev_d980e630b68710"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "caller-supplied path enters gen_key",
+              "file": "salt_cmdi.py",
+              "line": 42,
+              "kind": "source",
+              "description": "caller-supplied path enters gen_key",
+              "evidence_id": "ev_862dcfa66e3777"
+            },
+            {
+              "step": "path interpolated into shell command string",
+              "file": "salt_cmdi.py",
+              "line": 46,
+              "kind": "propagator",
+              "description": "path interpolated into shell command string",
+              "evidence_id": "ev_862dcfa66e3777"
+            },
+            {
+              "step": "command executed with shell=True",
+              "file": "salt_cmdi.py",
+              "line": 49,
+              "kind": "sink",
+              "description": "command executed with shell=True",
+              "evidence_id": "ev_862dcfa66e3777"
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [
+        {
+          "id": "bef93958957708ff",
+          "type": "OS_COMMAND_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "salt_cmdi.py",
+            "start_line": 287,
+            "end_line": 287,
+            "start_col": 28,
+            "end_col": 32,
+            "context": "cmd, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE,"
+          },
+          "description": "_old_run_cmd() executes a fully assembled command string with shell=True. The string is built from SSH host, user, port, identity, options, and remote command data without shell-safe quoting, allowing injected shell syntax to execute locally.",
+          "impact": "Untrusted SSH target or command parameters can lead to arbitrary local command execution.",
+          "remediation": "Avoid shell=True. Build the SSH invocation as a list of arguments and pass it to subprocess.Popen without shell execution, or strictly apply shlex.quote() to every dynamic component if a shell string is unavoidable.",
+          "cwe_id": "CWE-78",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html",
+            "https://owasp.org/Top10/A03_2021-Injection/",
+            "https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess",
+            "https://docs.python.org/3/library/subprocess.html"
+          ],
+          "proof_of_concept": "A host value such as 'example.com; id' can cause the appended command to be interpreted by the local shell.",
+          "secure_code_example": "proc = subprocess.Popen(['ssh', host, remote_command], shell=False, stderr=subprocess.PIPE, stdout=subprocess.PIPE)",
+          "source": "CONFIRMED",
+          "engine_sources": [
+            "SEMGREP",
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+          "merged_rule_ids": [
+            "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true"
+          ],
+          "file_hash": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "_old_run_cmd is defined but has no callers in the repository, so the reported shell=True sink is not reachable during normal command execution.",
+            "evidence_file": "salt_cmdi.py",
+            "evidence_line": 281,
+            "taint_path": [],
+            "mitigating_control": "Unreachable code path / no callers",
+            "tool_calls": 7,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 26.87,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 1,
+                "end_line": 162,
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 160,
+                "end_line": 300,
+                "evidence_id": "ev_1f897357032a20"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 74,
+              "symbol": "host/user/port/cmd",
+              "description": "Shell constructor and command arguments receive external configuration or command input."
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 250,
+              "symbol": "_cmd_str",
+              "description": "Dynamic values are concatenated into a shell command string without quoting."
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 286,
+              "symbol": "subprocess.Popen",
+              "description": "The assembled command is executed through the local shell."
+            }
+          ]
+        },
+        {
+          "id": "c9550f477778f78f",
+          "type": "OS_COMMAND_INJECTION",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "salt_cmdi.py",
+            "start_line": 300,
+            "end_line": 302,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "proc = salt.utils.nb_popen.NonBlockingPopen(\n    cmd, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE,\n)"
+          },
+          "description": "_run_nb_cmd() executes the assembled SSH command through NonBlockingPopen with shell=True. Because _cmd_str() does not quote or validate dynamic components, shell metacharacters can alter execution.",
+          "impact": "Untrusted target or command data can result in arbitrary local command execution.",
+          "remediation": "Use shell=False with an argument list, or quote all dynamic values with shlex.quote() before shell execution.",
+          "cwe_id": "CWE-78",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html",
+            "https://owasp.org/Top10/A03_2021-Injection/"
+          ],
+          "proof_of_concept": "A command or host containing shell separators such as ';' can inject an additional local command.",
+          "secure_code_example": "proc = salt.utils.nb_popen.NonBlockingPopen(['ssh', host, remote_command], shell=False, stderr=subprocess.PIPE, stdout=subprocess.PIPE)",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The Shell transport operates on administrator-configured roster/connection values and intended remote commands; there is no untrusted external input boundary feeding host/user/port/cmd into _run_nb_cmd, so the shell=True execution is internal trusted context rather than an attacker-controllable injection point.",
+            "evidence_file": "salt_cmdi.py",
+            "evidence_line": 300,
+            "taint_path": [],
+            "mitigating_control": "Trusted internal context / no external untrusted input boundary",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 26.99,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 1,
+                "end_line": 162,
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 160,
+                "end_line": 300,
+                "evidence_id": "ev_1f897357032a20"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 295,
+                "end_line": 438,
+                "evidence_id": "ev_cfde0e89709d79"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 438,
+                "end_line": 457,
+                "evidence_id": "ev_30cef0711b35c6"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 74,
+              "symbol": "host/user/port/cmd",
+              "description": "Shell constructor and command arguments receive external configuration or command input."
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 250,
+              "symbol": "_cmd_str",
+              "description": "Dynamic values are concatenated into a shell command string without quoting."
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 300,
+              "symbol": "NonBlockingPopen",
+              "description": "The assembled command is executed through the local shell."
+            }
+          ]
+        },
+        {
+          "id": "ceab9ecc97a2b8b5",
+          "type": "OS_COMMAND_INJECTION",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "salt_cmdi.py",
+            "start_line": 386,
+            "end_line": 395,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "term = salt.utils.vt.Terminal(\n    cmd,\n    shell=True,\n    log_stdout=True,\n    log_stdout_level=\"trace\",\n    log_stderr=True,\n    log_stderr_level=\"trace\",\n    stream_stdout=False,\n    stream_stderr=False,\n)"
+          },
+          "description": "_run_cmd() is the primary execution path and runs the assembled SSH command through salt.utils.vt.Terminal with shell=True. Dynamic SSH parameters and remote commands are not quoted or validated, so shell injection is possible. This path also handles constructed commands such as mkdir from remote paths.",
+          "impact": "Untrusted configuration, host, command, or remote path data can result in arbitrary local command execution.",
+          "remediation": "Avoid shell=True. Refactor _cmd_str() and callers to use argument lists, or apply context-appropriate shell quoting to every dynamic value before execution.",
+          "cwe_id": "CWE-78",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html",
+            "https://owasp.org/Top10/A03_2021-Injection/"
+          ],
+          "proof_of_concept": "A host or remote command containing shell metacharacters can inject an additional command when _run_cmd() executes the assembled string.",
+          "secure_code_example": "term = salt.utils.vt.Terminal(['ssh', host, remote_command], shell=False, log_stdout=True, log_stderr=True)",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The module's Shell methods assemble SSH commands from internal Salt target/configuration data and execute them through the VT terminal; no request, form, cookie, header, stdin, or other untrusted external input boundary is visible in this file, so the reported attacker-controlled flow is not established.",
+            "evidence_file": "salt_cmdi.py",
+            "evidence_line": 378,
+            "taint_path": [],
+            "mitigating_control": "Trusted internal context / no external untrusted input boundary",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 33.52,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 1,
+                "end_line": 162,
+                "evidence_id": "ev_862dcfa66e3777"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 162,
+                "end_line": 302,
+                "evidence_id": "ev_bf993ac52a5de3"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 302,
+                "end_line": 442,
+                "evidence_id": "ev_756a2043956b02"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_cmdi.py",
+                "start_line": 442,
+                "end_line": 457,
+                "evidence_id": "ev_abee6a741a42a0"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 74,
+              "symbol": "host/user/port/cmd/remote",
+              "description": "Shell constructor, exec_cmd(), and send() receive external configuration or command/path input."
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 250,
+              "symbol": "_cmd_str",
+              "description": "Dynamic values and commands are concatenated into a shell command string without quoting."
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 386,
+              "symbol": "salt.utils.vt.Terminal",
+              "description": "The assembled command is executed through the local shell."
+            }
+          ]
+        }
+      ],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 4
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 1,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 3
+      },
+      "risk_score": 10.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645358",
+      "file_name": "clean_gradio_media.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 4
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645422",
+      "file_name": "airflow_pathtraversal.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645472",
+      "file_name": "clean_weasyprint_units.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645586",
+      "file_name": "salt_deserialization.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [
+        {
+          "id": "767112e545d5905b",
+          "type": "INSECURE_DESERIALIZATION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "salt_deserialization.py",
+            "start_line": 702,
+            "end_line": 702,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "package = salt.payload.loads(frames[-1])"
+          },
+          "description": "ZeroMQReqServerChannel.handle_message deserializes attacker-controlled ZeroMQ frame data with salt.payload.loads before authentication or command authorization. salt.payload.loads can auto-detect and execute pickle payloads, allowing unauthenticated remote code execution through crafted clear-channel messages.",
+          "impact": "An unauthenticated network attacker can execute arbitrary code as the Salt master process, potentially compromising the entire Salt infrastructure and managed systems.",
+          "remediation": "Do not use pickle-capable deserialization on untrusted network input. Deserialize only with a safe, non-executing format such as msgpack or JSON, validate the resulting structure and allowed fields, and ensure authentication and authorization occur before processing privileged commands.",
+          "cwe_id": "CWE-502",
+          "owasp_category": "A08:2021 - Software and Data Integrity Failures",
+          "cvss_score": 5.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/502.html",
+            "https://docs.saltproject.io/en/latest/topics/security/index.html"
+          ],
+          "proof_of_concept": "Send a clear-channel ZeroMQ message to the Salt master whose final frame begins with a pickle magic byte and contains a malicious __reduce__ payload; handle_message invokes salt.payload.loads on the frame before checking enc or cmd, triggering pickle execution.",
+          "secure_code_example": "try:\n    package = salt.utils.msgpack.loads(frames[-1])\nexcept Exception:\n    return\nif not isinstance(package, dict):\n    return\nif package.get('enc') != 'clear':\n    return",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The reported code `package = salt.payload.loads(frames[-1])` does not exist at line 702 or elsewhere; the actual `handle_message` at line 730 calls `self.serial.loads(payload[0])` using the channel's configured serializer, not the auto-detecting module-level `salt.payload.loads`.",
+            "evidence_file": "salt_deserialization.py",
+            "evidence_line": 730,
+            "taint_path": [],
+            "mitigating_control": "Instance-configured serializer (self.serial.loads) instead of auto-detecting salt.payload.loads, with AESReqServerMixin transport handling",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 36.95,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "salt_deserialization.py",
+                "start_line": 1,
+                "end_line": 140,
+                "evidence_id": "ev_b4354c4ba7e2f1"
+              },
+              {
+                "tool": "read_lines",
+                "path": "salt_deserialization.py",
+                "start_line": 650,
+                "end_line": 764,
+                "evidence_id": "ev_5b692cdf0fea47"
+              },
+              {
+                "tool": "search",
+                "path": "salt_deserialization.py",
+                "start_line": 587,
+                "end_line": 587,
+                "evidence_id": "ev_02298f80341433"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 702,
+              "symbol": "frames[-1]",
+              "description": "Attacker-controlled ZeroMQ request frame"
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 702,
+              "symbol": "salt.payload.loads",
+              "description": "Pickle-capable deserialization of untrusted data"
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 702,
+              "symbol": "pickle.loads",
+              "description": "Arbitrary code execution during deserialization"
+            }
+          ]
+        }
+      ],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 1
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645640",
+      "file_name": "clean_ansible_display.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645698",
+      "file_name": "weasyprint_ssrf.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "f02b67ab2cc7fe13",
+          "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "weasyprint_ssrf.py",
+            "start_line": 211,
+            "end_line": 213,
+            "start_col": 8,
+            "end_col": 26,
+            "context": "response = urlopen(\n    Request(url, headers=HTTP_HEADERS), timeout=timeout,\n    context=ssl_context)"
+          },
+          "description": "default_url_fetcher passes an untrusted URL directly to urllib.request.urlopen without scheme allowlisting, destination IP validation, or redirect revalidation. It also permits file:// URLs and relies on urlopen's default redirect following, allowing requests to internal services, cloud metadata endpoints, localhost, or local files.",
+          "impact": "An attacker who controls HTML/CSS resource URLs can force the server to make arbitrary outbound or local requests, potentially exposing internal services, cloud IAM metadata, sensitive local files, or enabling further pivoting.",
+          "remediation": "Restrict allowed schemes to an explicit allowlist such as http and https unless file access is intentionally required. Validate and resolve the destination hostname before fetching, rejecting loopback, private, link-local, and cloud metadata IP ranges. Disable automatic redirects or revalidate every redirect target using the same policy. Consider requiring callers to provide a hardened URL fetcher for untrusted documents.",
+          "cwe_id": "CWE-918",
+          "owasp_category": "A10:2021 - Server-Side Request Forgery (SSRF)",
+          "cvss_score": 5.3,
+          "references": [
+            "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/",
+            "https://cwe.mitre.org/data/definitions/918.html"
+          ],
+          "proof_of_concept": "Call default_url_fetcher('http://127.0.0.1:8080/internal') or default_url_fetcher('file:///etc/passwd') with an attacker-controlled URL. The function will attempt to fetch the internal/local resource without validating the destination.",
+          "secure_code_example": "from urllib.parse import urlparse\nimport ipaddress\nimport socket\n\nALLOWED_SCHEMES = {'http', 'https'}\nBLOCKED_NETWORKS = [\n    ipaddress.ip_network('127.0.0.0/8'),\n    ipaddress.ip_network('10.0.0.0/8'),\n    ipaddress.ip_network('172.16.0.0/12'),\n    ipaddress.ip_network('192.168.0.0/16'),\n    ipaddress.ip_network('169.254.0.0/16'),\n    ipaddress.ip_network('::1/128'),\n]\n\nparsed = urlparse(url)\nif parsed.scheme not in ALLOWED_SCHEMES:\n    raise ValueError('Unsupported URL scheme')\naddresses = socket.getaddrinfo(parsed.hostname, None)\nfor family, _, _, _, sockaddr in addresses:\n    ip = ipaddress.ip_address(sockaddr[0])\n    if any(ip in network for network in BLOCKED_NETWORKS):\n        raise ValueError('Blocked destination address')\n# Fetch only after validation; use a custom redirect handler that revalidates each target.",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "default_url_fetcher accepts an attacker-controlled URL, only checks that it is an absolute URI, and passes it directly to urllib.request.urlopen without scheme allowlisting, IP/destination validation, or redirect revalidation; file:// URLs are also handled and fetched.",
+            "evidence_file": "weasyprint_ssrf.py",
+            "evidence_line": 211,
+            "taint_path": [
+              {
+                "step": "attacker-controlled resource URL enters default_url_fetcher as the url parameter",
+                "file": "weasyprint_ssrf.py",
+                "line": 171,
+                "kind": "source",
+                "description": "attacker-controlled resource URL enters default_url_fetcher as the url parameter",
+                "evidence_id": "ev_f3e75321695659"
+              },
+              {
+                "step": "URL is only checked to be an absolute URI; no scheme or destination allowlist is applied",
+                "file": "weasyprint_ssrf.py",
+                "line": 205,
+                "kind": "propagator",
+                "description": "URL is only checked to be an absolute URI; no scheme or destination allowlist is applied",
+                "evidence_id": "ev_f3e75321695659"
+              },
+              {
+                "step": "URL is converted to a URI, including file:// handling, without restricting the target",
+                "file": "weasyprint_ssrf.py",
+                "line": 210,
+                "kind": "propagator",
+                "description": "URL is converted to a URI, including file:// handling, without restricting the target",
+                "evidence_id": "ev_f3e75321695659"
+              },
+              {
+                "step": "URL is passed directly to urlopen, which follows redirects and can access local files or internal services",
+                "file": "weasyprint_ssrf.py",
+                "line": 211,
+                "kind": "sink",
+                "description": "URL is passed directly to urlopen, which follows redirects and can access local files or internal services",
+                "evidence_id": "ev_f3e75321695659"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 7,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 35.0,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 1,
+                "end_line": 146,
+                "evidence_id": "ev_ea40a32b503a90"
+              },
+              {
+                "tool": "read_lines",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 147,
+                "end_line": 264,
+                "evidence_id": "ev_f3e75321695659"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 171,
+                "end_line": 171,
+                "evidence_id": "ev_998a18174ce352"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 171,
+                "end_line": 171,
+                "evidence_id": "ev_998a18174ce352"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 243,
+                "end_line": 243,
+                "evidence_id": "ev_491f2ff41177bd"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 171,
+                "end_line": 171,
+                "evidence_id": "ev_998a18174ce352"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 243,
+                "end_line": 243,
+                "evidence_id": "ev_491f2ff41177bd"
+              },
+              {
+                "tool": "read_lines",
+                "path": "clean_weasyprint_units.py",
+                "start_line": 1,
+                "end_line": 160,
+                "evidence_id": "ev_8e0ad985a27c76"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "attacker-controlled resource URL enters default_url_fetcher as the url parameter",
+              "file": "weasyprint_ssrf.py",
+              "line": 171,
+              "kind": "source",
+              "description": "attacker-controlled resource URL enters default_url_fetcher as the url parameter",
+              "evidence_id": "ev_f3e75321695659"
+            },
+            {
+              "step": "URL is only checked to be an absolute URI; no scheme or destination allowlist is applied",
+              "file": "weasyprint_ssrf.py",
+              "line": 205,
+              "kind": "propagator",
+              "description": "URL is only checked to be an absolute URI; no scheme or destination allowlist is applied",
+              "evidence_id": "ev_f3e75321695659"
+            },
+            {
+              "step": "URL is converted to a URI, including file:// handling, without restricting the target",
+              "file": "weasyprint_ssrf.py",
+              "line": 210,
+              "kind": "propagator",
+              "description": "URL is converted to a URI, including file:// handling, without restricting the target",
+              "evidence_id": "ev_f3e75321695659"
+            },
+            {
+              "step": "URL is passed directly to urlopen, which follows redirects and can access local files or internal services",
+              "file": "weasyprint_ssrf.py",
+              "line": 211,
+              "kind": "sink",
+              "description": "URL is passed directly to urlopen, which follows redirects and can access local files or internal services",
+              "evidence_id": "ev_f3e75321695659"
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 0,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 8.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645745",
+      "file_name": "clean_django_crypto.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.645799",
+      "file_name": "airflow_idor.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [
+        {
+          "id": "5a15f004295b0a0f",
+          "type": "INSECURE_DIRECT_OBJECT_REFERENCE_(IDOR)",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "airflow_idor.py",
+            "start_line": 376,
+            "end_line": 432,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "get_task_instances_batch accepts user-controlled dag_ids and filters TaskInstance records without per-DAG authorization"
+          },
+          "description": "get_task_instances_batch reads dag_ids from the request body and directly filters TaskInstance records by those identifiers. The endpoint only verifies a generic read permission, not access to each requested DAG, allowing a user with read access to one DAG to retrieve task instances belonging to arbitrary DAG IDs.",
+          "impact": "Unauthorized disclosure of task instance data across DAGs, including metadata, states, dates, and execution details for DAGs the caller is not authorized to access.",
+          "remediation": "Validate every requested dag_id against the authenticated user's accessible DAGs before querying. Intersect dag_ids with the user's accessible DAG set or enforce per-DAG authorization for each requested ID, and reject or omit unauthorized DAG identifiers.",
+          "cwe_id": "CWE-639",
+          "owasp_category": "A01:2021 - Broken Access Control",
+          "cvss_score": 4.3,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/639.html",
+            "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+          ],
+          "proof_of_concept": "Authenticate as a user with read access to only DAG A, then call the batch task instance endpoint with a request body containing dag_ids for DAG B. The endpoint returns task instances for DAG B despite the caller lacking access to that DAG.",
+          "secure_code_example": "accessible_dags = current_app.appbuilder.sm.get_accessible_dags(dag_ids, current_user)\nquery = query.filter(TI.dag_id.in_(accessible_dags))",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The endpoint is guarded by read access on the generic DAG resource (RESOURCE_DAG). In Airflow's RBAC model, that global DAG read permission authorizes access to all DAGs, so filtering by caller-supplied dag_ids does not cross an authorization boundary.",
+            "evidence_file": "airflow_idor.py",
+            "evidence_line": 376,
+            "taint_path": [],
+            "mitigating_control": "Generic RESOURCE_DAG read permission grants all-DAG access under Airflow RBAC",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 45.16,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "airflow_idor.py",
+                "start_line": 340,
+                "end_line": 464,
+                "evidence_id": "ev_7141873f8b80f9"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 58,
+                "end_line": 58,
+                "evidence_id": "ev_5c70b02c0a20e0"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 106,
+                "end_line": 106,
+                "evidence_id": "ev_eee5a969e05795"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 159,
+                "end_line": 159,
+                "evidence_id": "ev_0b7cb8ded3ca01"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 298,
+                "end_line": 298,
+                "evidence_id": "ev_942082d9cd50a0"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 376,
+                "end_line": 376,
+                "evidence_id": "ev_e015a1ae17ff93"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 435,
+                "end_line": 435,
+                "evidence_id": "ev_e710566d8d9c93"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 502,
+                "end_line": 502,
+                "evidence_id": "ev_88010854b72a2f"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 573,
+                "end_line": 573,
+                "evidence_id": "ev_ffb5f483a2da44"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 619,
+                "end_line": 619,
+                "evidence_id": "ev_b793c38a062c80"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 636,
+                "end_line": 636,
+                "evidence_id": "ev_f3cf33aabcd118"
+              },
+              {
+                "tool": "read_lines",
+                "path": "airflow_idor.py",
+                "start_line": 1,
+                "end_line": 60,
+                "evidence_id": "ev_8ee17cfb27d817"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 376,
+              "symbol": "request_dict.get('dag_ids')",
+              "description": "User-controlled list of DAG identifiers from the request body"
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 376,
+              "symbol": "dag_ids",
+              "description": "Unvalidated identifiers passed into the database filter"
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 376,
+              "symbol": "TI.dag_id.in_(dag_ids)",
+              "description": "TaskInstance records are retrieved for arbitrary DAG IDs without ownership or per-DAG access checks"
+            }
+          ]
+        }
+      ],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 1
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.646600",
+      "file_name": "django_sqli.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "49a273f1381a91e8",
+          "type": "SQL_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "django_sqli.py",
+            "start_line": 53,
+            "end_line": 75,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "def as_sql(self, compiler, connection):\n    sql, params = compiler.compile(self.lhs)\n    ...\n    sql = connection.ops.datetime_extract_sql(self.lookup_name, sql, tzname)"
+          },
+          "description": "Extract accepts an arbitrary lookup_name value and passes it directly into backend SQL generation routines such as datetime_extract_sql, date_extract_sql, and time_extract_sql. These routines interpolate lookup_name into SQL text. If an application constructs Extract with untrusted input, an attacker can inject SQL fragments through lookup_name.",
+          "impact": "Untrusted lookup_name values can alter generated SQL, potentially enabling data exfiltration, unauthorized data modification, or other SQL injection impacts.",
+          "remediation": "Validate lookup_name against an explicit allowlist of supported extraction kinds before SQL generation. Reject any value not in the allowlist with a ValueError.",
+          "cwe_id": "CWE-89",
+          "owasp_category": "A03:2021-Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://www.djangoproject.com/weblog/2022/aug/03/security-releases/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-34265"
+          ],
+          "proof_of_concept": "Create an Extract expression with a malicious lookup_name such as \"year) FROM injected_table --\" and compile it; the generated SQL contains the injected fragment instead of a validated extraction keyword.",
+          "secure_code_example": "ALLOWED_EXTRACT_LOOKUPS = {\n    \"year\", \"iso_year\", \"month\", \"day\", \"week\", \"week_day\",\n    \"iso_week_day\", \"quarter\", \"hour\", \"minute\", \"second\",\n}\nif self.lookup_name not in ALLOWED_EXTRACT_LOOKUPS:\n    raise ValueError(\"Invalid lookup_name for Extract.\")",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "Extract accepts an arbitrary lookup_name and passes it into backend SQL generation without validating it against an allowlist; resolve_expression only checks field-type compatibility, not the lookup_name value.",
+            "evidence_file": "django_sqli.py",
+            "evidence_line": 58,
+            "taint_path": [
+              {
+                "step": "attacker-controlled lookup_name enters Extract.__init__",
+                "file": "django_sqli.py",
+                "line": 45,
+                "kind": "source",
+                "description": "attacker-controlled lookup_name enters Extract.__init__",
+                "evidence_id": "ev_8db38355e2e555"
+              },
+              {
+                "step": "lookup_name is stored as self.lookup_name without sanitization",
+                "file": "django_sqli.py",
+                "line": 47,
+                "kind": "propagator",
+                "description": "lookup_name is stored as self.lookup_name without sanitization",
+                "evidence_id": "ev_8db38355e2e555"
+              },
+              {
+                "step": "self.lookup_name is passed to datetime_extract_sql for SQL generation",
+                "file": "django_sqli.py",
+                "line": 58,
+                "kind": "sink",
+                "description": "self.lookup_name is passed to datetime_extract_sql for SQL generation",
+                "evidence_id": "ev_8db38355e2e555"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 35.92,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "django_sqli.py",
+                "start_line": 1,
+                "end_line": 154,
+                "evidence_id": "ev_8db38355e2e555"
+              },
+              {
+                "tool": "read_lines",
+                "path": "django_sqli.py",
+                "start_line": 154,
+                "end_line": 292,
+                "evidence_id": "ev_c7493508cf118d"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "attacker-controlled lookup_name enters Extract.__init__",
+              "file": "django_sqli.py",
+              "line": 45,
+              "kind": "source",
+              "description": "attacker-controlled lookup_name enters Extract.__init__",
+              "evidence_id": "ev_8db38355e2e555"
+            },
+            {
+              "step": "lookup_name is stored as self.lookup_name without sanitization",
+              "file": "django_sqli.py",
+              "line": 47,
+              "kind": "propagator",
+              "description": "lookup_name is stored as self.lookup_name without sanitization",
+              "evidence_id": "ev_8db38355e2e555"
+            },
+            {
+              "step": "self.lookup_name is passed to datetime_extract_sql for SQL generation",
+              "file": "django_sqli.py",
+              "line": 58,
+              "kind": "sink",
+              "description": "self.lookup_name is passed to datetime_extract_sql for SQL generation",
+              "evidence_id": "ev_8db38355e2e555"
+            }
+          ]
+        },
+        {
+          "id": "dfedad895a84ad4f",
+          "type": "SQL_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "django_sqli.py",
+            "start_line": 237,
+            "end_line": 254,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "def as_sql(self, compiler, connection):\n    inner_sql, inner_params = compiler.compile(self.lhs)\n    ...\n    sql = connection.ops.datetime_trunc_sql(self.kind, inner_sql, tzname)"
+          },
+          "description": "Trunc and its subclasses accept an arbitrary kind value and pass it directly into backend SQL generation routines such as datetime_trunc_sql, date_trunc_sql, and time_trunc_sql. These routines interpolate kind into SQL text. If an application constructs Trunc with untrusted input, an attacker can inject SQL fragments through kind.",
+          "impact": "Untrusted kind values can alter generated SQL, potentially enabling data exfiltration, unauthorized data modification, or other SQL injection impacts.",
+          "remediation": "Validate kind against an explicit allowlist of supported truncation kinds before SQL generation. Reject any value not in the allowlist with a ValueError.",
+          "cwe_id": "CWE-89",
+          "owasp_category": "A03:2021-Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://www.djangoproject.com/weblog/2022/aug/03/security-releases/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-34265"
+          ],
+          "proof_of_concept": "Create a Trunc expression with a malicious kind such as \"year') --\" and compile it; the generated SQL contains the injected fragment instead of a validated truncation keyword.",
+          "secure_code_example": "ALLOWED_TRUNC_KINDS = {\n    \"year\", \"quarter\", \"month\", \"week\", \"day\", \"hour\",\n    \"minute\", \"second\", \"date\", \"time\",\n}\nif self.kind not in ALLOWED_TRUNC_KINDS:\n    raise ValueError(\"Invalid kind for Trunc.\")",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "Trunc.__init__ accepts an unchecked kind value and stores it as self.kind, then TruncBase.as_sql passes self.kind directly to connection.ops.datetime_trunc_sql without an allowlist or escaping. resolve_expression only rejects certain invalid field/kind combinations and does not restrict kind to known safe values.",
+            "evidence_file": "django_sqli.py",
+            "evidence_line": 245,
+            "taint_path": [
+              {
+                "step": "untrusted kind argument enters through Trunc.__init__",
+                "file": "django_sqli.py",
+                "line": 342,
+                "kind": "source",
+                "description": "untrusted kind argument enters through Trunc.__init__",
+                "evidence_id": "ev_73278c97ed88a3"
+              },
+              {
+                "step": "kind is stored as self.kind without validation",
+                "file": "django_sqli.py",
+                "line": 348,
+                "kind": "propagator",
+                "description": "kind is stored as self.kind without validation",
+                "evidence_id": "ev_73278c97ed88a3"
+              },
+              {
+                "step": "self.kind is passed into backend SQL generation",
+                "file": "django_sqli.py",
+                "line": 245,
+                "kind": "sink",
+                "description": "self.kind is passed into backend SQL generation",
+                "evidence_id": "ev_50d02720c1c868"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 58.01,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "django_sqli.py",
+                "start_line": 1,
+                "end_line": 154,
+                "evidence_id": "ev_8db38355e2e555"
+              },
+              {
+                "tool": "read_lines",
+                "path": "django_sqli.py",
+                "start_line": 150,
+                "end_line": 291,
+                "evidence_id": "ev_50d02720c1c868"
+              },
+              {
+                "tool": "read_lines",
+                "path": "django_sqli.py",
+                "start_line": 290,
+                "end_line": 415,
+                "evidence_id": "ev_73278c97ed88a3"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 219,
+                "end_line": 219,
+                "evidence_id": "ev_b49251174b1e45"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 335,
+                "end_line": 335,
+                "evidence_id": "ev_abcaf44cb9b5e8"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 354,
+                "end_line": 354,
+                "evidence_id": "ev_4a48b52c461c71"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 358,
+                "end_line": 358,
+                "evidence_id": "ev_7d3f1657efb943"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 362,
+                "end_line": 362,
+                "evidence_id": "ev_e2e412f20e6397"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 366,
+                "end_line": 366,
+                "evidence_id": "ev_c0f8bf8f1f75a7"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 372,
+                "end_line": 372,
+                "evidence_id": "ev_69accd39dafd30"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 376,
+                "end_line": 376,
+                "evidence_id": "ev_ef0ba53ac22b77"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 389,
+                "end_line": 389,
+                "evidence_id": "ev_98b730f52717aa"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 402,
+                "end_line": 402,
+                "evidence_id": "ev_9f9bab51c72249"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 406,
+                "end_line": 406,
+                "evidence_id": "ev_9df5a27e27456a"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 410,
+                "end_line": 410,
+                "evidence_id": "ev_a736a3654003f3"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 414,
+                "end_line": 414,
+                "evidence_id": "ev_b19ac469669db1"
+              },
+              {
+                "tool": "search",
+                "path": "django_sqli.py",
+                "start_line": 415,
+                "end_line": 415,
+                "evidence_id": "ev_5429d630ee3922"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "untrusted kind argument enters through Trunc.__init__",
+              "file": "django_sqli.py",
+              "line": 342,
+              "kind": "source",
+              "description": "untrusted kind argument enters through Trunc.__init__",
+              "evidence_id": "ev_73278c97ed88a3"
+            },
+            {
+              "step": "kind is stored as self.kind without validation",
+              "file": "django_sqli.py",
+              "line": 348,
+              "kind": "propagator",
+              "description": "kind is stored as self.kind without validation",
+              "evidence_id": "ev_73278c97ed88a3"
+            },
+            {
+              "step": "self.kind is passed into backend SQL generation",
+              "file": "django_sqli.py",
+              "line": 245,
+              "kind": "sink",
+              "description": "self.kind is passed into backend SQL generation",
+              "evidence_id": "ev_50d02720c1c868"
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        }
+      },
+      "summary": {
+        "total": 2,
+        "critical": 2,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 22.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.646671",
+      "file_name": "clean_airflow_dates.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.646725",
+      "file_name": "clean_salt_units.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:39:29.646772",
+      "file_name": "gradio_xss.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    }
+  ]
+}

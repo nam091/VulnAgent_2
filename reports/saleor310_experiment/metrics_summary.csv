@@ -1,0 +1,5 @@
+Configuration,Status,TP,FP,FN,Precision,Recall,F1_Score,FP_Clean_Files,FP_Wrong_Type,Execution_Time_sec
+Semgrep only,completed,0,0,5,0.000,0.000,0.000,0,0,9.4
+LLM only,degraded,0,23,5,0.000,0.000,0.000,6,17,33.1
+VulnAgent (hybrid),degraded,0,22,5,0.000,0.000,0.000,10,12,58.9
+VulnAgent (3-Tier Full),degraded,1,10,4,0.091,0.200,0.125,4,6,104.2

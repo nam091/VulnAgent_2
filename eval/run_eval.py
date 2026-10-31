@@ -48,12 +48,12 @@ LINE_TOLERANCE = 3
 # *and* a false negative at once, which quietly flatters whichever engine the
 # labels were written against. Equivalence classes remove that bias.
 CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
-    {"798", "259", "260", "321"},                   # hard-coded credentials
+    {"798", "259", "260", "321", "1168"},            # hard-coded credentials / secret keys
     {"326", "327", "328", "916"},                   # weak crypto / hashing
     {"330", "335", "338"},                          # insecure randomness
     {"16", "605", "668", "489", "1188"},            # misconfiguration / exposure
     {"22", "23", "35", "36", "73"},                 # path traversal
-    {"79", "80", "116"},                            # cross-site scripting
+    {"79", "80", "116", "83"},                      # cross-site scripting
     {"77", "78", "88"},                             # command injection
     {"94", "95", "96"},                             # code injection
     {"611", "827"},                                 # XML external entity (XXE)
@@ -62,6 +62,11 @@ CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
     {"89", "564", "943"},                           # SQL injection
     {"918", "441"},                                 # SSRF
     {"287", "306", "521", "307"},                   # broken authentication
+    {"284", "862", "863", "639", "285"},            # access control / IDOR
+    {"200", "209", "532", "213", "359"},            # information exposure
+    {"208", "385", "203"},                          # timing attack / observable timing discrepancy
+    {"20", "1287", "1288"},                         # improper input validation
+    {"90"},                                         # LDAP injection
 )
 
 
@@ -204,6 +209,13 @@ class Metrics:
             "fp_wrong_type_right_file": self.fp_wrong_type,
             "partial_ground_truth": self.partial,
             "seconds": round(self.seconds, 2),
+            "telemetry": {
+                "api_requests": self.coverage.get("api_requests", 0),
+                "input_tokens": self.coverage.get("input_tokens", 0),
+                "output_tokens": self.coverage.get("output_tokens", 0),
+                "total_tokens": self.coverage.get("total_tokens", 0),
+                "execution_latency_seconds": round(self.seconds, 2),
+            },
             "coverage": self.coverage,
             "missed": self.missed,
             "spurious": self.spurious,
@@ -225,6 +237,9 @@ def _compute_dir_hash(p: Path) -> str:
     h = hashlib.sha256()
     for f in sorted(p.rglob("*")):
         if f.is_file():
+            rel_parts = f.relative_to(p).parts
+            if any(part.startswith(".") for part in rel_parts) or any(part == "__pycache__" for part in rel_parts):
+                continue
             rel = f.relative_to(p).as_posix()
             h.update(rel.encode("utf-8"))
             h.update(f.read_bytes())
@@ -316,11 +331,18 @@ def load_dataset(dataset_dir: Path) -> Tuple[List[Label], Dict[str, Any]]:
     if "partial_labels" not in payload and payload.get("match_mode") == "file" and not payload.get("clean_files"):
         partial = True
 
+    clean_files_raw = payload.get("clean_files", [])
+    clean_files_list = [
+        Path(f["file"] if isinstance(f, dict) else f).as_posix()
+        for f in clean_files_raw
+    ]
+
     meta = {
         "name": payload.get("name", dataset_dir.name),
         "source": payload.get("source", ""),
         "match_mode": payload.get("match_mode", "line"),
-        "clean_files": [Path(f).as_posix() for f in payload.get("clean_files", [])],
+        "clean_files": clean_files_list,
+        "clean_file_controls": [f for f in clean_files_raw if isinstance(f, dict)],
         "partial_labels": partial,
     }
     return labels, meta
@@ -548,10 +570,14 @@ async def run_vulnagent(
     configuration_name: str = "VulnAgent",
     use_cache: bool = True,
     semgrep_configs: Optional[Tuple[str, ...]] = None,
+    use_ast_slicer: bool = True,
+    suppress_unconfirmed_rules: bool = False,
+    **kwargs: Any,
 ) -> RunRecord:
     """
     Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
     """
+    min_risk = kwargs.pop("min_risk", 0)
     options = ScanOptions(
         target=str(samples_dir),
         use_llm=use_llm,
@@ -561,6 +587,10 @@ async def run_vulnagent(
         use_cache=use_cache,
         verify=verify,
         verify_all=verify_all,
+        use_ast_slicer=use_ast_slicer,
+        suppress_unconfirmed_rules=suppress_unconfirmed_rules,
+        min_risk=min_risk,
+        **kwargs,
     )
     started = time.perf_counter()
     try:
@@ -605,9 +635,19 @@ async def run_vulnagent(
     ]
     hits = result.stats.get("cache_hits", 0)
     misses = result.stats.get("cache_misses", 0)
+    req_cnt = (
+        len(result.stats["files_requested"])
+        if isinstance(result.stats.get("files_requested"), (list, tuple, set))
+        else int(result.stats.get("files_requested", 0) or 0)
+    )
+    scanned_cnt = int(result.stats.get("files_scanned", len(result.reports)) or 0)
+    if req_cnt == 0:
+        req_cnt = scanned_cnt
+    comp_rate = (scanned_cnt / req_cnt) if req_cnt > 0 else 1.0
     coverage = {
-        "files_scanned": result.stats.get("files_scanned", len(result.reports)),
-        "files_requested": result.stats.get("files_requested", 0),
+        "files_scanned": scanned_cnt,
+        "files_requested": req_cnt,
+        "completion_rate": comp_rate,
         "total_seconds": result.stats.get("total_seconds", elapsed),
         "cache_hits": hits,
         "cache_misses": misses,
@@ -617,7 +657,8 @@ async def run_vulnagent(
         "rule_tier_seconds": result.stats.get("rule_tier_seconds", 0.0),
         "llm_tier_seconds": result.stats.get("llm_tier_seconds", 0.0),
     }
-    for k in ("verify_seconds", "verify_uncertain", "verify_refuted", "verify_supported"):
+    for k in ("verify_seconds", "verify_uncertain", "verify_refuted", "verify_supported",
+              "api_requests", "input_tokens", "output_tokens", "total_tokens", "telemetry"):
         if k in result.stats:
             coverage[k] = result.stats[k]
 
@@ -769,8 +810,9 @@ def render_table(results: List[Metrics]) -> str:
     """
     Format the comparison table, distinguishing completed, degraded, and failed runs.
     """
+    col_width = max([len(m.name) for m in results] + [len("configuration"), 24]) if results else 24
     header = (
-        f"{'configuration':<24} {'status':<10} {'TP':>4} {'FP':>4} {'FN':>4} "
+        f"{'configuration':<{col_width}} {'status':<10} {'TP':>4} {'FP':>4} {'FN':>4} "
         f"{'precision':>10} {'recall':>8} {'F1':>7} {'sec':>7}"
     )
     lines = [header, "-" * len(header)]
@@ -781,7 +823,7 @@ def render_table(results: List[Metrics]) -> str:
 
         if metrics.status not in ("completed", "degraded"):
             lines.append(
-                f"{metrics.name:<24} {status_str:<10} {'---':>4} {'---':>4} "
+                f"{metrics.name:<{col_width}} {status_str:<10} {'---':>4} {'---':>4} "
                 f"{'---':>4} {'---':>10} {'---':>8} {'---':>7} {metrics.seconds:>7.1f}"
             )
             continue
@@ -790,7 +832,7 @@ def render_table(results: List[Metrics]) -> str:
         precision = "       n/a" if metrics.partial else f"{metrics.precision:>10.3f}"
         f1 = "    n/a" if metrics.partial else f"{metrics.f1:>7.3f}"
         lines.append(
-            f"{metrics.name:<24} {status_str:<10} {metrics.true_positives:>4} {fp} "
+            f"{metrics.name:<{col_width}} {status_str:<10} {metrics.true_positives:>4} {fp} "
             f"{metrics.false_negatives:>4} {precision} "
             f"{metrics.recall:>8.3f} {f1} {metrics.seconds:>7.1f}"
         )
@@ -798,11 +840,12 @@ def render_table(results: List[Metrics]) -> str:
 
 
 CONFIGURATIONS = {
-    "hybrid": ("VulnAgent (hybrid)", dict(use_llm=True, use_semgrep=True)),
-    "confirmed": ("VulnAgent (confirmed)", dict(use_llm=True, use_semgrep=True, confirmed_only=True)),
+    "deep-verify": ("VulnAgent DeepVerify", dict(use_llm=True, use_semgrep=True, use_ast_slicer=True, verify=True, verify_all=True, suppress_unconfirmed_rules=True, min_risk=0)),
+    "3tier": ("VulnAgent DeepVerify", dict(use_llm=True, use_semgrep=True, use_ast_slicer=True, verify=True, verify_all=True, suppress_unconfirmed_rules=True, min_risk=0)),
     "semgrep": ("Semgrep only", dict(use_llm=False, use_semgrep=True)),
-    "llm": ("LLM only", dict(use_llm=True, use_semgrep=False)),
-    "verified": ("VulnAgent (agent-verified)", dict(use_llm=True, use_semgrep=True, verify=True)),
+    "llm": ("LLM only", dict(use_llm=True, use_semgrep=False, use_ast_slicer=False)),
+    "ast": ("VulnAgent (AST-Slicer + LLM)", dict(use_llm=True, use_semgrep=False, use_ast_slicer=True)),
+    "confirmed": ("VulnAgent (confirmed)", dict(use_llm=True, use_semgrep=True, confirmed_only=True)),
     "llm-verified": ("LLM only + agent verify", dict(use_llm=True, use_semgrep=False, verify=True, verify_all=True)),
 }
 
@@ -817,7 +860,7 @@ async def main() -> int:
         help="Dataset directory containing labels.json and samples/"
     )
     parser.add_argument(
-        "--only", choices=list(CONFIGURATIONS) + ["bandit"], action="append",
+        "--only", choices=list(CONFIGURATIONS.keys()) + ["bandit"], action="append",
         help="Run only the named configuration (repeatable)"
     )
     parser.add_argument("--json", help="Write full results to a JSON file")
@@ -825,9 +868,13 @@ async def main() -> int:
     parser.add_argument("--rules", default=None, help="Semgrep rules configuration (file, dir, or pack, comma-separated)")
     parser.add_argument("--exact-cwe", action="store_true", help="Require exact CWE number match (no equivalence classes)")
     parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
+    parser.add_argument("--model", default=None, help="LLM model identifier to use (overrides OPENAI_MODEL)")
     parser.add_argument("--no-cache", action="store_true", help="Disable analyzer caching to measure cold latency and model variance")
     parser.add_argument("--cold", action="store_true", help="Alias for --no-cache")
     args = parser.parse_args()
+
+    if args.model:
+        os.environ["OPENAI_MODEL"] = args.model
 
     use_cache = not (args.no_cache or args.cold)
 
@@ -897,7 +944,7 @@ async def main() -> int:
         print("          cannot be judged: this run measures RECALL only.")
     print()
 
-    selected = args.only or list(CONFIGURATIONS)
+    selected = args.only or list(CONFIGURATIONS.keys())
     results: List[Metrics] = []
 
     for key in CONFIGURATIONS:
@@ -1152,8 +1199,16 @@ async def main() -> int:
                 "timestamp": time.time(),
                 "iso_timestamp": datetime.now().isoformat(),
             },
+            "telemetry": {
+                "api_requests": sum(m.coverage.get("api_requests", 0) for m in results),
+                "input_tokens": sum(m.coverage.get("input_tokens", 0) for m in results),
+                "output_tokens": sum(m.coverage.get("output_tokens", 0) for m in results),
+                "total_tokens": sum(m.coverage.get("total_tokens", 0) for m in results),
+                "execution_latency_seconds": round(sum(m.seconds for m in results), 2),
+            },
             "results": [m.as_dict() for m in results],
         }
+        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.json).write_text(
             json.dumps(manifest_payload, indent=2, ensure_ascii=False),
             encoding="utf-8"

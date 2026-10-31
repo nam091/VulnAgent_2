@@ -1,0 +1,5 @@
+Configuration,Status,TP,FP,FN,Precision,Recall,F1_Score,FP_Clean_Files,FP_Wrong_Type,Execution_Time_sec
+Semgrep only,completed,1,7,9,0.1250,0.1000,0.1111,3,3,5.21
+LLM only (cmc/reflection/beam:free),degraded,10,68,0,0.1282,1.0000,0.2273,21,20,117.47
+VulnAgent (hybrid),degraded,6,17,4,0.2609,0.6000,0.3636,7,6,214.48
+VulnAgent (3-Tier Full: AST + LLM + Verifier),completed,10,52,0,0.1613,1.0000,0.2778,5,20,182.40

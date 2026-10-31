@@ -1,0 +1,393 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "OWASP BenchmarkPython 100 (50 Vuln + 50 Clean)",
+    "source": "https://github.com/OWASP-Benchmark/BenchmarkPython",
+    "match_mode": "file",
+    "labels": 50,
+    "files": 50,
+    "partial_labels": false,
+    "labels_sha256": "5ee51d677825f94c33564e24f3d195b3b149be8811df28e0666477eec3b2dea7",
+    "samples_sha256": "bbc20fbbb6ec778c477c59fde02f9dc0ec58e5c025cc4b65597820781677feab",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\benchmark100"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "5ee51d677825f94c33564e24f3d195b3b149be8811df28e0666477eec3b2dea7",
+    "initial_samples_sha256": "bbc20fbbb6ec778c477c59fde02f9dc0ec58e5c025cc4b65597820781677feab"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 100,
+    "concurrency": 16,
+    "timestamp": 1792985826.0561361,
+    "iso_timestamp": "2026-10-26T10:37:06.056139"
+  },
+  "telemetry": {
+    "api_requests": 454,
+    "input_tokens": 3222552,
+    "output_tokens": 329286,
+    "total_tokens": 3551838,
+    "execution_latency_seconds": 308.49
+  },
+  "results": [
+    {
+      "name": "VulnAgent DeepVerify",
+      "status": "completed",
+      "degraded": false,
+      "errors": [],
+      "tp": 49,
+      "fp": 2,
+      "fn": 1,
+      "precision": 0.9608,
+      "recall": 0.98,
+      "f1": 0.9703,
+      "unmatched": 0,
+      "fp_on_clean_files": 1,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 0,
+      "fp_wrong_type_right_file": 1,
+      "partial_ground_truth": false,
+      "seconds": 308.49,
+      "telemetry": {
+        "api_requests": 454,
+        "input_tokens": 3222552,
+        "output_tokens": 329286,
+        "total_tokens": 3551838,
+        "execution_latency_seconds": 308.49
+      },
+      "coverage": {
+        "files_scanned": 100,
+        "files_requested": 100,
+        "completion_rate": 1.0,
+        "total_seconds": 308.32,
+        "cache_hits": 0,
+        "cache_misses": 100,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 8.4,
+        "llm_tier_seconds": 153.4,
+        "verify_seconds": 144.79,
+        "verify_uncertain": 5,
+        "verify_refuted": 6,
+        "api_requests": 454,
+        "input_tokens": 3222552,
+        "output_tokens": 329286,
+        "total_tokens": 3551838,
+        "telemetry": {
+          "api_requests": 454,
+          "input_tokens": 3222552,
+          "output_tokens": 329286,
+          "total_tokens": 3551838,
+          "prompt_tokens": 3222552,
+          "completion_tokens": 329286
+        }
+      },
+      "missed": [
+        "BenchmarkTest00655.py:0 REDIRECT"
+      ],
+      "spurious": [
+        "BenchmarkTest00994.py:63 CROSS_SITE_SCRIPTING",
+        "BenchmarkTest01173.py:51 OS_COMMAND_INJECTION"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00078.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00074.py",
+          "line": 51
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00605.py",
+          "line": 47
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00657.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00008.py",
+          "line": 50
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00099.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00198.py",
+          "line": 47
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00368.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00454.py",
+          "line": 44
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00455.py",
+          "line": 46
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00068.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00463.py",
+          "line": 46
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00166.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00167.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00168.py",
+          "line": 60
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00249.py",
+          "line": 57
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00251.py",
+          "line": 59
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00270.py",
+          "line": 41
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00483.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00503.py",
+          "line": 40
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00511.py",
+          "line": 57
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00517.py",
+          "line": 57
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00607.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00708.py",
+          "line": 63
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00716.py",
+          "line": 58
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00820.py",
+          "line": 41
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00951.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00283.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00284.py",
+          "line": 47
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00844.py",
+          "line": 50
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00986.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00994.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00994.py",
+          "line": 63
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00085.py",
+          "line": 45
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00175.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00219.py",
+          "line": 47
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00296.py",
+          "line": 58
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00475.py",
+          "line": 45
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00621.py",
+          "line": 52
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00622.py",
+          "line": 52
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00343.py",
+          "line": 44
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00914.py",
+          "line": 57
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest01173.py",
+          "line": 51
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00205.py",
+          "line": 53
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00450.py",
+          "line": 42
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00462.py",
+          "line": 48
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00531.py",
+          "line": 49
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00669.py",
+          "line": 31
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00753.py",
+          "line": 48
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00930.py",
+          "line": 56
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00272.py",
+          "line": 45
+        }
+      ]
+    }
+  ]
+}

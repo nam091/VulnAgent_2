@@ -1,0 +1,4611 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "OWASP Benchmark for Python v0.1",
+    "source": "https://github.com/OWASP-Benchmark/BenchmarkPython",
+    "match_mode": "file",
+    "labels": 452,
+    "files": 452,
+    "partial_labels": false,
+    "labels_sha256": "beab50d39ff6c63bb454e1a7d8092fdb39a6cbd75e05cceefca02e66e6a95307",
+    "samples_sha256": "8d0638664e7c0cef2e56c7a778714d1af72d45b4535dca62c0cd147ea79fdd1b",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\benchmark"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "beab50d39ff6c63bb454e1a7d8092fdb39a6cbd75e05cceefca02e66e6a95307",
+    "initial_samples_sha256": "8d0638664e7c0cef2e56c7a778714d1af72d45b4535dca62c0cd147ea79fdd1b"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "concurrency": 5,
+    "timestamp": 1792859902.0810604,
+    "iso_timestamp": "2026-10-24T23:38:22.081062"
+  },
+  "telemetry": {
+    "api_requests": 1382,
+    "input_tokens": 10924500,
+    "output_tokens": 150300,
+    "total_tokens": 11074800,
+    "execution_latency_seconds": 388.5
+  },
+  "results": [
+    {
+      "name": "VulnAgent DeepVerify",
+      "status": "completed",
+      "degraded": false,
+      "errors": [],
+      "tp": 439,
+      "fp": 96,
+      "fn": 13,
+      "precision": 0.8206,
+      "recall": 0.9712,
+      "f1": 0.8896,
+      "unmatched": 0,
+      "fp_on_clean_files": 18,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 0,
+      "fp_wrong_type_right_file": 28,
+      "partial_ground_truth": false,
+      "seconds": 388.5,
+      "telemetry": {
+        "api_requests": 1382,
+        "input_tokens": 10924500,
+        "output_tokens": 150300,
+        "total_tokens": 11074800,
+        "execution_latency_seconds": 388.5
+      },
+      "coverage": {
+        "files_scanned": 1230,
+        "files_requested": [
+          "BenchmarkTest00001.py",
+          "BenchmarkTest00002.py",
+          "BenchmarkTest00003.py",
+          "BenchmarkTest00004.py",
+          "BenchmarkTest00005.py",
+          "BenchmarkTest00006.py",
+          "BenchmarkTest00007.py",
+          "BenchmarkTest00008.py",
+          "BenchmarkTest00009.py",
+          "BenchmarkTest00010.py",
+          "BenchmarkTest00011.py",
+          "BenchmarkTest00012.py",
+          "BenchmarkTest00013.py",
+          "BenchmarkTest00014.py",
+          "BenchmarkTest00015.py",
+          "BenchmarkTest00016.py",
+          "BenchmarkTest00017.py",
+          "BenchmarkTest00018.py",
+          "BenchmarkTest00019.py",
+          "BenchmarkTest00020.py",
+          "BenchmarkTest00021.py",
+          "BenchmarkTest00022.py",
+          "BenchmarkTest00023.py",
+          "BenchmarkTest00024.py",
+          "BenchmarkTest00025.py",
+          "BenchmarkTest00026.py",
+          "BenchmarkTest00027.py",
+          "BenchmarkTest00028.py",
+          "BenchmarkTest00029.py",
+          "BenchmarkTest00030.py",
+          "BenchmarkTest00031.py",
+          "BenchmarkTest00032.py",
+          "BenchmarkTest00033.py",
+          "BenchmarkTest00034.py",
+          "BenchmarkTest00035.py",
+          "BenchmarkTest00036.py",
+          "BenchmarkTest00037.py",
+          "BenchmarkTest00038.py",
+          "BenchmarkTest00039.py",
+          "BenchmarkTest00040.py",
+          "BenchmarkTest00041.py",
+          "BenchmarkTest00042.py",
+          "BenchmarkTest00043.py",
+          "BenchmarkTest00044.py",
+          "BenchmarkTest00045.py",
+          "BenchmarkTest00046.py",
+          "BenchmarkTest00047.py",
+          "BenchmarkTest00048.py",
+          "BenchmarkTest00049.py",
+          "BenchmarkTest00050.py",
+          "BenchmarkTest00051.py",
+          "BenchmarkTest00052.py",
+          "BenchmarkTest00053.py",
+          "BenchmarkTest00054.py",
+          "BenchmarkTest00055.py",
+          "BenchmarkTest00056.py",
+          "BenchmarkTest00057.py",
+          "BenchmarkTest00058.py",
+          "BenchmarkTest00059.py",
+          "BenchmarkTest00060.py",
+          "BenchmarkTest00061.py",
+          "BenchmarkTest00062.py",
+          "BenchmarkTest00063.py",
+          "BenchmarkTest00064.py",
+          "BenchmarkTest00065.py",
+          "BenchmarkTest00066.py",
+          "BenchmarkTest00067.py",
+          "BenchmarkTest00068.py",
+          "BenchmarkTest00069.py",
+          "BenchmarkTest00070.py",
+          "BenchmarkTest00071.py",
+          "BenchmarkTest00072.py",
+          "BenchmarkTest00073.py",
+          "BenchmarkTest00074.py",
+          "BenchmarkTest00075.py",
+          "BenchmarkTest00076.py",
+          "BenchmarkTest00077.py",
+          "BenchmarkTest00078.py",
+          "BenchmarkTest00079.py",
+          "BenchmarkTest00080.py",
+          "BenchmarkTest00081.py",
+          "BenchmarkTest00082.py",
+          "BenchmarkTest00083.py",
+          "BenchmarkTest00084.py",
+          "BenchmarkTest00085.py",
+          "BenchmarkTest00086.py",
+          "BenchmarkTest00087.py",
+          "BenchmarkTest00088.py",
+          "BenchmarkTest00089.py",
+          "BenchmarkTest00090.py",
+          "BenchmarkTest00091.py",
+          "BenchmarkTest00092.py",
+          "BenchmarkTest00093.py",
+          "BenchmarkTest00094.py",
+          "BenchmarkTest00095.py",
+          "BenchmarkTest00096.py",
+          "BenchmarkTest00097.py",
+          "BenchmarkTest00098.py",
+          "BenchmarkTest00099.py",
+          "BenchmarkTest00100.py",
+          "BenchmarkTest00101.py",
+          "BenchmarkTest00102.py",
+          "BenchmarkTest00103.py",
+          "BenchmarkTest00104.py",
+          "BenchmarkTest00105.py",
+          "BenchmarkTest00106.py",
+          "BenchmarkTest00107.py",
+          "BenchmarkTest00108.py",
+          "BenchmarkTest00109.py",
+          "BenchmarkTest00110.py",
+          "BenchmarkTest00111.py",
+          "BenchmarkTest00112.py",
+          "BenchmarkTest00113.py",
+          "BenchmarkTest00114.py",
+          "BenchmarkTest00115.py",
+          "BenchmarkTest00116.py",
+          "BenchmarkTest00117.py",
+          "BenchmarkTest00118.py",
+          "BenchmarkTest00119.py",
+          "BenchmarkTest00120.py",
+          "BenchmarkTest00121.py",
+          "BenchmarkTest00122.py",
+          "BenchmarkTest00123.py",
+          "BenchmarkTest00124.py",
+          "BenchmarkTest00125.py",
+          "BenchmarkTest00126.py",
+          "BenchmarkTest00127.py",
+          "BenchmarkTest00128.py",
+          "BenchmarkTest00129.py",
+          "BenchmarkTest00130.py",
+          "BenchmarkTest00131.py",
+          "BenchmarkTest00132.py",
+          "BenchmarkTest00133.py",
+          "BenchmarkTest00134.py",
+          "BenchmarkTest00135.py",
+          "BenchmarkTest00136.py",
+          "BenchmarkTest00137.py",
+          "BenchmarkTest00138.py",
+          "BenchmarkTest00139.py",
+          "BenchmarkTest00140.py",
+          "BenchmarkTest00141.py",
+          "BenchmarkTest00142.py",
+          "BenchmarkTest00143.py",
+          "BenchmarkTest00144.py",
+          "BenchmarkTest00145.py",
+          "BenchmarkTest00146.py",
+          "BenchmarkTest00147.py",
+          "BenchmarkTest00148.py",
+          "BenchmarkTest00149.py",
+          "BenchmarkTest00150.py",
+          "BenchmarkTest00151.py",
+          "BenchmarkTest00152.py",
+          "BenchmarkTest00153.py",
+          "BenchmarkTest00154.py",
+          "BenchmarkTest00155.py",
+          "BenchmarkTest00156.py",
+          "BenchmarkTest00157.py",
+          "BenchmarkTest00158.py",
+          "BenchmarkTest00159.py",
+          "BenchmarkTest00160.py",
+          "BenchmarkTest00161.py",
+          "BenchmarkTest00162.py",
+          "BenchmarkTest00163.py",
+          "BenchmarkTest00164.py",
+          "BenchmarkTest00165.py",
+          "BenchmarkTest00166.py",
+          "BenchmarkTest00167.py",
+          "BenchmarkTest00168.py",
+          "BenchmarkTest00169.py",
+          "BenchmarkTest00170.py",
+          "BenchmarkTest00171.py",
+          "BenchmarkTest00172.py",
+          "BenchmarkTest00173.py",
+          "BenchmarkTest00174.py",
+          "BenchmarkTest00175.py",
+          "BenchmarkTest00176.py",
+          "BenchmarkTest00177.py",
+          "BenchmarkTest00178.py",
+          "BenchmarkTest00179.py",
+          "BenchmarkTest00180.py",
+          "BenchmarkTest00181.py",
+          "BenchmarkTest00182.py",
+          "BenchmarkTest00183.py",
+          "BenchmarkTest00184.py",
+          "BenchmarkTest00185.py",
+          "BenchmarkTest00186.py",
+          "BenchmarkTest00187.py",
+          "BenchmarkTest00188.py",
+          "BenchmarkTest00189.py",
+          "BenchmarkTest00190.py",
+          "BenchmarkTest00191.py",
+          "BenchmarkTest00192.py",
+          "BenchmarkTest00193.py",
+          "BenchmarkTest00194.py",
+          "BenchmarkTest00195.py",
+          "BenchmarkTest00196.py",
+          "BenchmarkTest00197.py",
+          "BenchmarkTest00198.py",
+          "BenchmarkTest00199.py",
+          "BenchmarkTest00200.py",
+          "BenchmarkTest00201.py",
+          "BenchmarkTest00202.py",
+          "BenchmarkTest00203.py",
+          "BenchmarkTest00204.py",
+          "BenchmarkTest00205.py",
+          "BenchmarkTest00206.py",
+          "BenchmarkTest00207.py",
+          "BenchmarkTest00208.py",
+          "BenchmarkTest00209.py",
+          "BenchmarkTest00210.py",
+          "BenchmarkTest00211.py",
+          "BenchmarkTest00212.py",
+          "BenchmarkTest00213.py",
+          "BenchmarkTest00214.py",
+          "BenchmarkTest00215.py",
+          "BenchmarkTest00216.py",
+          "BenchmarkTest00217.py",
+          "BenchmarkTest00218.py",
+          "BenchmarkTest00219.py",
+          "BenchmarkTest00220.py",
+          "BenchmarkTest00221.py",
+          "BenchmarkTest00222.py",
+          "BenchmarkTest00223.py",
+          "BenchmarkTest00224.py",
+          "BenchmarkTest00225.py",
+          "BenchmarkTest00226.py",
+          "BenchmarkTest00227.py",
+          "BenchmarkTest00228.py",
+          "BenchmarkTest00229.py",
+          "BenchmarkTest00230.py",
+          "BenchmarkTest00231.py",
+          "BenchmarkTest00232.py",
+          "BenchmarkTest00233.py",
+          "BenchmarkTest00234.py",
+          "BenchmarkTest00235.py",
+          "BenchmarkTest00236.py",
+          "BenchmarkTest00237.py",
+          "BenchmarkTest00238.py",
+          "BenchmarkTest00239.py",
+          "BenchmarkTest00240.py",
+          "BenchmarkTest00241.py",
+          "BenchmarkTest00242.py",
+          "BenchmarkTest00243.py",
+          "BenchmarkTest00244.py",
+          "BenchmarkTest00245.py",
+          "BenchmarkTest00246.py",
+          "BenchmarkTest00247.py",
+          "BenchmarkTest00248.py",
+          "BenchmarkTest00249.py",
+          "BenchmarkTest00250.py",
+          "BenchmarkTest00251.py",
+          "BenchmarkTest00252.py",
+          "BenchmarkTest00253.py",
+          "BenchmarkTest00254.py",
+          "BenchmarkTest00255.py",
+          "BenchmarkTest00256.py",
+          "BenchmarkTest00257.py",
+          "BenchmarkTest00258.py",
+          "BenchmarkTest00259.py",
+          "BenchmarkTest00260.py",
+          "BenchmarkTest00261.py",
+          "BenchmarkTest00262.py",
+          "BenchmarkTest00263.py",
+          "BenchmarkTest00264.py",
+          "BenchmarkTest00265.py",
+          "BenchmarkTest00266.py",
+          "BenchmarkTest00267.py",
+          "BenchmarkTest00268.py",
+          "BenchmarkTest00269.py",
+          "BenchmarkTest00270.py",
+          "BenchmarkTest00271.py",
+          "BenchmarkTest00272.py",
+          "BenchmarkTest00273.py",
+          "BenchmarkTest00274.py",
+          "BenchmarkTest00275.py",
+          "BenchmarkTest00276.py",
+          "BenchmarkTest00277.py",
+          "BenchmarkTest00278.py",
+          "BenchmarkTest00279.py",
+          "BenchmarkTest00280.py",
+          "BenchmarkTest00281.py",
+          "BenchmarkTest00282.py",
+          "BenchmarkTest00283.py",
+          "BenchmarkTest00284.py",
+          "BenchmarkTest00285.py",
+          "BenchmarkTest00286.py",
+          "BenchmarkTest00287.py",
+          "BenchmarkTest00288.py",
+          "BenchmarkTest00289.py",
+          "BenchmarkTest00290.py",
+          "BenchmarkTest00291.py",
+          "BenchmarkTest00292.py",
+          "BenchmarkTest00293.py",
+          "BenchmarkTest00294.py",
+          "BenchmarkTest00295.py",
+          "BenchmarkTest00296.py",
+          "BenchmarkTest00297.py",
+          "BenchmarkTest00298.py",
+          "BenchmarkTest00299.py",
+          "BenchmarkTest00300.py",
+          "BenchmarkTest00301.py",
+          "BenchmarkTest00302.py",
+          "BenchmarkTest00303.py",
+          "BenchmarkTest00304.py",
+          "BenchmarkTest00305.py",
+          "BenchmarkTest00306.py",
+          "BenchmarkTest00307.py",
+          "BenchmarkTest00308.py",
+          "BenchmarkTest00309.py",
+          "BenchmarkTest00310.py",
+          "BenchmarkTest00311.py",
+          "BenchmarkTest00312.py",
+          "BenchmarkTest00313.py",
+          "BenchmarkTest00314.py",
+          "BenchmarkTest00315.py",
+          "BenchmarkTest00316.py",
+          "BenchmarkTest00317.py",
+          "BenchmarkTest00318.py",
+          "BenchmarkTest00319.py",
+          "BenchmarkTest00320.py",
+          "BenchmarkTest00321.py",
+          "BenchmarkTest00322.py",
+          "BenchmarkTest00323.py",
+          "BenchmarkTest00324.py",
+          "BenchmarkTest00325.py",
+          "BenchmarkTest00326.py",
+          "BenchmarkTest00327.py",
+          "BenchmarkTest00328.py",
+          "BenchmarkTest00329.py",
+          "BenchmarkTest00330.py",
+          "BenchmarkTest00331.py",
+          "BenchmarkTest00332.py",
+          "BenchmarkTest00333.py",
+          "BenchmarkTest00334.py",
+          "BenchmarkTest00335.py",
+          "BenchmarkTest00336.py",
+          "BenchmarkTest00337.py",
+          "BenchmarkTest00338.py",
+          "BenchmarkTest00339.py",
+          "BenchmarkTest00340.py",
+          "BenchmarkTest00341.py",
+          "BenchmarkTest00342.py",
+          "BenchmarkTest00343.py",
+          "BenchmarkTest00344.py",
+          "BenchmarkTest00345.py",
+          "BenchmarkTest00346.py",
+          "BenchmarkTest00347.py",
+          "BenchmarkTest00348.py",
+          "BenchmarkTest00349.py",
+          "BenchmarkTest00350.py",
+          "BenchmarkTest00351.py",
+          "BenchmarkTest00352.py",
+          "BenchmarkTest00353.py",
+          "BenchmarkTest00354.py",
+          "BenchmarkTest00355.py",
+          "BenchmarkTest00356.py",
+          "BenchmarkTest00357.py",
+          "BenchmarkTest00358.py",
+          "BenchmarkTest00359.py",
+          "BenchmarkTest00360.py",
+          "BenchmarkTest00361.py",
+          "BenchmarkTest00362.py",
+          "BenchmarkTest00363.py",
+          "BenchmarkTest00364.py",
+          "BenchmarkTest00365.py",
+          "BenchmarkTest00366.py",
+          "BenchmarkTest00367.py",
+          "BenchmarkTest00368.py",
+          "BenchmarkTest00369.py",
+          "BenchmarkTest00370.py",
+          "BenchmarkTest00371.py",
+          "BenchmarkTest00372.py",
+          "BenchmarkTest00373.py",
+          "BenchmarkTest00374.py",
+          "BenchmarkTest00375.py",
+          "BenchmarkTest00376.py",
+          "BenchmarkTest00377.py",
+          "BenchmarkTest00378.py",
+          "BenchmarkTest00379.py",
+          "BenchmarkTest00380.py",
+          "BenchmarkTest00381.py",
+          "BenchmarkTest00382.py",
+          "BenchmarkTest00383.py",
+          "BenchmarkTest00384.py",
+          "BenchmarkTest00385.py",
+          "BenchmarkTest00386.py",
+          "BenchmarkTest00387.py",
+          "BenchmarkTest00388.py",
+          "BenchmarkTest00389.py",
+          "BenchmarkTest00390.py",
+          "BenchmarkTest00391.py",
+          "BenchmarkTest00392.py",
+          "BenchmarkTest00393.py",
+          "BenchmarkTest00394.py",
+          "BenchmarkTest00395.py",
+          "BenchmarkTest00396.py",
+          "BenchmarkTest00397.py",
+          "BenchmarkTest00398.py",
+          "BenchmarkTest00399.py",
+          "BenchmarkTest00400.py",
+          "BenchmarkTest00401.py",
+          "BenchmarkTest00402.py",
+          "BenchmarkTest00403.py",
+          "BenchmarkTest00404.py",
+          "BenchmarkTest00405.py",
+          "BenchmarkTest00406.py",
+          "BenchmarkTest00407.py",
+          "BenchmarkTest00408.py",
+          "BenchmarkTest00409.py",
+          "BenchmarkTest00410.py",
+          "BenchmarkTest00411.py",
+          "BenchmarkTest00412.py",
+          "BenchmarkTest00413.py",
+          "BenchmarkTest00414.py",
+          "BenchmarkTest00415.py",
+          "BenchmarkTest00416.py",
+          "BenchmarkTest00417.py",
+          "BenchmarkTest00418.py",
+          "BenchmarkTest00419.py",
+          "BenchmarkTest00420.py",
+          "BenchmarkTest00421.py",
+          "BenchmarkTest00422.py",
+          "BenchmarkTest00423.py",
+          "BenchmarkTest00424.py",
+          "BenchmarkTest00425.py",
+          "BenchmarkTest00426.py",
+          "BenchmarkTest00427.py",
+          "BenchmarkTest00428.py",
+          "BenchmarkTest00429.py",
+          "BenchmarkTest00430.py",
+          "BenchmarkTest00431.py",
+          "BenchmarkTest00432.py",
+          "BenchmarkTest00433.py",
+          "BenchmarkTest00434.py",
+          "BenchmarkTest00435.py",
+          "BenchmarkTest00436.py",
+          "BenchmarkTest00437.py",
+          "BenchmarkTest00438.py",
+          "BenchmarkTest00439.py",
+          "BenchmarkTest00440.py",
+          "BenchmarkTest00441.py",
+          "BenchmarkTest00442.py",
+          "BenchmarkTest00443.py",
+          "BenchmarkTest00444.py",
+          "BenchmarkTest00445.py",
+          "BenchmarkTest00446.py",
+          "BenchmarkTest00447.py",
+          "BenchmarkTest00448.py",
+          "BenchmarkTest00449.py",
+          "BenchmarkTest00450.py",
+          "BenchmarkTest00451.py",
+          "BenchmarkTest00452.py",
+          "BenchmarkTest00453.py",
+          "BenchmarkTest00454.py",
+          "BenchmarkTest00455.py",
+          "BenchmarkTest00456.py",
+          "BenchmarkTest00457.py",
+          "BenchmarkTest00458.py",
+          "BenchmarkTest00459.py",
+          "BenchmarkTest00460.py",
+          "BenchmarkTest00461.py",
+          "BenchmarkTest00462.py",
+          "BenchmarkTest00463.py",
+          "BenchmarkTest00464.py",
+          "BenchmarkTest00465.py",
+          "BenchmarkTest00466.py",
+          "BenchmarkTest00467.py",
+          "BenchmarkTest00468.py",
+          "BenchmarkTest00469.py",
+          "BenchmarkTest00470.py",
+          "BenchmarkTest00471.py",
+          "BenchmarkTest00472.py",
+          "BenchmarkTest00473.py",
+          "BenchmarkTest00474.py",
+          "BenchmarkTest00475.py",
+          "BenchmarkTest00476.py",
+          "BenchmarkTest00477.py",
+          "BenchmarkTest00478.py",
+          "BenchmarkTest00479.py",
+          "BenchmarkTest00480.py",
+          "BenchmarkTest00481.py",
+          "BenchmarkTest00482.py",
+          "BenchmarkTest00483.py",
+          "BenchmarkTest00484.py",
+          "BenchmarkTest00485.py",
+          "BenchmarkTest00486.py",
+          "BenchmarkTest00487.py",
+          "BenchmarkTest00488.py",
+          "BenchmarkTest00489.py",
+          "BenchmarkTest00490.py",
+          "BenchmarkTest00491.py",
+          "BenchmarkTest00492.py",
+          "BenchmarkTest00493.py",
+          "BenchmarkTest00494.py",
+          "BenchmarkTest00495.py",
+          "BenchmarkTest00496.py",
+          "BenchmarkTest00497.py",
+          "BenchmarkTest00498.py",
+          "BenchmarkTest00499.py",
+          "BenchmarkTest00500.py",
+          "BenchmarkTest00501.py",
+          "BenchmarkTest00502.py",
+          "BenchmarkTest00503.py",
+          "BenchmarkTest00504.py",
+          "BenchmarkTest00505.py",
+          "BenchmarkTest00506.py",
+          "BenchmarkTest00507.py",
+          "BenchmarkTest00508.py",
+          "BenchmarkTest00509.py",
+          "BenchmarkTest00510.py",
+          "BenchmarkTest00511.py",
+          "BenchmarkTest00512.py",
+          "BenchmarkTest00513.py",
+          "BenchmarkTest00514.py",
+          "BenchmarkTest00515.py",
+          "BenchmarkTest00516.py",
+          "BenchmarkTest00517.py",
+          "BenchmarkTest00518.py",
+          "BenchmarkTest00519.py",
+          "BenchmarkTest00520.py",
+          "BenchmarkTest00521.py",
+          "BenchmarkTest00522.py",
+          "BenchmarkTest00523.py",
+          "BenchmarkTest00524.py",
+          "BenchmarkTest00525.py",
+          "BenchmarkTest00526.py",
+          "BenchmarkTest00527.py",
+          "BenchmarkTest00528.py",
+          "BenchmarkTest00529.py",
+          "BenchmarkTest00530.py",
+          "BenchmarkTest00531.py",
+          "BenchmarkTest00532.py",
+          "BenchmarkTest00533.py",
+          "BenchmarkTest00534.py",
+          "BenchmarkTest00535.py",
+          "BenchmarkTest00536.py",
+          "BenchmarkTest00537.py",
+          "BenchmarkTest00538.py",
+          "BenchmarkTest00539.py",
+          "BenchmarkTest00540.py",
+          "BenchmarkTest00541.py",
+          "BenchmarkTest00542.py",
+          "BenchmarkTest00543.py",
+          "BenchmarkTest00544.py",
+          "BenchmarkTest00545.py",
+          "BenchmarkTest00546.py",
+          "BenchmarkTest00547.py",
+          "BenchmarkTest00548.py",
+          "BenchmarkTest00549.py",
+          "BenchmarkTest00550.py",
+          "BenchmarkTest00551.py",
+          "BenchmarkTest00552.py",
+          "BenchmarkTest00553.py",
+          "BenchmarkTest00554.py",
+          "BenchmarkTest00555.py",
+          "BenchmarkTest00556.py",
+          "BenchmarkTest00557.py",
+          "BenchmarkTest00558.py",
+          "BenchmarkTest00559.py",
+          "BenchmarkTest00560.py",
+          "BenchmarkTest00561.py",
+          "BenchmarkTest00562.py",
+          "BenchmarkTest00563.py",
+          "BenchmarkTest00564.py",
+          "BenchmarkTest00565.py",
+          "BenchmarkTest00566.py",
+          "BenchmarkTest00567.py",
+          "BenchmarkTest00568.py",
+          "BenchmarkTest00569.py",
+          "BenchmarkTest00570.py",
+          "BenchmarkTest00571.py",
+          "BenchmarkTest00572.py",
+          "BenchmarkTest00573.py",
+          "BenchmarkTest00574.py",
+          "BenchmarkTest00575.py",
+          "BenchmarkTest00576.py",
+          "BenchmarkTest00577.py",
+          "BenchmarkTest00578.py",
+          "BenchmarkTest00579.py",
+          "BenchmarkTest00580.py",
+          "BenchmarkTest00581.py",
+          "BenchmarkTest00582.py",
+          "BenchmarkTest00583.py",
+          "BenchmarkTest00584.py",
+          "BenchmarkTest00585.py",
+          "BenchmarkTest00586.py",
+          "BenchmarkTest00587.py",
+          "BenchmarkTest00588.py",
+          "BenchmarkTest00589.py",
+          "BenchmarkTest00590.py",
+          "BenchmarkTest00591.py",
+          "BenchmarkTest00592.py",
+          "BenchmarkTest00593.py",
+          "BenchmarkTest00594.py",
+          "BenchmarkTest00595.py",
+          "BenchmarkTest00596.py",
+          "BenchmarkTest00597.py",
+          "BenchmarkTest00598.py",
+          "BenchmarkTest00599.py",
+          "BenchmarkTest00600.py",
+          "BenchmarkTest00601.py",
+          "BenchmarkTest00602.py",
+          "BenchmarkTest00603.py",
+          "BenchmarkTest00604.py",
+          "BenchmarkTest00605.py",
+          "BenchmarkTest00606.py",
+          "BenchmarkTest00607.py",
+          "BenchmarkTest00608.py",
+          "BenchmarkTest00609.py",
+          "BenchmarkTest00610.py",
+          "BenchmarkTest00611.py",
+          "BenchmarkTest00612.py",
+          "BenchmarkTest00613.py",
+          "BenchmarkTest00614.py",
+          "BenchmarkTest00615.py",
+          "BenchmarkTest00616.py",
+          "BenchmarkTest00617.py",
+          "BenchmarkTest00618.py",
+          "BenchmarkTest00619.py",
+          "BenchmarkTest00620.py",
+          "BenchmarkTest00621.py",
+          "BenchmarkTest00622.py",
+          "BenchmarkTest00623.py",
+          "BenchmarkTest00624.py",
+          "BenchmarkTest00625.py",
+          "BenchmarkTest00626.py",
+          "BenchmarkTest00627.py",
+          "BenchmarkTest00628.py",
+          "BenchmarkTest00629.py",
+          "BenchmarkTest00630.py",
+          "BenchmarkTest00631.py",
+          "BenchmarkTest00632.py",
+          "BenchmarkTest00633.py",
+          "BenchmarkTest00634.py",
+          "BenchmarkTest00635.py",
+          "BenchmarkTest00636.py",
+          "BenchmarkTest00637.py",
+          "BenchmarkTest00638.py",
+          "BenchmarkTest00639.py",
+          "BenchmarkTest00640.py",
+          "BenchmarkTest00641.py",
+          "BenchmarkTest00642.py",
+          "BenchmarkTest00643.py",
+          "BenchmarkTest00644.py",
+          "BenchmarkTest00645.py",
+          "BenchmarkTest00646.py",
+          "BenchmarkTest00647.py",
+          "BenchmarkTest00648.py",
+          "BenchmarkTest00649.py",
+          "BenchmarkTest00650.py",
+          "BenchmarkTest00651.py",
+          "BenchmarkTest00652.py",
+          "BenchmarkTest00653.py",
+          "BenchmarkTest00654.py",
+          "BenchmarkTest00655.py",
+          "BenchmarkTest00656.py",
+          "BenchmarkTest00657.py",
+          "BenchmarkTest00658.py",
+          "BenchmarkTest00659.py",
+          "BenchmarkTest00660.py",
+          "BenchmarkTest00661.py",
+          "BenchmarkTest00662.py",
+          "BenchmarkTest00663.py",
+          "BenchmarkTest00664.py",
+          "BenchmarkTest00665.py",
+          "BenchmarkTest00666.py",
+          "BenchmarkTest00667.py",
+          "BenchmarkTest00668.py",
+          "BenchmarkTest00669.py",
+          "BenchmarkTest00670.py",
+          "BenchmarkTest00671.py",
+          "BenchmarkTest00672.py",
+          "BenchmarkTest00673.py",
+          "BenchmarkTest00674.py",
+          "BenchmarkTest00675.py",
+          "BenchmarkTest00676.py",
+          "BenchmarkTest00677.py",
+          "BenchmarkTest00678.py",
+          "BenchmarkTest00679.py",
+          "BenchmarkTest00680.py",
+          "BenchmarkTest00681.py",
+          "BenchmarkTest00682.py",
+          "BenchmarkTest00683.py",
+          "BenchmarkTest00684.py",
+          "BenchmarkTest00685.py",
+          "BenchmarkTest00686.py",
+          "BenchmarkTest00687.py",
+          "BenchmarkTest00688.py",
+          "BenchmarkTest00689.py",
+          "BenchmarkTest00690.py",
+          "BenchmarkTest00691.py",
+          "BenchmarkTest00692.py",
+          "BenchmarkTest00693.py",
+          "BenchmarkTest00694.py",
+          "BenchmarkTest00695.py",
+          "BenchmarkTest00696.py",
+          "BenchmarkTest00697.py",
+          "BenchmarkTest00698.py",
+          "BenchmarkTest00699.py",
+          "BenchmarkTest00700.py",
+          "BenchmarkTest00701.py",
+          "BenchmarkTest00702.py",
+          "BenchmarkTest00703.py",
+          "BenchmarkTest00704.py",
+          "BenchmarkTest00705.py",
+          "BenchmarkTest00706.py",
+          "BenchmarkTest00707.py",
+          "BenchmarkTest00708.py",
+          "BenchmarkTest00709.py",
+          "BenchmarkTest00710.py",
+          "BenchmarkTest00711.py",
+          "BenchmarkTest00712.py",
+          "BenchmarkTest00713.py",
+          "BenchmarkTest00714.py",
+          "BenchmarkTest00715.py",
+          "BenchmarkTest00716.py",
+          "BenchmarkTest00717.py",
+          "BenchmarkTest00718.py",
+          "BenchmarkTest00719.py",
+          "BenchmarkTest00720.py",
+          "BenchmarkTest00721.py",
+          "BenchmarkTest00722.py",
+          "BenchmarkTest00723.py",
+          "BenchmarkTest00724.py",
+          "BenchmarkTest00725.py",
+          "BenchmarkTest00726.py",
+          "BenchmarkTest00727.py",
+          "BenchmarkTest00728.py",
+          "BenchmarkTest00729.py",
+          "BenchmarkTest00730.py",
+          "BenchmarkTest00731.py",
+          "BenchmarkTest00732.py",
+          "BenchmarkTest00733.py",
+          "BenchmarkTest00734.py",
+          "BenchmarkTest00735.py",
+          "BenchmarkTest00736.py",
+          "BenchmarkTest00737.py",
+          "BenchmarkTest00738.py",
+          "BenchmarkTest00739.py",
+          "BenchmarkTest00740.py",
+          "BenchmarkTest00741.py",
+          "BenchmarkTest00742.py",
+          "BenchmarkTest00743.py",
+          "BenchmarkTest00744.py",
+          "BenchmarkTest00745.py",
+          "BenchmarkTest00746.py",
+          "BenchmarkTest00747.py",
+          "BenchmarkTest00748.py",
+          "BenchmarkTest00749.py",
+          "BenchmarkTest00750.py",
+          "BenchmarkTest00751.py",
+          "BenchmarkTest00752.py",
+          "BenchmarkTest00753.py",
+          "BenchmarkTest00754.py",
+          "BenchmarkTest00755.py",
+          "BenchmarkTest00756.py",
+          "BenchmarkTest00757.py",
+          "BenchmarkTest00758.py",
+          "BenchmarkTest00759.py",
+          "BenchmarkTest00760.py",
+          "BenchmarkTest00761.py",
+          "BenchmarkTest00762.py",
+          "BenchmarkTest00763.py",
+          "BenchmarkTest00764.py",
+          "BenchmarkTest00765.py",
+          "BenchmarkTest00766.py",
+          "BenchmarkTest00767.py",
+          "BenchmarkTest00768.py",
+          "BenchmarkTest00769.py",
+          "BenchmarkTest00770.py",
+          "BenchmarkTest00771.py",
+          "BenchmarkTest00772.py",
+          "BenchmarkTest00773.py",
+          "BenchmarkTest00774.py",
+          "BenchmarkTest00775.py",
+          "BenchmarkTest00776.py",
+          "BenchmarkTest00777.py",
+          "BenchmarkTest00778.py",
+          "BenchmarkTest00779.py",
+          "BenchmarkTest00780.py",
+          "BenchmarkTest00781.py",
+          "BenchmarkTest00782.py",
+          "BenchmarkTest00783.py",
+          "BenchmarkTest00784.py",
+          "BenchmarkTest00785.py",
+          "BenchmarkTest00786.py",
+          "BenchmarkTest00787.py",
+          "BenchmarkTest00788.py",
+          "BenchmarkTest00789.py",
+          "BenchmarkTest00790.py",
+          "BenchmarkTest00791.py",
+          "BenchmarkTest00792.py",
+          "BenchmarkTest00793.py",
+          "BenchmarkTest00794.py",
+          "BenchmarkTest00795.py",
+          "BenchmarkTest00796.py",
+          "BenchmarkTest00797.py",
+          "BenchmarkTest00798.py",
+          "BenchmarkTest00799.py",
+          "BenchmarkTest00800.py",
+          "BenchmarkTest00801.py",
+          "BenchmarkTest00802.py",
+          "BenchmarkTest00803.py",
+          "BenchmarkTest00804.py",
+          "BenchmarkTest00805.py",
+          "BenchmarkTest00806.py",
+          "BenchmarkTest00807.py",
+          "BenchmarkTest00808.py",
+          "BenchmarkTest00809.py",
+          "BenchmarkTest00810.py",
+          "BenchmarkTest00811.py",
+          "BenchmarkTest00812.py",
+          "BenchmarkTest00813.py",
+          "BenchmarkTest00814.py",
+          "BenchmarkTest00815.py",
+          "BenchmarkTest00816.py",
+          "BenchmarkTest00817.py",
+          "BenchmarkTest00818.py",
+          "BenchmarkTest00819.py",
+          "BenchmarkTest00820.py",
+          "BenchmarkTest00821.py",
+          "BenchmarkTest00822.py",
+          "BenchmarkTest00823.py",
+          "BenchmarkTest00824.py",
+          "BenchmarkTest00825.py",
+          "BenchmarkTest00826.py",
+          "BenchmarkTest00827.py",
+          "BenchmarkTest00828.py",
+          "BenchmarkTest00829.py",
+          "BenchmarkTest00830.py",
+          "BenchmarkTest00831.py",
+          "BenchmarkTest00832.py",
+          "BenchmarkTest00833.py",
+          "BenchmarkTest00834.py",
+          "BenchmarkTest00835.py",
+          "BenchmarkTest00836.py",
+          "BenchmarkTest00837.py",
+          "BenchmarkTest00838.py",
+          "BenchmarkTest00839.py",
+          "BenchmarkTest00840.py",
+          "BenchmarkTest00841.py",
+          "BenchmarkTest00842.py",
+          "BenchmarkTest00843.py",
+          "BenchmarkTest00844.py",
+          "BenchmarkTest00845.py",
+          "BenchmarkTest00846.py",
+          "BenchmarkTest00847.py",
+          "BenchmarkTest00848.py",
+          "BenchmarkTest00849.py",
+          "BenchmarkTest00850.py",
+          "BenchmarkTest00851.py",
+          "BenchmarkTest00852.py",
+          "BenchmarkTest00853.py",
+          "BenchmarkTest00854.py",
+          "BenchmarkTest00855.py",
+          "BenchmarkTest00856.py",
+          "BenchmarkTest00857.py",
+          "BenchmarkTest00858.py",
+          "BenchmarkTest00859.py",
+          "BenchmarkTest00860.py",
+          "BenchmarkTest00861.py",
+          "BenchmarkTest00862.py",
+          "BenchmarkTest00863.py",
+          "BenchmarkTest00864.py",
+          "BenchmarkTest00865.py",
+          "BenchmarkTest00866.py",
+          "BenchmarkTest00867.py",
+          "BenchmarkTest00868.py",
+          "BenchmarkTest00869.py",
+          "BenchmarkTest00870.py",
+          "BenchmarkTest00871.py",
+          "BenchmarkTest00872.py",
+          "BenchmarkTest00873.py",
+          "BenchmarkTest00874.py",
+          "BenchmarkTest00875.py",
+          "BenchmarkTest00876.py",
+          "BenchmarkTest00877.py",
+          "BenchmarkTest00878.py",
+          "BenchmarkTest00879.py",
+          "BenchmarkTest00880.py",
+          "BenchmarkTest00881.py",
+          "BenchmarkTest00882.py",
+          "BenchmarkTest00883.py",
+          "BenchmarkTest00884.py",
+          "BenchmarkTest00885.py",
+          "BenchmarkTest00886.py",
+          "BenchmarkTest00887.py",
+          "BenchmarkTest00888.py",
+          "BenchmarkTest00889.py",
+          "BenchmarkTest00890.py",
+          "BenchmarkTest00891.py",
+          "BenchmarkTest00892.py",
+          "BenchmarkTest00893.py",
+          "BenchmarkTest00894.py",
+          "BenchmarkTest00895.py",
+          "BenchmarkTest00896.py",
+          "BenchmarkTest00897.py",
+          "BenchmarkTest00898.py",
+          "BenchmarkTest00899.py",
+          "BenchmarkTest00900.py",
+          "BenchmarkTest00901.py",
+          "BenchmarkTest00902.py",
+          "BenchmarkTest00903.py",
+          "BenchmarkTest00904.py",
+          "BenchmarkTest00905.py",
+          "BenchmarkTest00906.py",
+          "BenchmarkTest00907.py",
+          "BenchmarkTest00908.py",
+          "BenchmarkTest00909.py",
+          "BenchmarkTest00910.py",
+          "BenchmarkTest00911.py",
+          "BenchmarkTest00912.py",
+          "BenchmarkTest00913.py",
+          "BenchmarkTest00914.py",
+          "BenchmarkTest00915.py",
+          "BenchmarkTest00916.py",
+          "BenchmarkTest00917.py",
+          "BenchmarkTest00918.py",
+          "BenchmarkTest00919.py",
+          "BenchmarkTest00920.py",
+          "BenchmarkTest00921.py",
+          "BenchmarkTest00922.py",
+          "BenchmarkTest00923.py",
+          "BenchmarkTest00924.py",
+          "BenchmarkTest00925.py",
+          "BenchmarkTest00926.py",
+          "BenchmarkTest00927.py",
+          "BenchmarkTest00928.py",
+          "BenchmarkTest00929.py",
+          "BenchmarkTest00930.py",
+          "BenchmarkTest00931.py",
+          "BenchmarkTest00932.py",
+          "BenchmarkTest00933.py",
+          "BenchmarkTest00934.py",
+          "BenchmarkTest00935.py",
+          "BenchmarkTest00936.py",
+          "BenchmarkTest00937.py",
+          "BenchmarkTest00938.py",
+          "BenchmarkTest00939.py",
+          "BenchmarkTest00940.py",
+          "BenchmarkTest00941.py",
+          "BenchmarkTest00942.py",
+          "BenchmarkTest00943.py",
+          "BenchmarkTest00944.py",
+          "BenchmarkTest00945.py",
+          "BenchmarkTest00946.py",
+          "BenchmarkTest00947.py",
+          "BenchmarkTest00948.py",
+          "BenchmarkTest00949.py",
+          "BenchmarkTest00950.py",
+          "BenchmarkTest00951.py",
+          "BenchmarkTest00952.py",
+          "BenchmarkTest00953.py",
+          "BenchmarkTest00954.py",
+          "BenchmarkTest00955.py",
+          "BenchmarkTest00956.py",
+          "BenchmarkTest00957.py",
+          "BenchmarkTest00958.py",
+          "BenchmarkTest00959.py",
+          "BenchmarkTest00960.py",
+          "BenchmarkTest00961.py",
+          "BenchmarkTest00962.py",
+          "BenchmarkTest00963.py",
+          "BenchmarkTest00964.py",
+          "BenchmarkTest00965.py",
+          "BenchmarkTest00966.py",
+          "BenchmarkTest00967.py",
+          "BenchmarkTest00968.py",
+          "BenchmarkTest00969.py",
+          "BenchmarkTest00970.py",
+          "BenchmarkTest00971.py",
+          "BenchmarkTest00972.py",
+          "BenchmarkTest00973.py",
+          "BenchmarkTest00974.py",
+          "BenchmarkTest00975.py",
+          "BenchmarkTest00976.py",
+          "BenchmarkTest00977.py",
+          "BenchmarkTest00978.py",
+          "BenchmarkTest00979.py",
+          "BenchmarkTest00980.py",
+          "BenchmarkTest00981.py",
+          "BenchmarkTest00982.py",
+          "BenchmarkTest00983.py",
+          "BenchmarkTest00984.py",
+          "BenchmarkTest00985.py",
+          "BenchmarkTest00986.py",
+          "BenchmarkTest00987.py",
+          "BenchmarkTest00988.py",
+          "BenchmarkTest00989.py",
+          "BenchmarkTest00990.py",
+          "BenchmarkTest00991.py",
+          "BenchmarkTest00992.py",
+          "BenchmarkTest00993.py",
+          "BenchmarkTest00994.py",
+          "BenchmarkTest00995.py",
+          "BenchmarkTest00996.py",
+          "BenchmarkTest00997.py",
+          "BenchmarkTest00998.py",
+          "BenchmarkTest00999.py",
+          "BenchmarkTest01000.py",
+          "BenchmarkTest01001.py",
+          "BenchmarkTest01002.py",
+          "BenchmarkTest01003.py",
+          "BenchmarkTest01004.py",
+          "BenchmarkTest01005.py",
+          "BenchmarkTest01006.py",
+          "BenchmarkTest01007.py",
+          "BenchmarkTest01008.py",
+          "BenchmarkTest01009.py",
+          "BenchmarkTest01010.py",
+          "BenchmarkTest01011.py",
+          "BenchmarkTest01012.py",
+          "BenchmarkTest01013.py",
+          "BenchmarkTest01014.py",
+          "BenchmarkTest01015.py",
+          "BenchmarkTest01016.py",
+          "BenchmarkTest01017.py",
+          "BenchmarkTest01018.py",
+          "BenchmarkTest01019.py",
+          "BenchmarkTest01020.py",
+          "BenchmarkTest01021.py",
+          "BenchmarkTest01022.py",
+          "BenchmarkTest01023.py",
+          "BenchmarkTest01024.py",
+          "BenchmarkTest01025.py",
+          "BenchmarkTest01026.py",
+          "BenchmarkTest01027.py",
+          "BenchmarkTest01028.py",
+          "BenchmarkTest01029.py",
+          "BenchmarkTest01030.py",
+          "BenchmarkTest01031.py",
+          "BenchmarkTest01032.py",
+          "BenchmarkTest01033.py",
+          "BenchmarkTest01034.py",
+          "BenchmarkTest01035.py",
+          "BenchmarkTest01036.py",
+          "BenchmarkTest01037.py",
+          "BenchmarkTest01038.py",
+          "BenchmarkTest01039.py",
+          "BenchmarkTest01040.py",
+          "BenchmarkTest01041.py",
+          "BenchmarkTest01042.py",
+          "BenchmarkTest01043.py",
+          "BenchmarkTest01044.py",
+          "BenchmarkTest01045.py",
+          "BenchmarkTest01046.py",
+          "BenchmarkTest01047.py",
+          "BenchmarkTest01048.py",
+          "BenchmarkTest01049.py",
+          "BenchmarkTest01050.py",
+          "BenchmarkTest01051.py",
+          "BenchmarkTest01052.py",
+          "BenchmarkTest01053.py",
+          "BenchmarkTest01054.py",
+          "BenchmarkTest01055.py",
+          "BenchmarkTest01056.py",
+          "BenchmarkTest01057.py",
+          "BenchmarkTest01058.py",
+          "BenchmarkTest01059.py",
+          "BenchmarkTest01060.py",
+          "BenchmarkTest01061.py",
+          "BenchmarkTest01062.py",
+          "BenchmarkTest01063.py",
+          "BenchmarkTest01064.py",
+          "BenchmarkTest01065.py",
+          "BenchmarkTest01066.py",
+          "BenchmarkTest01067.py",
+          "BenchmarkTest01068.py",
+          "BenchmarkTest01069.py",
+          "BenchmarkTest01070.py",
+          "BenchmarkTest01071.py",
+          "BenchmarkTest01072.py",
+          "BenchmarkTest01073.py",
+          "BenchmarkTest01074.py",
+          "BenchmarkTest01075.py",
+          "BenchmarkTest01076.py",
+          "BenchmarkTest01077.py",
+          "BenchmarkTest01078.py",
+          "BenchmarkTest01079.py",
+          "BenchmarkTest01080.py",
+          "BenchmarkTest01081.py",
+          "BenchmarkTest01082.py",
+          "BenchmarkTest01083.py",
+          "BenchmarkTest01084.py",
+          "BenchmarkTest01085.py",
+          "BenchmarkTest01086.py",
+          "BenchmarkTest01087.py",
+          "BenchmarkTest01088.py",
+          "BenchmarkTest01089.py",
+          "BenchmarkTest01090.py",
+          "BenchmarkTest01091.py",
+          "BenchmarkTest01092.py",
+          "BenchmarkTest01093.py",
+          "BenchmarkTest01094.py",
+          "BenchmarkTest01095.py",
+          "BenchmarkTest01096.py",
+          "BenchmarkTest01097.py",
+          "BenchmarkTest01098.py",
+          "BenchmarkTest01099.py",
+          "BenchmarkTest01100.py",
+          "BenchmarkTest01101.py",
+          "BenchmarkTest01102.py",
+          "BenchmarkTest01103.py",
+          "BenchmarkTest01104.py",
+          "BenchmarkTest01105.py",
+          "BenchmarkTest01106.py",
+          "BenchmarkTest01107.py",
+          "BenchmarkTest01108.py",
+          "BenchmarkTest01109.py",
+          "BenchmarkTest01110.py",
+          "BenchmarkTest01111.py",
+          "BenchmarkTest01112.py",
+          "BenchmarkTest01113.py",
+          "BenchmarkTest01114.py",
+          "BenchmarkTest01115.py",
+          "BenchmarkTest01116.py",
+          "BenchmarkTest01117.py",
+          "BenchmarkTest01118.py",
+          "BenchmarkTest01119.py",
+          "BenchmarkTest01120.py",
+          "BenchmarkTest01121.py",
+          "BenchmarkTest01122.py",
+          "BenchmarkTest01123.py",
+          "BenchmarkTest01124.py",
+          "BenchmarkTest01125.py",
+          "BenchmarkTest01126.py",
+          "BenchmarkTest01127.py",
+          "BenchmarkTest01128.py",
+          "BenchmarkTest01129.py",
+          "BenchmarkTest01130.py",
+          "BenchmarkTest01131.py",
+          "BenchmarkTest01132.py",
+          "BenchmarkTest01133.py",
+          "BenchmarkTest01134.py",
+          "BenchmarkTest01135.py",
+          "BenchmarkTest01136.py",
+          "BenchmarkTest01137.py",
+          "BenchmarkTest01138.py",
+          "BenchmarkTest01139.py",
+          "BenchmarkTest01140.py",
+          "BenchmarkTest01141.py",
+          "BenchmarkTest01142.py",
+          "BenchmarkTest01143.py",
+          "BenchmarkTest01144.py",
+          "BenchmarkTest01145.py",
+          "BenchmarkTest01146.py",
+          "BenchmarkTest01147.py",
+          "BenchmarkTest01148.py",
+          "BenchmarkTest01149.py",
+          "BenchmarkTest01150.py",
+          "BenchmarkTest01151.py",
+          "BenchmarkTest01152.py",
+          "BenchmarkTest01153.py",
+          "BenchmarkTest01154.py",
+          "BenchmarkTest01155.py",
+          "BenchmarkTest01156.py",
+          "BenchmarkTest01157.py",
+          "BenchmarkTest01158.py",
+          "BenchmarkTest01159.py",
+          "BenchmarkTest01160.py",
+          "BenchmarkTest01161.py",
+          "BenchmarkTest01162.py",
+          "BenchmarkTest01163.py",
+          "BenchmarkTest01164.py",
+          "BenchmarkTest01165.py",
+          "BenchmarkTest01166.py",
+          "BenchmarkTest01167.py",
+          "BenchmarkTest01168.py",
+          "BenchmarkTest01169.py",
+          "BenchmarkTest01170.py",
+          "BenchmarkTest01171.py",
+          "BenchmarkTest01172.py",
+          "BenchmarkTest01173.py",
+          "BenchmarkTest01174.py",
+          "BenchmarkTest01175.py",
+          "BenchmarkTest01176.py",
+          "BenchmarkTest01177.py",
+          "BenchmarkTest01178.py",
+          "BenchmarkTest01179.py",
+          "BenchmarkTest01180.py",
+          "BenchmarkTest01181.py",
+          "BenchmarkTest01182.py",
+          "BenchmarkTest01183.py",
+          "BenchmarkTest01184.py",
+          "BenchmarkTest01185.py",
+          "BenchmarkTest01186.py",
+          "BenchmarkTest01187.py",
+          "BenchmarkTest01188.py",
+          "BenchmarkTest01189.py",
+          "BenchmarkTest01190.py",
+          "BenchmarkTest01191.py",
+          "BenchmarkTest01192.py",
+          "BenchmarkTest01193.py",
+          "BenchmarkTest01194.py",
+          "BenchmarkTest01195.py",
+          "BenchmarkTest01196.py",
+          "BenchmarkTest01197.py",
+          "BenchmarkTest01198.py",
+          "BenchmarkTest01199.py",
+          "BenchmarkTest01200.py",
+          "BenchmarkTest01201.py",
+          "BenchmarkTest01202.py",
+          "BenchmarkTest01203.py",
+          "BenchmarkTest01204.py",
+          "BenchmarkTest01205.py",
+          "BenchmarkTest01206.py",
+          "BenchmarkTest01207.py",
+          "BenchmarkTest01208.py",
+          "BenchmarkTest01209.py",
+          "BenchmarkTest01210.py",
+          "BenchmarkTest01211.py",
+          "BenchmarkTest01212.py",
+          "BenchmarkTest01213.py",
+          "BenchmarkTest01214.py",
+          "BenchmarkTest01215.py",
+          "BenchmarkTest01216.py",
+          "BenchmarkTest01217.py",
+          "BenchmarkTest01218.py",
+          "BenchmarkTest01219.py",
+          "BenchmarkTest01220.py",
+          "BenchmarkTest01221.py",
+          "BenchmarkTest01222.py",
+          "BenchmarkTest01223.py",
+          "BenchmarkTest01224.py",
+          "BenchmarkTest01225.py",
+          "BenchmarkTest01226.py",
+          "BenchmarkTest01227.py",
+          "BenchmarkTest01228.py",
+          "BenchmarkTest01229.py",
+          "BenchmarkTest01230.py"
+        ],
+        "total_seconds": 388.5,
+        "cache_hits": 0,
+        "cache_misses": 742,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 11.45,
+        "llm_tier_seconds": 178.2,
+        "verify_seconds": 198.85,
+        "verified_candidates": 450,
+        "verify_confirmed": 404,
+        "verify_refuted": 362,
+        "verify_uncertain": 12,
+        "api_requests": 1382,
+        "input_tokens": 10924500,
+        "output_tokens": 150300,
+        "total_tokens": 11074800,
+        "telemetry": {
+          "api_requests": 1382,
+          "input_tokens": 10924500,
+          "output_tokens": 150300,
+          "total_tokens": 11074800,
+          "prompt_tokens": 10924500,
+          "completion_tokens": 150300
+        }
+      },
+      "missed": [
+        "BenchmarkTest00001.py:0 PATHTRAVER",
+        "BenchmarkTest00057.py:0 HASH",
+        "BenchmarkTest00066.py:0 SECURECOOKIE",
+        "BenchmarkTest00113.py:0 XPATHI",
+        "BenchmarkTest00143.py:0 HASH",
+        "BenchmarkTest00169.py:0 XSS",
+        "BenchmarkTest00205.py:0 XXE",
+        "BenchmarkTest00210.py:0 XPATHI",
+        "BenchmarkTest00211.py:0 XPATHI",
+        "BenchmarkTest00248.py:0 HASH",
+        "BenchmarkTest00309.py:0 WEAKRAND",
+        "BenchmarkTest00338.py:0 TRUSTBOUND",
+        "BenchmarkTest00368.py:0 XPATHI",
+        "BenchmarkTest00374.py:0 XPATHI",
+        "BenchmarkTest00425.py:0 CODEINJ",
+        "BenchmarkTest00454.py:0 SQLI",
+        "BenchmarkTest00463.py:0 XPATHI",
+        "BenchmarkTest00484.py:0 HASH",
+        "BenchmarkTest00507.py:0 DESERIALIZATION",
+        "BenchmarkTest00523.py:0 PATHTRAVER",
+        "BenchmarkTest00586.py:0 HASH",
+        "BenchmarkTest00615.py:0 PATHTRAVER",
+        "BenchmarkTest00628.py:0 WEAKRAND",
+        "BenchmarkTest00646.py:0 HASH",
+        "BenchmarkTest00657.py:0 DESERIALIZATION",
+        "BenchmarkTest00690.py:0 WEAKRAND",
+        "BenchmarkTest00708.py:0 HASH",
+        "BenchmarkTest00734.py:0 DESERIALIZATION",
+        "BenchmarkTest00737.py:0 PATHTRAVER",
+        "BenchmarkTest00760.py:0 XPATHI",
+        "BenchmarkTest00773.py:0 WEAKRAND",
+        "BenchmarkTest00774.py:0 WEAKRAND",
+        "BenchmarkTest00796.py:0 HASH",
+        "BenchmarkTest00858.py:0 XPATHI",
+        "BenchmarkTest00877.py:0 HASH",
+        "BenchmarkTest00890.py:0 CODEINJ",
+        "BenchmarkTest00894.py:0 CODEINJ",
+        "BenchmarkTest00899.py:0 CMDI",
+        "BenchmarkTest00907.py:0 PATHTRAVER",
+        "BenchmarkTest00932.py:0 XPATHI",
+        "BenchmarkTest00945.py:0 WEAKRAND",
+        "BenchmarkTest00994.py:0 DESERIALIZATION",
+        "BenchmarkTest01077.py:0 HASH",
+        "BenchmarkTest01129.py:0 WEAKRAND",
+        "BenchmarkTest01149.py:0 HASH",
+        "BenchmarkTest01197.py:0 HASH",
+        "BenchmarkTest01208.py:0 REDIRECT",
+        "BenchmarkTest01218.py:0 XPATHI"
+      ],
+      "spurious": [
+        "BenchmarkTest01014.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00131.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00458.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00717.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest01097.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00102.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00590.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00290.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00264.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00388.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00884.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest01169.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest01153.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00163.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00095.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00598.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00917.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00039.py:42 INFORMATION_EXPOSURE",
+        "BenchmarkTest00001.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00057.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00066.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00113.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00143.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00169.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00205.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00210.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00211.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00248.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00309.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00338.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00368.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00374.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00425.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00454.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00463.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00484.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00507.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00523.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00586.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00615.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00628.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00646.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00657.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00690.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00708.py:8 IMPROPER_ERROR_HANDLING",
+        "BenchmarkTest00734.py:8 IMPROPER_ERROR_HANDLING"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00981.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00506.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00824.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00605.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00533.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00272.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00270.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00863.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00517.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00089.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00556.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00563.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest01188.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00583.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00064.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00662.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00449.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00277.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00321.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00624.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00805.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00767.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00974.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00823.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00655.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00268.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00526.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00450.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00610.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00182.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00554.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00601.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00948.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00915.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00906.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00839.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest01191.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01177.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00329.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00973.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00340.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00580.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00606.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00623.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00365.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00072.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00249.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00775.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00986.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00161.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00065.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00502.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00343.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00019.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01047.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00294.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01187.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00178.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00482.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01146.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00298.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00887.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00834.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest01210.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00560.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01185.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00429.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00827.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00473.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01176.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00412.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00385.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00456.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00593.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00326.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00472.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00092.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00768.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00269.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00505.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00511.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00654.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00728.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00466.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00933.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest01212.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00220.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00323.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00713.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00916.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00464.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00168.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00977.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00739.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest01193.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00026.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00115.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00854.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00641.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00510.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00725.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00439.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00165.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00383.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00226.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00336.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00750.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00626.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00422.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00978.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00831.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00982.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00715.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00260.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00714.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01131.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00189.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00562.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00087.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00891.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00244.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00918.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00564.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01127.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00761.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00197.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00054.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00861.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01044.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00266.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00719.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00914.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00025.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00097.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00140.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00625.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00925.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00008.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00489.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00930.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01088.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00772.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00281.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00535.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00604.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01126.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00681.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01085.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00555.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00808.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00944.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00319.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01070.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00825.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00107.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00306.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00585.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01214.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00895.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00116.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00709.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00283.py",
+          "line": 0,
+          "type": "SQLI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00029.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00067.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00541.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00096.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00432.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00642.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00643.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00499.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00515.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00620.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00496.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00431.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00218.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01087.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00267.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00806.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00581.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01183.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00770.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00173.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest01200.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00327.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00418.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00622.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00175.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00372.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01227.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00494.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00716.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00820.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00212.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00085.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00273.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00607.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00462.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00227.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00621.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01190.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00495.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00688.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00384.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00167.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00171.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00718.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00754.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00265.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00742.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00889.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00438.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01192.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00159.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00532.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00160.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00217.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00599.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00114.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00304.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01040.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00950.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00030.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest01216.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00771.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00531.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01194.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00209.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00873.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00673.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00103.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00104.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00485.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00546.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00896.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00769.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00731.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00028.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00596.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00665.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00669.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00992.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00221.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00559.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00947.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01043.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00949.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00031.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00451.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00382.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00733.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00258.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00460.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00098.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00207.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00188.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00370.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00993.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00223.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00765.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00536.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00153.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00187.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00455.py",
+          "line": 0,
+          "type": "SQLI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00453.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "BenchmarkTest00166.py",
+          "line": 0,
+          "type": "CMDI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00819.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00647.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00474.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00735.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00516.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00433.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01050.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00859.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00975.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01196.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00841.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00342.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00476.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00619.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00164.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00366.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00018.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00984.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00561.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00924.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00059.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00351.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00860.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00483.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00225.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00219.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01128.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00707.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00729.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00727.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00305.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00410.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00674.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00667.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00296.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00444.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00817.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01049.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00357.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00613.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest01178.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00068.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00842.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00898.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00373.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00501.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00582.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01045.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00284.py",
+          "line": 0,
+          "type": "SQLI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00689.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00741.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00652.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00002.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00060.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01048.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00751.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01199.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-601",
+          "file": "BenchmarkTest00814.py",
+          "line": 0,
+          "type": "REDIRECT",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01046.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01182.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00117.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00362.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00558.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00888.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00427.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "BenchmarkTest00099.py",
+          "line": 0,
+          "type": "SQLI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00749.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00003.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00766.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00142.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00322.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01147.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00250.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00251.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00844.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00951.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-502",
+          "file": "BenchmarkTest00078.py",
+          "line": 0,
+          "type": "DESERIALIZATION",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00328.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00409.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01148.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00278.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00656.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01130.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00627.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00503.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00862.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00720.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00308.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00534.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00222.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00172.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00920.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00180.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00320.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00445.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00058.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00753.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00682.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00650.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00886.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-79",
+          "file": "BenchmarkTest00923.py",
+          "line": 0,
+          "type": "XSS",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00198.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00543.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00475.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00980.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01181.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00112.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00177.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00101.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01041.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest01145.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest01086.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00529.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-90",
+          "file": "BenchmarkTest00430.py",
+          "line": 0,
+          "type": "LDAPI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00910.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00141.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest01042.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00297.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00651.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00289.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00557.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-611",
+          "file": "BenchmarkTest00931.py",
+          "line": 0,
+          "type": "XXE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00353.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00885.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-643",
+          "file": "BenchmarkTest00545.py",
+          "line": 0,
+          "type": "XPATHI",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "BenchmarkTest00592.py",
+          "line": 0,
+          "type": "SECURECOOKIE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00307.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00835.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00027.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-94",
+          "file": "BenchmarkTest00074.py",
+          "line": 0,
+          "type": "CODEINJ",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-328",
+          "file": "BenchmarkTest00874.py",
+          "line": 0,
+          "type": "HASH",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00224.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00618.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest01179.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00946.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00497.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-501",
+          "file": "BenchmarkTest00341.py",
+          "line": 0,
+          "type": "TRUSTBOUND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-330",
+          "file": "BenchmarkTest00381.py",
+          "line": 0,
+          "type": "WEAKRAND",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "BenchmarkTest00612.py",
+          "line": 0,
+          "type": "PATHTRAVER",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest01014.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00131.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00458.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00717.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest01097.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00102.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00590.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00290.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00264.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00388.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00884.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest01169.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest01153.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00163.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00095.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00598.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00917.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "BenchmarkTest00039.py",
+          "line": 42,
+          "type": "INFORMATION_EXPOSURE",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00001.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00057.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00066.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00113.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00143.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00169.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00205.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00210.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00211.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00248.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00309.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00338.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00368.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00374.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00425.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00454.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00463.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00484.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00507.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00523.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00586.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00615.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00628.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00646.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00657.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00690.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00708.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "BenchmarkTest00734.py",
+          "line": 8,
+          "type": "IMPROPER_ERROR_HANDLING",
+          "source": "confirmed"
+        }
+      ]
+    }
+  ]
+}

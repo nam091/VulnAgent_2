@@ -1,0 +1,188 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "Multi-tier Enterprise Web App Benchmark",
+    "source": "Enterprise multi-tier Python application architecture (Controller -> Service -> Data Access / Storage Driver / Network Client / Task Executor)",
+    "match_mode": "file",
+    "labels": 11,
+    "files": 7,
+    "partial_labels": false,
+    "labels_sha256": "16c2044b197a3bb0c3601a211158957ac453e650d63aec09b74db093dc5ad913",
+    "samples_sha256": "eb339cb1d832cd8bef979e3700621a360b1ef80d6bce8598f11865700fab423b",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\enterprise_multitier"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "16c2044b197a3bb0c3601a211158957ac453e650d63aec09b74db093dc5ad913",
+    "initial_samples_sha256": "eb339cb1d832cd8bef979e3700621a360b1ef80d6bce8598f11865700fab423b"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 10,
+    "concurrency": 16,
+    "timestamp": 1792961426.338514,
+    "iso_timestamp": "2026-10-26T03:50:26.338516"
+  },
+  "telemetry": {
+    "api_requests": 96,
+    "input_tokens": 583930,
+    "output_tokens": 36694,
+    "total_tokens": 620624,
+    "execution_latency_seconds": 83.19
+  },
+  "results": [
+    {
+      "name": "VulnAgent DeepVerify",
+      "status": "completed",
+      "degraded": false,
+      "errors": [],
+      "tp": 11,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "unmatched": 0,
+      "fp_on_clean_files": 0,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 0,
+      "fp_wrong_type_right_file": 0,
+      "partial_ground_truth": false,
+      "seconds": 83.19,
+      "telemetry": {
+        "api_requests": 96,
+        "input_tokens": 583930,
+        "output_tokens": 36694,
+        "total_tokens": 620624,
+        "execution_latency_seconds": 83.19
+      },
+      "coverage": {
+        "files_scanned": 10,
+        "files_requested": 10,
+        "completion_rate": 1.0,
+        "total_seconds": 83.07,
+        "cache_hits": 0,
+        "cache_misses": 10,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 6.88,
+        "llm_tier_seconds": 23.18,
+        "verify_seconds": 52.88,
+        "verify_uncertain": 1,
+        "verify_refuted": 2,
+        "api_requests": 96,
+        "input_tokens": 583930,
+        "output_tokens": 36694,
+        "total_tokens": 620624,
+        "telemetry": {
+          "api_requests": 96,
+          "input_tokens": 583930,
+          "output_tokens": 36694,
+          "total_tokens": 620624,
+          "prompt_tokens": 583930,
+          "completion_tokens": 36694
+        }
+      },
+      "missed": [],
+      "spurious": [],
+      "raw_findings": [
+        {
+          "cwe": "CWE-89",
+          "file": "data_access.py",
+          "line": 30
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "controllers.py",
+          "line": 36
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "controllers.py",
+          "line": 95
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "controllers.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "controllers.py",
+          "line": 74
+        },
+        {
+          "cwe": "CWE-918",
+          "file": "network_client.py",
+          "line": 20
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "storage_driver.py",
+          "line": 22
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "task_executor.py",
+          "line": 24
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "user_service.py",
+          "line": 20
+        },
+        {
+          "cwe": "CWE-78",
+          "file": "user_service.py",
+          "line": 40
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "file_service.py",
+          "line": 12
+        }
+      ]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ warnings.filterwarnings("ignore", message=".*Core Pydantic V1 functionality.*")
 
 # Allow standalone execution from arbitrary cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from analyzer.baseline import BASELINE_FILENAME, Baseline, SuppressionIndex, gate
 from analyzer.fixer import apply_plan, build_plan
@@ -28,7 +29,14 @@ from analyzer.scanner import ScanOptions, Scanner, ScanResult
 from analyzer.semgrep_runner import SemgrepRunner
 from context.diff_scope import DiffScopeAnalyzer
 from integrations.host_adapter import HostAdapter
-from models.vulnerability import FindingSource, Vulnerability, VulnerabilitySeverity
+from models.vulnerability import (
+    FindingSource,
+    StandardFindingOutput,
+    StandardScanOutput,
+    Vulnerability,
+    VulnerabilitySeverity,
+    normalize_posix_path,
+)
 from reporters import console, sarif
 
 __version__ = "1.0.0"
@@ -63,8 +71,8 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
         help="Concurrent LLM calls (default: 5)"
     )
     parser.add_argument(
-        "--min-risk", type=int, default=3,
-        help="Minimum risk score for a file to reach the LLM tier (default: 3)"
+        "--min-risk", type=int, default=None,
+        help="Minimum risk score for a file to reach the LLM tier (default: 3 for standard scan, 0 when DeepVerify/--verify is enabled)"
     )
     parser.add_argument(
         "--max-llm-files", type=int, default=None,
@@ -83,12 +91,32 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
         )
     )
     parser.add_argument(
-        "--verify-all", action="store_true",
+        "--verify-all", action="store_true", default=None,
         help="Verify every finding, not just the LLM-only ones"
+    )
+    parser.add_argument(
+        "--no-verify-all", action="store_false", dest="verify_all",
+        help="Verify only LLM-only findings"
     )
     parser.add_argument(
         "--verify-turns", type=int, default=6,
         help="Investigation budget per finding, in model turns (default: 6)"
+    )
+    parser.add_argument(
+        "--no-ast-slicer", action="store_true",
+        help="Disable intra-procedural backward AST slicing for LLM prompts"
+    )
+    parser.add_argument(
+        "--rules", default=None,
+        help="Semgrep rule configs (file, directory, or registry packs e.g. p/python, p/security-audit, p/owasp-top-ten)"
+    )
+    parser.add_argument(
+        "--offline", action="store_true",
+        help="Use local pinned security rules offline without accessing Semgrep registry"
+    )
+    parser.add_argument(
+        "--no-dashboard", action="store_true",
+        help="Do not record this scan into the Web Dashboard job history."
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -110,6 +138,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     scan = subparsers.add_parser("scan", help="Scan a file or directory")
     _add_scan_options(scan)
+    scan.add_argument(
+        "--verify", action="store_true", dest="verify_findings",
+        help="Alias for --verify-findings"
+    )
+    scan.add_argument(
+        "--min-confidence", type=float, default=None,
+        help="Chỉ xuất các lỗ hổng có độ tin cậy >= ngưỡng (ví dụ: 0.75 hoặc 0.80 cho các lỗ hổng actionable)"
+    )
     scan.add_argument(
         "-f", "--format", choices=("text", "json", "sarif"), default="text",
         help="Output format (default: text)"
@@ -135,6 +171,10 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--no-suppressions", action="store_true",
         help="Ignore inline '# vulnagent: ignore' directives"
+    )
+    scan.add_argument(
+        "--quiet", "-q", action="store_true",
+        help="Suppress real-time progress logging to terminal"
     )
     scan.add_argument("-v", "--verbose", action="store_true", help="Show impact and remediation")
 
@@ -168,7 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Baseline file to write (default: {BASELINE_FILENAME})"
     )
 
-    subparsers.add_parser("serve", help="Run the HTTP API and web UI")
+    serve_cmd = subparsers.add_parser("serve", help="Run the HTTP API and web UI")
+    serve_cmd.add_argument("--port", type=int, default=8088, help="Port to listen on (default: 8088)")
+    serve_cmd.add_argument("--host", default="127.0.0.1", help="Host interface (default: 127.0.0.1)")
     subparsers.add_parser("mcp", help="Run the MCP server on stdio")
 
     init_cmd = subparsers.add_parser("init", help="Initialize VulnAgent in current workspace")
@@ -195,6 +237,38 @@ def build_parser() -> argparse.ArgumentParser:
     hook_cmd.add_argument("--max-rounds", type=int, default=2, help="Max hook rounds (default: 2)")
     hook_cmd.add_argument("--debounce", type=float, default=3.0, help="Debounce in seconds (default: 3.0)")
     hook_cmd.add_argument("--trailing", action="store_true", help="Wait out debounce window to guarantee final edit is analyzed")
+
+    bench_cmd = subparsers.add_parser("benchmark", help="Benchmark evaluation and scoring tools")
+    bench_sub = bench_cmd.add_subparsers(dest="benchmark_command", required=True)
+    score_cmd = bench_sub.add_parser("score", help="Score scan outputs against benchmark ground truth")
+    score_cmd.add_argument(
+        "--scan",
+        nargs="+",
+        action="extend",
+        required=True,
+        help="Path to 1 or more JSON scan output files",
+    )
+    score_cmd.add_argument(
+        "--dataset",
+        default="eval/datasets/benchmark100",
+        help="Benchmark dataset directory or shorthand name (default: eval/datasets/benchmark100)",
+    )
+    score_cmd.add_argument(
+        "--exact-cwe",
+        action="store_true",
+        help="Require exact CWE matching without equivalence classes",
+    )
+    score_cmd.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help="Path to export evaluation results as JSON",
+    )
+    score_cmd.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Print detailed per-CWE breakdown table",
+    )
 
     return parser
 
@@ -226,18 +300,51 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
         ScanOptions: The scan configuration
     """
 
+    verify = bool(
+        getattr(args, "verify_findings", False)
+        or (getattr(args, "verify", False) and getattr(args, "command", None) != "fix")
+    )
+    raw_verify_all = getattr(args, "verify_all", None)
+    raw_suppress = getattr(args, "suppress_unconfirmed_rules", None)
+
+    if verify:
+        verify_all = True if raw_verify_all is not False else False
+        suppress_unconfirmed_rules = True if raw_suppress is not False else False
+    else:
+        verify_all = bool(raw_verify_all) if raw_verify_all is not None else False
+        suppress_unconfirmed_rules = bool(raw_suppress) if raw_suppress is not None else False
+
+    raw_min_risk = getattr(args, "min_risk", None)
+    if raw_min_risk is None:
+        min_risk = 0 if verify else 3
+    else:
+        min_risk = raw_min_risk
+
+    rules_arg = getattr(args, "rules", None)
+    offline = bool(getattr(args, "offline", False))
+    semgrep_configs = (
+        SemgrepRunner.resolve_configs(rules_arg, offline=offline)
+        if (rules_arg or offline)
+        else None
+    )
+
     return ScanOptions(
-        target=str(Path(args.target)),
+        target=str(Path(getattr(args, "target", "."))),
         use_llm=not getattr(args, "no_llm", False),
         use_semgrep=not getattr(args, "no_semgrep", False),
         concurrency=getattr(args, "concurrency", 5),
-        min_risk=getattr(args, "min_risk", 0),
+        min_risk=min_risk,
         max_llm_files=getattr(args, "max_llm_files", None),
         excludes=getattr(args, "exclude", None),
         use_cache=not getattr(args, "no_cache", False),
-        verify=getattr(args, "verify_findings", False),
-        verify_all=getattr(args, "verify_all", False),
+        verify=verify,
+        verify_all=verify_all,
         verify_turns=getattr(args, "verify_turns", 6),
+        semgrep_configs=semgrep_configs,
+        use_ast_slicer=not getattr(args, "no_ast_slicer", False),
+        suppress_unconfirmed_rules=suppress_unconfirmed_rules,
+        min_confidence=getattr(args, "min_confidence", None),
+        offline=offline,
     )
 
 
@@ -309,11 +416,65 @@ async def _run_scan(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     try:
-        result = await Scanner(_options_from(args)).scan()
+        options = _options_from(args)
+        if not getattr(args, "quiet", False):
+            # Banner showing active scan configuration
+            mode_desc = []
+            if options.use_semgrep:
+                mode_desc.append("Semgrep (SAST)")
+            if options.use_llm:
+                model_name = os.getenv("OPENAI_MODEL", "default")
+                mode_desc.append(f"LLM [{model_name}]")
+            if options.verify:
+                mode_desc.append("DeepVerify (Adversarial Agent)")
+            
+            pipeline_name = "VulnAgent DeepVerify" if (options.use_semgrep and options.use_llm and options.verify) else (' + '.join(mode_desc) if mode_desc else 'Rule-only')
+            print(f"[VulnAgent] Target: {options.target}", file=sys.stderr)
+            print(f"[VulnAgent] Pipeline Mode: {pipeline_name}", file=sys.stderr)
+            print(f"[VulnAgent] Concurrency: {options.concurrency} worker(s) | AST Slicer: {'Enabled' if options.use_ast_slicer else 'Disabled'}", file=sys.stderr)
+            print("-" * 78, file=sys.stderr)
+
+            # Real-time event logger to terminal
+            def _cli_progress_logger(event: Dict[str, Any]) -> None:
+                phase = str(event.get("phase", "")).upper()
+                msg = event.get("message", "")
+                pct = event.get("percent", 0.0)
+                
+                tag = f"[{phase}]"
+                if phase == "DISCOVERY":
+                    print(f"[*] {tag:<12} {msg}", file=sys.stderr)
+                elif phase == "RULES":
+                    print(f"[*] {tag:<12} {msg}", file=sys.stderr)
+                elif phase == "LLM":
+                    print(f"[*] {tag:<12} ({pct:>4.1f}%) {msg}", file=sys.stderr)
+                elif phase == "VERIFY":
+                    print(f"[*] {tag:<12} ({pct:>4.1f}%) {msg}", file=sys.stderr)
+                elif phase == "FUSION":
+                    print(f"[*] {tag:<12} {msg}", file=sys.stderr)
+                elif phase == "DONE":
+                    print(f"[+] {tag:<12} {msg}", file=sys.stderr)
+                else:
+                    print(f"[*] {tag:<12} {msg}", file=sys.stderr)
+
+            options.progress = _cli_progress_logger
+
+        result = await Scanner(options).scan()
+        if not getattr(args, "quiet", False):
+            print("-" * 78, file=sys.stderr)
     except Exception as e:
         logging.exception("Scan failed")
         print(f"error: scan failed: {e}", file=sys.stderr)
         return EXIT_ERROR
+
+    if getattr(args, "min_confidence", None) is not None:
+        min_conf = float(args.min_confidence)
+        for report in result.reports:
+            report.vulnerabilities = [
+                v for v in report.vulnerabilities
+                if getattr(v, "confidence", None) is not None and v.confidence >= min_conf
+            ]
+            report.calculate_summary()
+            report.calculate_risk_score()
 
     suppressed = 0 if args.no_suppressions else _apply_suppressions(result)
 
@@ -331,6 +492,53 @@ async def _run_scan(args: argparse.Namespace) -> int:
             gating_pool = new_findings
 
     payload = _render(args, result)
+
+    # Automatically synchronize scan outcome to Web Dashboard job store
+    if not getattr(args, "no_dashboard", False):
+        try:
+            from jobs import JobStore
+            from main import _package, generate_smart_scan_title
+            from datetime import datetime, timezone
+
+            store = JobStore()
+            target_p = Path(options.target).resolve()
+            label_name = target_p.name if target_p.name else str(options.target)
+            mode_tag = "deep-verify" if options.verify else ("llm" if not options.use_semgrep else "semgrep")
+
+            try:
+                smart_label = await generate_smart_scan_title(
+                    files=getattr(result, "reports", []),
+                    findings=getattr(result, "vulnerabilities", []),
+                    kind="folder" if target_p.is_dir() else "snippet",
+                    fallback_seed=label_name,
+                    mode=mode_tag
+                )
+            except Exception:
+                smart_label = f"CLI [{mode_tag.title()}]: {label_name}"
+
+            job = store.create(
+                kind="folder" if target_p.is_dir() else "snippet",
+                label=smart_label,
+                options={
+                    "mode": mode_tag,
+                    "verify": options.verify,
+                    "concurrency": options.concurrency,
+                    "target": str(target_p),
+                    "cli": True,
+                },
+                workspace=str(target_p),
+            )
+            store.update(
+                job,
+                status="done",
+                percent=100.0,
+                phase="done",
+                message=f"Complete: {len(result.vulnerabilities)} finding(s)",
+                finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                result=_package(result),
+            )
+        except Exception as e:
+            logging.debug(f"Could not record CLI scan to dashboard JobStore: {e}")
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -368,6 +576,53 @@ async def _run_scan(args: argparse.Namespace) -> int:
     return EXIT_CLEAN
 
 
+def serialize_scan_output(
+    result: ScanResult,
+    args: Optional[argparse.Namespace] = None,
+    target: Optional[str] = None,
+) -> StandardScanOutput:
+    """
+    Serialize a ScanResult into the unified StandardScanOutput schema.
+
+    Args:
+        result: The scan outcome
+        args: Optional CLI arguments namespace
+        target: Optional target path override
+
+    Returns:
+        StandardScanOutput: Standardized Pydantic scan output model
+    """
+    target_str = target
+    if not target_str and args and hasattr(args, "target") and args.target:
+        target_str = str(args.target)
+    if not target_str and getattr(result, "root", None):
+        target_str = str(result.root)
+
+    options_dict: Dict[str, Any] = {}
+    if args:
+        for k, v in vars(args).items():
+            if k.startswith("_") or k == "method_calls":
+                continue
+            if isinstance(v, (str, int, float, bool, type(None))):
+                options_dict[k] = v
+            elif isinstance(v, Path):
+                options_dict[k] = str(v)
+            elif isinstance(v, (list, tuple)):
+                options_dict[k] = [str(x) if isinstance(x, Path) else x for x in v if isinstance(x, (str, int, float, bool, Path))]
+            elif isinstance(v, dict):
+                options_dict[k] = {str(dk): dv for dk, dv in v.items() if isinstance(dv, (str, int, float, bool))}
+    elif hasattr(result, "options") and isinstance(result.options, dict):
+        options_dict = result.options
+    elif isinstance(result.stats, dict) and "options" in result.stats:
+        options_dict = result.stats["options"]
+
+    return StandardScanOutput.from_scan_result(
+        result,
+        target=target_str,
+        options=options_dict,
+    )
+
+
 def _render(args: argparse.Namespace, result: ScanResult) -> str:
     """
     Produce output in the requested format.
@@ -383,14 +638,9 @@ def _render(args: argparse.Namespace, result: ScanResult) -> str:
     if args.format == "text":
         return console.render(result, verbose=args.verbose)
     if args.format == "json":
+        output = serialize_scan_output(result, args=args)
         return json.dumps(
-            {
-                "status": result.status,
-                "degraded": result.degraded,
-                "coverage": result.coverage,
-                "stats": result.stats,
-                "reports": [r.model_dump(mode="json") for r in result.reports],
-            },
+            output.model_dump(mode="json"),
             indent=2, ensure_ascii=False, default=str
         )
     return json.dumps(
@@ -976,6 +1226,22 @@ async def _run_hook(args: argparse.Namespace) -> int:
     return EXIT_CLEAN
 
 
+async def _run_benchmark(args: argparse.Namespace) -> int:
+    """
+    Delegate benchmark execution to eval tools.
+    """
+    if getattr(args, "benchmark_command", None) == "score":
+        try:
+            from eval.evaluate_scan import run_evaluation_cli
+        except ImportError:
+            eval_root = Path(__file__).resolve().parents[1]
+            if str(eval_root) not in sys.path:
+                sys.path.insert(0, str(eval_root))
+            from eval.evaluate_scan import run_evaluation_cli
+        return run_evaluation_cli(args)
+    return EXIT_CLEAN
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """
     CLI entry point.
@@ -996,7 +1262,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "serve":
         import uvicorn
-        uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)
+        port = getattr(args, "port", 8088)
+        host = getattr(args, "host", "127.0.0.1")
+        uvicorn.run("main:app", host=host, port=port, reload=False)
         return EXIT_CLEAN
 
     if args.command == "mcp":
@@ -1013,6 +1281,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "history": _run_history,
         "check": _run_check,
         "hook": _run_hook,
+        "benchmark": _run_benchmark,
     }
     return asyncio.run(runners[args.command](args))
 

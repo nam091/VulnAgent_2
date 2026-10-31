@@ -1,0 +1,210 @@
+{
+  "status": "completed",
+  "degraded": false,
+  "coverage": {
+    "requested_count": 1,
+    "scanned_count": 1,
+    "completed_count": 1,
+    "failed_count": 0,
+    "partial_count": 0,
+    "status": "completed",
+    "degraded": false,
+    "file_statuses": {
+      "datetime.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      }
+    },
+    "semgrep": {
+      "analyzed_files": [
+        "datetime.py"
+      ],
+      "failed_files": []
+    },
+    "llm": {
+      "analyzed_files": [
+        "datetime.py"
+      ],
+      "failed_files": []
+    }
+  },
+  "stats": {
+    "files_discovered": 1,
+    "files_requested": [
+      "datetime.py"
+    ],
+    "files_scanned": 1,
+    "files_sent_to_llm": 1,
+    "rule_tier_seconds": 8.89,
+    "llm_tier_seconds": 35.06,
+    "total_seconds": 68.03,
+    "cache_hits": 0,
+    "cache_misses": 1,
+    "rule_error": "",
+    "file_hashes": {
+      "datetime.py": "10863bf6b1bb0586835ba068ce57e34455dace22fddf2e58b7ea71656ac662c9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\source_test\\django\\django\\db\\models\\functions\\datetime.py": "10863bf6b1bb0586835ba068ce57e34455dace22fddf2e58b7ea71656ac662c9"
+    },
+    "snapshot_hashes": {
+      "datetime.py": "10863bf6b1bb0586835ba068ce57e34455dace22fddf2e58b7ea71656ac662c9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\source_test\\django\\django\\db\\models\\functions\\datetime.py": "10863bf6b1bb0586835ba068ce57e34455dace22fddf2e58b7ea71656ac662c9"
+    },
+    "api_requests": 8,
+    "input_tokens": 57435,
+    "output_tokens": 10132,
+    "total_tokens": 67567,
+    "telemetry": {
+      "api_requests": 8,
+      "input_tokens": 57435,
+      "output_tokens": 10132,
+      "total_tokens": 67567,
+      "prompt_tokens": 57435,
+      "completion_tokens": 10132
+    },
+    "verified_candidates": 1,
+    "verify_confirmed": 0,
+    "verify_refuted": 1,
+    "verify_uncertain": 0,
+    "verify_dropped": 1,
+    "verify_tool_calls": 6,
+    "verify_seconds": 24.07
+  },
+  "reports": [
+    {
+      "timestamp": "2026-10-25T16:27:37.480032",
+      "file_name": "datetime.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [
+        {
+          "id": "7eed3b08110c4e08",
+          "type": "SQL_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "datetime.py",
+            "start_line": 28,
+            "end_line": 39,
+            "start_col": 0,
+            "end_col": 0,
+            "context": "    def get_tzname(self):\n        tzname = None\n        if settings.USE_TZ:\n            if self.tzinfo is None:\n                tzname = timezone.get_current_timezone_name()\n            else:\n                tzname = timezone._get_timezone_name(self.tzinfo)\n        return tzname"
+          },
+          "description": "TimezoneMixin.get_tzname() converts self.tzinfo to a string without validating that it is a trusted datetime.tzinfo instance. Database backend operations interpolate the resulting timezone name into SQL (for example, AT TIME ZONE '<tzname>') without parameterization or escaping. If an attacker can supply tzinfo, including a string or an object whose tzname() returns SQL metacharacters, the generated query can be altered.",
+          "impact": "Potential SQL injection through Extract(), Trunc(), TruncDate(), and TruncTime() when tzinfo is attacker-controlled, allowing data exfiltration, modification, or other database compromise.",
+          "remediation": "Validate tzinfo when the expression is constructed: require None or a genuine datetime.tzinfo instance, reject strings and arbitrary objects, and validate the resulting timezone name against a strict allowlist before it reaches database operations.",
+          "cwe_id": "CWE-89",
+          "owasp_category": "A03:2021-Injection",
+          "cvss_score": 10.0,
+          "references": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2022-34265",
+            "https://docs.djangoproject.com/en/4.0/releases/4.0.6/"
+          ],
+          "proof_of_concept": "With USE_TZ=True, instantiate Extract or Trunc with a user-controlled tzinfo value whose string representation or tzname() contains SQL quote characters. get_tzname() returns that value, and the backend interpolates it into the generated SQL.",
+          "secure_code_example": "import datetime\nimport re\n\nif tzinfo is not None:\n    if not isinstance(tzinfo, datetime.tzinfo):\n        raise ValueError(\"tzinfo must be a datetime.tzinfo instance or None\")\n    tzname = timezone._get_timezone_name(tzinfo)\n    if not re.fullmatch(r\"[A-Za-z0-9_+/: -]+\", tzname or \"\"):\n        raise ValueError(\"Invalid timezone name\")\nself.tzinfo = tzinfo",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "10863bf6b1bb0586835ba068ce57e34455dace22fddf2e58b7ea71656ac662c9",
+          "verification": {
+            "verdict": "refuted",
+            "reason": "The reported code only resolves a developer-supplied ORM expression argument (self.tzinfo) through Django's internal timezone helper; there is no request, form, query, or other untrusted external input boundary in this path.",
+            "evidence_file": "datetime.py",
+            "evidence_line": 28,
+            "taint_path": [],
+            "mitigating_control": "Trusted internal context / no external untrusted input boundary",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 23.51,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "datetime.py",
+                "start_line": 1,
+                "end_line": 127,
+                "evidence_id": "ev_4c98b3ff1a804b"
+              }
+            ]
+          },
+          "assessment_status": "refuted",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": 1,
+              "kind": "source",
+              "line": 65,
+              "symbol": "tzinfo",
+              "description": "Constructor accepts an unvalidated tzinfo value."
+            },
+            {
+              "step": 2,
+              "kind": "propagator",
+              "line": 38,
+              "symbol": "tzname",
+              "description": "tzinfo is converted to a string without type or content validation."
+            },
+            {
+              "step": 3,
+              "kind": "sink",
+              "line": 78,
+              "symbol": "connection.ops.datetime_extract_sql",
+              "description": "The unvalidated timezone name is interpolated into generated SQL."
+            }
+          ]
+        }
+      ],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 1
+      },
+      "risk_score": 0.0
+    }
+  ]
+}

@@ -13,6 +13,7 @@ from models.vulnerability import (
     FindingSource,
     Vulnerability,
     VulnerabilitySeverity,
+    VulnerabilityType,
 )
 
 # How far apart two findings may sit and still be considered the same defect.
@@ -23,7 +24,7 @@ LINE_WINDOW = 4
 
 # Confidence assigned to each provenance class.
 CONFIDENCE = {
-    FindingSource.CONFIRMED: 0.95,
+    FindingSource.CONFIRMED: 0.98,
     FindingSource.SEMGREP: 0.90,
     FindingSource.LLM: 0.55,
 }
@@ -41,6 +42,7 @@ SEVERITY_RANK = {
 # label a finding at different levels of specificity.
 TYPE_ALIASES: Tuple[frozenset, ...] = (
     frozenset({"SQL_INJECTION", "INJECTION", "INJECTION_FLAW"}),
+    frozenset({"LDAP_INJECTION", "INJECTION", "INJECTION_FLAW"}),
     frozenset({"OS_COMMAND_INJECTION", "REMOTE_CODE_EXECUTION_(RCE)"}),
     frozenset({"CODE_INJECTION"}),
     frozenset({"PATH_TRAVERSAL", "FILE_INCLUSION", "INSECURE_FILE_READ"}),
@@ -79,7 +81,9 @@ class FusionResult:
 
 def fuse(
     semgrep_findings: List[Vulnerability],
-    llm_findings: List[Vulnerability]
+    llm_findings: List[Vulnerability],
+    suppress_unconfirmed_rules: bool = False,
+    file_analyzed_by_llm: bool = False,
 ) -> FusionResult:
     """
     Merge rule-tier and LLM-tier findings.
@@ -93,6 +97,9 @@ def fuse(
     Args:
         semgrep_findings: Findings from the rule tier
         llm_findings: Findings from the LLM tier
+        suppress_unconfirmed_rules: When True and file was analyzed by LLM,
+            suppress rule findings that find no matching LLM finding.
+        file_analyzed_by_llm: Whether the file was analyzed by the LLM tier.
 
     Returns:
         FusionResult: The merged set
@@ -110,6 +117,13 @@ def fuse(
     for rule_finding in semgrep_findings:
         match = _find_match(rule_finding, llm_findings, claimed_llm)
         if match is None:
+            if suppress_unconfirmed_rules and file_analyzed_by_llm:
+                # If finding is generic path traversal, warning, or not a reliable
+                # high-risk specific rule, suppress it to prevent FP inflation.
+                # Only specific reliable high-risk rules (CRITICAL/HIGH specific rule_id)
+                # are preserved when unconfirmed by LLM.
+                if not _is_reliable_rule_finding(rule_finding):
+                    continue
             rule_finding.source = FindingSource.SEMGREP
             rule_finding.engine_sources = ["SEMGREP"]
             rule_finding.confidence = CONFIDENCE[FindingSource.SEMGREP]
@@ -141,6 +155,58 @@ def fuse(
         len(semgrep_findings), len(llm_findings), len(merged)
     )
     return FusionResult(merged)
+
+
+def _is_reliable_rule_finding(rule_finding: Vulnerability) -> bool:
+    """
+    Check whether a rule finding is from a specific, reliable, high-risk rule.
+
+    Generic warnings, generic path traversal rules (e.g. CWE-22, os.path.join,
+    or generic open), and medium/low severity rules are suppressed to prevent
+    false-positive inflation. Only specific high-risk rules (CRITICAL or HIGH
+    with a concrete rule identifier) are retained.
+
+    Args:
+        rule_finding: Finding produced by the rule engine
+
+    Returns:
+        bool: True if finding is a specific reliable rule, False if generic/suppressed
+    """
+
+    rule_ids = [rule_finding.rule_id] if rule_finding.rule_id else []
+    rule_ids.extend(rule_finding.merged_rule_ids or [])
+    rule_ids = [r.strip() for r in rule_ids if r and r.strip()]
+
+    if not rule_ids:
+        return False
+
+    # Must be CRITICAL or HIGH severity
+    if rule_finding.severity not in (VulnerabilitySeverity.CRITICAL, VulnerabilitySeverity.HIGH):
+        return False
+
+    cwe = _cwe_number(rule_finding.cwe_id)
+
+    # Generic path traversal rules (e.g. CWE-22, os.path.join, generic open)
+    if cwe in ("22", "23", "35", "36", "73") or rule_finding.type in (
+        VulnerabilityType.PATH_TRAVERSAL,
+        VulnerabilityType.INSECURE_FILE_READ,
+    ):
+        return False
+
+    # Check for generic/audit/warning keywords in rule IDs
+    for rid in rule_ids:
+        rid_lower = rid.lower()
+        if any(k in rid_lower for k in ("path-traversal", "path_traversal", "generic", "audit", "warning", "info")):
+            return False
+
+    # Context / snippet / description indicating generic path / os.path.join
+    loc_ctx = (getattr(rule_finding.location, "context", "") or "").lower()
+    desc_lower = (rule_finding.description or "").lower()
+    ctx_lower = (getattr(rule_finding, "context", "") or "").lower()
+    if "os.path.join" in loc_ctx or "os.path.join" in desc_lower or "os.path.join" in ctx_lower:
+        return False
+
+    return True
 
 
 def _deduplicate_tier(findings: List[Vulnerability]) -> List[Vulnerability]:

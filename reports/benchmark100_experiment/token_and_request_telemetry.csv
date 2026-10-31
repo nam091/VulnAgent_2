@@ -1,0 +1,5 @@
+Configuration,Files_Processed,Total_API_Requests,Avg_Requests_per_File,Total_Prompt_Tokens,Total_Completion_Tokens,Total_Tokens,Avg_Tokens_per_Request,Avg_Tokens_per_File,Execution_Time_sec,Throughput_Tokens_per_sec,Throughput_Files_per_sec,Notes
+Semgrep only,100,0,0.0,0,0,0,0.0,0.0,5.97,0.0,16.75,Static rule analysis on local CPU; zero external tokens consumed.
+LLM only,100,100,1.0,748250,7120,755370,7553.7,7553.7,163.01,4633.89,0.61,Single-pass zero-shot prompting across benchmark files via 9Router (cmc/reflection/beam:free).
+VulnAgent (hybrid),100,100,1.0,785120,7560,792680,7926.8,7926.8,207.45,3821.07,0.48,Corroborated hybrid fusion; rule engine + LLM dual-analysis with unconfirmed rule suppression.
+VulnAgent (3-Tier Full: AST + LLM + Verifier),100,324,3.24,1698533,90833,1789366,5522.73,17893.66,182.05,9829.2,0.55,Full 3-Tier architecture: AST Slicer + LLM Dual-Scope Taint Reasoning + Adversarial Verifier.

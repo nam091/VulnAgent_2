@@ -30,6 +30,16 @@ _DIM = "\033[90m"
 _BOLD = "\033[1m"
 _RESET = "\033[0m"
 
+_TAINT_KIND_COLORS = {
+    "SOURCE": "\033[33m",          # Yellow
+    "PROPAGATION": "\033[36m",     # Cyan
+    "PROPAGATOR": "\033[36m",      # Cyan
+    "SANITIZER": "\033[32m",        # Green
+    "SINK": "\033[31m",             # Red
+    "IMPORTED_CALL": "\033[35m",    # Magenta
+    "IMPORTED_SINK": "\033[1;31m",  # Bold Red
+}
+
 SOURCE_LABEL = {
     FindingSource.CONFIRMED: "confirmed",
     FindingSource.SEMGREP: "rule-only",
@@ -47,7 +57,55 @@ def _use_color() -> bool:
 
     if os.environ.get("NO_COLOR"):
         return False
-    return sys.stdout.isatty()
+    return sys.stdout.isatty() or sys.stderr.isatty()
+
+
+def format_taint_path(taint_path: List[Dict[str, Any]], paint=None) -> List[str]:
+    """
+    Format visual taint flow steps with line numbers and code snippets for terminal display.
+
+    Args:
+        taint_path: List of taint step dictionaries
+        paint: Optional styling function (e.g. from render())
+
+    Returns:
+        List[str]: Formatted terminal lines
+    """
+    if not taint_path:
+        return []
+
+    if paint is None:
+        paint = lambda text, code: f"{code}{text}{_RESET}" if _use_color() else text
+
+    flow_lines: List[str] = []
+    flow_lines.append(paint("             Taint Flow:", _BOLD))
+
+    for idx, step in enumerate(taint_path, start=1):
+        if not isinstance(step, dict):
+            continue
+        step_num = step.get("step") or idx
+        raw_kind = str(step.get("kind", "step")).upper()
+        file_path = step.get("file", "")
+        line_num = step.get("line") or 0
+        desc = step.get("description") or ""
+
+        loc_str = f" at {file_path}:{line_num}" if line_num and file_path else (f" at {file_path}" if file_path else "")
+        kind_color = _TAINT_KIND_COLORS.get(raw_kind, _DIM)
+
+        kind_tag = paint(f"[{step_num}] {raw_kind}", kind_color)
+        desc_str = f" - {desc}" if desc else ""
+        step_header = f"               {kind_tag}{paint(loc_str + desc_str, _DIM)}"
+        flow_lines.append(step_header)
+
+        code_snippet = step.get("code")
+        if code_snippet:
+            for s_line in str(code_snippet).splitlines():
+                if s_line.strip().startswith(">"):
+                    flow_lines.append(paint(f"                 {s_line}", _BOLD))
+                else:
+                    flow_lines.append(paint(f"                 {s_line}", _DIM))
+
+    return flow_lines
 
 
 def render(result: ScanResult, verbose: bool = False) -> str:
@@ -99,7 +157,9 @@ def render(result: ScanResult, verbose: bool = False) -> str:
 
     if not vulns:
         lines.append("")
-        lines.append("  No vulnerabilities found.")
+        lines.append(paint("  No vulnerabilities found.", _BOLD))
+        lines.append("")
+        lines.extend(_summary_box(result, paint))
         lines.append("")
         return "\n".join(lines)
 
@@ -134,6 +194,8 @@ def render(result: ScanResult, verbose: bool = False) -> str:
                     lines.append(paint(f"             impact: {vuln.impact[:100]}", _DIM))
                 if vuln.remediation:
                     lines.append(paint(f"             fix:    {vuln.remediation[:100]}", _DIM))
+                if vuln.taint_path:
+                    lines.extend(format_taint_path(vuln.taint_path, paint=paint))
         lines.append("")
 
     chains = sum(len(r.chained_vulnerabilities) for r in result.reports)
@@ -163,8 +225,121 @@ def render(result: ScanResult, verbose: bool = False) -> str:
                 if status not in ("ok", "disabled", "not routed"):
                     lines.append(paint(f"    {report.file_name}: {tier} -> {status}", _DIM))
 
+    # Append the comprehensive executive summary box
+    lines.append("")
+    lines.extend(_summary_box(result, paint))
     lines.append("")
     return "\n".join(lines)
+
+
+def _summary_box(result: ScanResult, paint) -> List[str]:
+    """
+    Format a comprehensive terminal summary box with execution metrics and telemetry.
+    """
+    from collections import Counter
+    stats = result.stats or {}
+    reports = result.reports or []
+    vulns = result.vulnerabilities
+
+    total_sec = stats.get("total_seconds", 0) or 0
+    mins_str = f" (~{total_sec/60:.1f} phút)" if total_sec > 60 else ""
+
+    counts = _severity_counts(vulns)
+    sev_str = "  ·  ".join(
+        paint(f"{counts[s]} {s.value}", _COLORS[s])
+        for s in SEVERITY_ORDER if counts[s]
+    ) or "0 findings"
+
+    confirmed = sum(1 for v in vulns if v.source == FindingSource.CONFIRMED)
+    llm_only = sum(1 for v in vulns if v.source == FindingSource.LLM)
+    rule_only = sum(1 for v in vulns if v.source == FindingSource.SEMGREP)
+
+    cwes = Counter(f"{v.cwe_id} ({v.type.value if hasattr(v.type, 'value') else v.type})" for v in vulns if v.cwe_id)
+    top_cwes = cwes.most_common(5)
+
+    box: List[str] = [
+        paint("=" * 80, _BOLD),
+        paint(" " * 18 + "BẢNG TỔNG KẾT QUÉT (SCAN EXECUTION SUMMARY)", _BOLD),
+        paint("=" * 80, _BOLD),
+        paint("[*] TIẾN TRÌNH & THỜI GIAN (EXECUTION & TIMING):", _BOLD),
+        f"  • Tổng thời gian quét    : {total_sec:.2f}s{mins_str}",
+    ]
+
+    if stats.get("rule_tier_seconds"):
+        box.append(f"    - Tầng 1 (Semgrep SAST): {stats['rule_tier_seconds']:.2f}s")
+    if stats.get("llm_tier_seconds"):
+        box.append(f"    - Tầng 2 (LLM Scan)    : {stats['llm_tier_seconds']:.2f}s")
+    if stats.get("verify_seconds"):
+        box.append(f"    - Tầng 3 (Verifier)    : {stats['verify_seconds']:.2f}s")
+
+    files_disc = stats.get("files_discovered", len(reports))
+    files_scan = stats.get("files_scanned", len(reports))
+    files_llm = stats.get("files_sent_to_llm", 0)
+    box.append(f"  • Tệp phát hiện / Quét   : {files_disc} tệp / {files_scan} tệp ({files_llm} tệp gửi sang LLM)")
+
+    if stats.get("cache_hits"):
+        box.append(f"  • Bộ nhớ đệm (Cache)     : {stats['cache_hits']} hit, {stats.get('cache_misses', 0)} miss")
+
+    box.extend([
+        "",
+        paint("[*] THỐNG KÊ LỖ HỔNG (VULNERABILITY METRICS):", _BOLD),
+        f"  • Tổng số phát hiện      : {len(vulns)} lỗ hổng",
+        f"  • Phân bố theo mức độ    : {sev_str}",
+        "  • Phân loại nguồn gốc    :",
+        f"    - CONFIRMED (Đồng thuận kép): {confirmed} lỗ hổng (Độ tin cậy 0.98)",
+        f"    - LLM-only (Phát hiện ngữ nghĩa): {llm_only} lỗ hổng",
+        f"    - SEMGREP (Luật tĩnh): {rule_only} lỗ hổng",
+    ])
+
+    chains = sum(len(r.chained_vulnerabilities) for r in reports)
+    if chains:
+        box.append(f"  • Chuỗi tấn công (Chains): {chains} chuỗi hợp lệ")
+
+    if stats.get("verified_candidates"):
+        box.extend([
+            "",
+            paint("[*] THẨM TRA ĐỐI KHÁNG TẦNG 3 (ADVERSARIAL VERIFIER):", _BOLD),
+            f"  • Số ứng viên thẩm tra   : {stats['verified_candidates']} phát hiện",
+            f"  • Xác nhận có bằng chứng : {stats.get('verify_confirmed', 0)} phát hiện (Upheld)",
+            f"  • Bác bỏ cảnh báo ảo (FP): {stats.get('verify_dropped', 0)} phát hiện (Refuted & Dropped)",
+            f"  • Số lệnh gọi đọc code   : {stats.get('verify_tool_calls', 0)} tool calls",
+        ])
+
+    telemetry = stats.get("telemetry") or {}
+    total_tokens = stats.get("total_tokens") or telemetry.get("total_tokens")
+    api_requests = stats.get("api_requests") or telemetry.get("api_requests")
+    input_tokens = stats.get("input_tokens") or telemetry.get("input_tokens") or telemetry.get("prompt_tokens") or 0
+    output_tokens = stats.get("output_tokens") or telemetry.get("output_tokens") or telemetry.get("completion_tokens") or 0
+
+    if total_tokens or api_requests:
+        box.extend([
+            "",
+            paint("[*] TÀI NGUYÊN & TOKEN (TELEMETRY):", _BOLD),
+            f"  • Tổng số API Requests   : {api_requests:,} requests" if api_requests else "",
+            f"  • Tổng Tokens tiêu thụ   : {total_tokens:,} tokens (Input: {input_tokens:,} · Output: {output_tokens:,})" if total_tokens else "",
+        ])
+        box = [b for b in box if b]
+
+    if top_cwes:
+        box.extend([
+            "",
+            paint("[*] TOP CÁC LỖ HỔNG PHỔ BIẾN NHẤT:", _BOLD),
+        ])
+        for i, (name, count) in enumerate(top_cwes, 1):
+            box.append(f"  {i}. {name:<45}: {count} phát hiện")
+
+    box.append(paint("=" * 80, _BOLD))
+    return box
+
+
+def render_summary(result: ScanResult) -> str:
+    """
+    Render exclusively the summary box without individual file findings.
+    """
+    color = _use_color()
+    def paint(text: str, code: str) -> str:
+        return f"{code}{text}{_RESET}" if color else text
+    return "\n".join(_summary_box(result, paint))
 
 
 def _severity_counts(vulns: List[Vulnerability]) -> Dict[VulnerabilitySeverity, int]:

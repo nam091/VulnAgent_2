@@ -1,0 +1,518 @@
+{
+  "model": "ag/gemini-3.8-flash-medium",
+  "role": "competitor",
+  "timestamp": "2026-10-24T06:21:15.876680+00:00",
+  "base_url": "http://127.0.0.1:20128/v1",
+  "timeout_sec": 45.0,
+  "summary": {
+    "model": "ag/gemini-3.8-flash-medium",
+    "role": "competitor",
+    "total_files": 13,
+    "success_count": 4,
+    "blocked_count": 5,
+    "timeout_count": 4,
+    "http_error_count": 0,
+    "avg_latency_sec": 32.892,
+    "total_latency_sec": 427.6,
+    "total_prompt_tokens": 85220,
+    "total_completion_tokens": 1493,
+    "total_reasoning_tokens": 3320,
+    "total_tokens": 86713,
+    "total_findings": 2,
+    "valid_json_rate": 100.0,
+    "true_positives": 0,
+    "false_positives": 2,
+    "false_negatives": 9,
+    "fp_on_clean": 2,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0
+  },
+  "file_results": [
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "superset_config.py",
+      "dataset": "superset",
+      "category": "HARDCODED_CREDENTIALS / Safety Trigger",
+      "is_clean": false,
+      "status": "BLOCKED_BY_SAFETY_FILTER",
+      "status_code": 200,
+      "latency_sec": 37.741,
+      "tokens": {
+        "prompt_tokens": 24092,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 24092
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{'blockReason': 'OTHER', 'blockReasonMessage': \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\"}",
+      "error_message": "",
+      "block_reason": "OTHER",
+      "ground_truth_labels": [
+        {
+          "file": "superset_config.py",
+          "line": 1,
+          "cwe": "798",
+          "type": "HARDCODED_CREDENTIALS",
+          "note": "CVE-2023-27524 / CWE-798: Default SECRET_KEY vulnerability allowing session forgery and RCE"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "superset_config.py:1 HARDCODED_CREDENTIALS"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "views_core.py",
+      "dataset": "superset",
+      "category": "SSRF / Complex View",
+      "is_clean": false,
+      "status": "TIMEOUT",
+      "status_code": null,
+      "latency_sec": 45.02,
+      "tokens": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "",
+      "error_message": "Request timed out after 45.0s",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "views_core.py",
+          "line": 1,
+          "cwe": "918",
+          "type": "SSRF",
+          "note": "CVE-2023-36388 / CWE-918: Server-Side Request Forgery (SSRF) in URL fetching and export endpoints"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "views_core.py:1 SSRF"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "database_views.py",
+      "dataset": "superset",
+      "category": "INFORMATION_DISCLOSURE",
+      "is_clean": false,
+      "status": "TIMEOUT",
+      "status_code": null,
+      "latency_sec": 45.005,
+      "tokens": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "",
+      "error_message": "Request timed out after 45.0s",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "database_views.py",
+          "line": 1,
+          "cwe": "209",
+          "type": "INFORMATION_DISCLOSURE",
+          "note": "CVE-2024-53948 / CWE-209: Information Disclosure / Metadata leak in DB test connection error reporting"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "database_views.py:1 INFORMATION_DISCLOSURE"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "query_context_factory.py",
+      "dataset": "superset",
+      "category": "INPUT_VALIDATION / Safety Trigger",
+      "is_clean": false,
+      "status": "BLOCKED_BY_SAFETY_FILTER",
+      "status_code": 200,
+      "latency_sec": 44.943,
+      "tokens": {
+        "prompt_tokens": 1830,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 1830
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{'blockReason': 'OTHER', 'blockReasonMessage': \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\"}",
+      "error_message": "",
+      "block_reason": "OTHER",
+      "ground_truth_labels": [
+        {
+          "file": "query_context_factory.py",
+          "line": 1,
+          "cwe": "20",
+          "type": "INPUT_VALIDATION",
+          "note": "CVE-2023-25504 / CWE-20: Improper Input Validation in query payload processing"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "query_context_factory.py:1 INPUT_VALIDATION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "sql_lab_models.py",
+      "dataset": "superset",
+      "category": "SQL_INJECTION",
+      "is_clean": false,
+      "status": "BLOCKED_BY_SAFETY_FILTER",
+      "status_code": 200,
+      "latency_sec": 18.13,
+      "tokens": {
+        "prompt_tokens": 13130,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 13130
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{'blockReason': 'OTHER', 'blockReasonMessage': \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\"}",
+      "error_message": "",
+      "block_reason": "OTHER",
+      "ground_truth_labels": [
+        {
+          "file": "sql_lab_models.py",
+          "line": 1,
+          "cwe": "89",
+          "type": "SQL_INJECTION",
+          "note": "CVE-2023-39265 / CWE-89: SQL Injection in SQL Lab query execution"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "sql_lab_models.py:1 SQL_INJECTION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "slack_util.py",
+      "dataset": "superset",
+      "category": "COMMAND_INJECTION",
+      "is_clean": false,
+      "status": "BLOCKED_BY_SAFETY_FILTER",
+      "status_code": 200,
+      "latency_sec": 33.952,
+      "tokens": {
+        "prompt_tokens": 1289,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 1289
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{'blockReason': 'OTHER', 'blockReasonMessage': \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\"}",
+      "error_message": "",
+      "block_reason": "OTHER",
+      "ground_truth_labels": [
+        {
+          "file": "slack_util.py",
+          "line": 1,
+          "cwe": "78",
+          "type": "COMMAND_INJECTION",
+          "note": "CVE-2020-13948 / CWE-78: OS Command Injection in slack utility via unsanitized command string"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "slack_util.py:1 COMMAND_INJECTION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "clean_date_parser.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 20.962,
+      "tokens": {
+        "prompt_tokens": 19971,
+        "completion_tokens": 16,
+        "reasoning_tokens": 1068,
+        "total_tokens": 19987
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": []\n}\n```",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "clean_hashing.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 23.943,
+      "tokens": {
+        "prompt_tokens": 3443,
+        "completion_tokens": 1313,
+        "reasoning_tokens": 488,
+        "total_tokens": 4756
+      },
+      "is_valid_json": true,
+      "findings_count": 2,
+      "extracted_findings": [
+        {
+          "cwe": "328",
+          "line": 23,
+          "type": "CWE-328: Use of Weak Hash",
+          "severity": "LOW",
+          "description": "The function `md5_sha_from_str` utilizes the MD5 hashing algorithm via `hashlib.md5()`. MD5 is cryptographically broken and prone to hash collision attacks. While often used for cache key generation o"
+        },
+        {
+          "cwe": "710",
+          "line": 23,
+          "type": "CWE-710: Improper Adherence to Coding Standards (Misleading Function Name)",
+          "severity": "INFO",
+          "description": "Functions `md5_sha_from_str` and `md5_sha_from_dict` include 'sha' in their identifiers but strictly execute an MD5 algorithm. This misleading naming convention can lead developers to incorrectly assu"
+        }
+      ],
+      "raw_response_snippet": "```json\n{\n  \"file_name\": \"clean_hashing.py\",\n  \"code_context\": {\n    \"imports\": [\n      \"hashlib\",\n      \"typing.Any\",\n      \"typing.Callable\",\n      \"typing.Dict\",\n      \"typing.Optional\",\n      \"simplejson as json\"\n    ],\n    \"functions\": [\n      \"md5_sha_from_str\",\n      \"md5_sha_from_dict\"\n    ]",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 2,
+      "fn": 0,
+      "fp_on_clean": 2,
+      "missed": [],
+      "spurious": [
+        "clean_hashing.py:23 CWE-328: Use of Weak Hash",
+        "clean_hashing.py:23 CWE-710: Improper Adherence to Coding Standards (Misleading Function Name)"
+      ]
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "adyen_plugin.py",
+      "dataset": "saleor310",
+      "category": "TIMING_ATTACK / Sensitive Payment",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 22.266,
+      "tokens": {
+        "prompt_tokens": 15668,
+        "completion_tokens": 16,
+        "reasoning_tokens": 1377,
+        "total_tokens": 15684
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": []\n}\n```",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "adyen_plugin.py",
+          "line": 943,
+          "cwe": "208",
+          "type": "TIMING_ATTACK",
+          "note": "GHSA-3rqj-9v87-2x3f / CWE-208 / CWE-385: Timing attack in validate_hmac_signature via standard == string comparison instead of constant-time compare_digest"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "adyen_plugin.py:943 TIMING_ATTACK"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "refresh_token.py",
+      "dataset": "saleor310",
+      "category": "CSRF_BYPASS / Sensitive Auth",
+      "is_clean": false,
+      "status": "TIMEOUT",
+      "status_code": null,
+      "latency_sec": 45.011,
+      "tokens": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "",
+      "error_message": "Request timed out after 45.0s",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "refresh_token.py",
+          "line": 218,
+          "cwe": "352",
+          "type": "CSRF_BYPASS",
+          "note": "GHSA-ff69-fwjf-3c9w / CWE-352 / CWE-287: CSRF bypass in get_refresh_token reading refresh token directly from cookies without CSRF validation"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "refresh_token.py:218 CSRF_BYPASS"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "account_mutations.py",
+      "dataset": "saleor310",
+      "category": "AUTHORIZATION_BYPASS",
+      "is_clean": false,
+      "status": "TIMEOUT",
+      "status_code": null,
+      "latency_sec": 45.002,
+      "tokens": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "",
+      "error_message": "Request timed out after 45.0s",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "account_mutations.py",
+          "line": 74,
+          "cwe": "284",
+          "type": "AUTHORIZATION_BYPASS",
+          "note": "GHSA-6whj-8p3f-2xqp / CWE-284 / CWE-863: Account pre-hijacking and authorization bypass in AccountRegister mutation"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "account_mutations.py:74 AUTHORIZATION_BYPASS"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "clean_core_utils.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "BLOCKED_BY_SAFETY_FILTER",
+      "status_code": 200,
+      "latency_sec": 32.793,
+      "tokens": {
+        "prompt_tokens": 2462,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 2462
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{'blockReason': 'OTHER', 'blockReasonMessage': \"This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can [send feedback](https://ai.google.dev/gemini-api/docs/troubleshooting#file-bug) or read more about [our policies here](https://policies.google.com/terms/generative-ai/use-policy).\"}",
+      "error_message": "",
+      "block_reason": "OTHER",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "ag/gemini-3.8-flash-medium",
+      "file": "clean_taxes.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 12.832,
+      "tokens": {
+        "prompt_tokens": 3335,
+        "completion_tokens": 148,
+        "reasoning_tokens": 387,
+        "total_tokens": 3483
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"file\": \"clean_taxes.py\",\n  \"summary\": {\n    \"total_vulnerabilities\": 0,\n    \"critical\": 0,\n    \"high\": 0,\n    \"medium\": 0,\n    \"low\": 0,\n    \"informational\": 0\n  },\n  \"findings\": [],\n  \"notes\": \"The analyzed file contains pure data structures (dataclasses) and pure helper functions for ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    }
+  ]
+}

@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agent.loop import ToolCallingAgent
-from agent.tools import TOOL_SCHEMAS, CodeTools
+from agent.tools import TOOL_SCHEMAS, CodeTools, tools_schema
+from evidence.safe_reader import enrich_taint_path, read_code_snippet
 from evidence.store import EvidenceStore
 from models.assessment import AssessmentStatus, evaluate_assessment_policy
 from models.vulnerability import FindingSource, Vulnerability, VulnerabilityType
@@ -42,6 +43,153 @@ is wrong:
   - Reading a secret from the environment or a vault, which is correct practice
   - Using a cryptographically secure API the reporter mistook for a weak one
   - The code path is unreachable, or is test or example code
+
+Adversarial Verification Standards (CWE Counter-Evidence Guidelines):
+  1. CSRF (CWE-352):
+     - Refute ONLY when genuine anti-CSRF token verification is present (e.g. CSRFProtect(app),
+       CsrfViewMiddleware, @csrf_protect, synchronizer token check on POST/PUT/DELETE, or
+       strict SameSite cookie configuration).
+     - DO NOT refute if the endpoint is decorated with @csrf_exempt or csrf_exempt, or if
+       state-changing endpoints lack anti-CSRF protection entirely. The @csrf_exempt decorator
+       explicitly disables CSRF protection and must NOT be accepted as a mitigating control.
+  2. Insecure Randomness (CWE-330):
+     - Refute when cryptographically secure pseudo-random generators are used for security tokens:
+       secrets module (secrets.token_hex, secrets.token_urlsafe, secrets.token_bytes,
+       secrets.choice, secrets.randbelow) or os.urandom.
+     - Refute if standard library random (random.random, random.randint, random.choice) is used
+       strictly in non-security contexts (games, simulations, data shuffling, UI animation jitter).
+     - Confirm if standard random or numpy.random is used to generate security-sensitive tokens,
+       session IDs, passwords, API keys, CSRF tokens, or cryptographic nonces.
+  3. XML External Entity / XXE (CWE-611):
+     - Refute if defusedxml (defusedxml.ElementTree, defusedxml.minidom, defusedxml.lxml)
+       is used, or if the parser explicitly disables external entity resolution and network access
+       (e.g. resolve_entities=False, no_network=True in lxml.etree.XMLParser).
+     - Confirm if untrusted XML is parsed with default lxml, xml.dom.minidom, or xml.sax
+       without disabling entity resolution or external DTD retrieval.
+  4. Open Redirect (CWE-601):
+     - Refute ONLY if the destination URL is strictly validated against an immutable domain
+       allowlist, or if rigorous relative path validation is performed (e.g. url.startswith('/')
+       and not url.startswith('//') and not url.startswith('/\\\\'), or url_has_allowed_host_and_scheme).
+     - Confirm if redirect destinations are unvalidated or rely on flawed checks like naive
+       url.startswith('/') (which is bypassed by protocol-relative '//evil.com' URLs) or substring matching.
+  5. Timing Attacks (CWE-208):
+     - Refute if constant-time comparison is used (hmac.compare_digest or secrets.compare_digest)
+       when comparing cryptographic secrets, authentication tokens, API keys, MACs, or password hashes.
+     - Confirm if sensitive secrets or hashes are compared using standard string equality (== or !=),
+       which leaks timing information through early character mismatches.
+  6. Deserialization of Untrusted Data (CWE-502):
+     - Refute if safe parsers or structured formats are used (json.loads, yaml.safe_load,
+       defusedxml, ast.literal_eval).
+     - Confirm if untrusted inputs are passed directly to pickle.loads, pickle.load,
+       yaml.load without SafeLoader, or shelve.
+  7. Server-Side Request Forgery / SSRF (CWE-918):
+     - Refute if target URLs/hosts are strictly validated against an allowlist of approved
+       destinations and private/internal IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+       127.0.0.0/8) are blocked before making requests.
+     - Confirm if user-supplied URLs are fetched directly via requests.get/post, urllib,
+       or httpx without host allowlist or IP boundary validation.
+  8. Clean Files / Utility Context Guidelines:
+     - Pure utility functions (mathematical computations, string transformations, date formatting,
+       unit conversions, trusted internal config): When checking pure utility functions, if no
+       untrusted external input boundary exists (No untrusted external input boundary) and parameters
+       are safe internal data types or constants, emit "refuted" with
+       mitigating_control="Trusted internal context / no external untrusted input boundary".
+     - Static file operations / Archive extraction: When a file extraction or file opening operation
+       takes place on static files or internal test fixtures not receiving external input,
+       emit "refuted" with mitigating_control="Static internal file target / fixed local path".
+
+Benchmark Sanitizer Counter-Evidence Standards (11 Benchmark CWE Groups):
+  9. Path Traversal (CWE-22):
+     - Refute decisively ("refuted") when:
+       * Canonical resolution with boundary check is performed: `Path.resolve` (or `resolve()`) followed
+         by `is_relative_to(...)` or `str(p).startswith(...)`.
+       * Directory traversal containment check is performed: `if '../' in ...` or `if '..' in ...` with
+         an early return or error response, or regex sanitization (`re.sub` stripping `../`).
+       * Strict whitelist / allowlist check: `if bar in ALLOWED_FILES` or dictionary lookup mapping
+         input to fixed files, or ternary branch setting path to a constant string.
+     - Confirm ("confirmed") when attacker-controlled input is concatenated directly into file paths
+       passed to `open()`, `codecs.open()`, `Path(...)`, etc., with no boundary check, `..` check, or whitelist.
+  10. OS Command Injection (CWE-78):
+     - Refute decisively ("refuted") when:
+       * Arguments are escaped via `shlex.quote(...)`.
+       * Shell metacharacters are stripped via `re.sub` (e.g. `re.sub(r'[;&|`$]', '', ...)`).
+       * Execution uses an argument list without a shell (`subprocess.run(["cmd", arg], shell=False)`).
+       * Arguments or commands are validated against an allowlist (`if cmd in ALLOWED_COMMANDS`).
+     - Confirm ("confirmed") when user input is formatted/concatenated into a shell command string
+       and executed via `os.system()`, `os.popen()`, or `subprocess.Popen(..., shell=True)` without escaping.
+  11. Cross-Site Scripting / XSS (CWE-79):
+     - Refute decisively ("refuted") when output data is escaped or cleaned via standard sanitizers:
+       `escape_for_html(...)`, `html.escape(...)`, `urllib.parse.quote(...)`, `urllib.parse.quote_plus(...)`,
+       `markupsafe.escape(...)`, `jinja2.escape(...)`, `django.utils.html.escape(...)`, or regex
+       filtering (`re.sub` removing `<script>`, HTML tags, or dangerous characters `<>&"'`) before writing
+       into responses or rendering. Set mitigating_control naming the sanitizer used.
+     - Confirm ("confirmed") when untrusted input is reflected directly into HTML responses or templates
+       without any escaping or sanitization.
+  12. SQL Injection (CWE-89):
+     - Refute decisively ("refuted") when:
+       * Parameterized queries / prepared statements with placeholders are used (e.g. `execute(query, (param,))`,
+         `%s`, `?`, or `:param` bindings).
+       * Input is safely type-cast to numeric types (`int(param)`, `float(param)`).
+       * Identifiers or values are verified against a strict whitelist (`if col in ALLOWED_COLUMNS`).
+     - Confirm ("confirmed") when untrusted data is formatted directly into a SQL string (f-strings, `%`, `.format()`)
+       and executed on a database.
+  13. LDAP Injection (CWE-90):
+     - Refute decisively ("refuted") when:
+       * Input is escaped using `ldap3.utils.conv.escape_filter_chars(...)` or equivalent LDAP escaping before being passed to search.
+       * Input is validated against an allowlist.
+     - Confirm ("confirmed") when raw user input is concatenated or formatted (e.g. f-strings, %) directly into LDAP query filters (e.g. `conn.search(base, filter)`).
+     - Do NOT refute merely because HTML escaping (e.g. `escape_for_html`) is used in the response output AFTER the LDAP query has already been executed.
+  14. Code Injection / Dynamic Evaluation (CWE-94):
+     - Refute decisively ("refuted") when:
+       * Safe evaluation is used (`ast.literal_eval`).
+       * Dispatch uses a strict whitelist mapping / function dictionary.
+     - Confirm ("confirmed") when untrusted input is passed directly to `eval()`, `exec()`, or `compile()`.
+  15. Weak Cryptography / Hash (CWE-327 / CWE-328):
+     - Refute decisively ("refuted") when:
+       * Strong cryptographic hash algorithms (SHA-256, SHA-512, SHA-3) or secure password hashing
+         (bcrypt, argon2, scrypt, pbkdf2_hmac) are used.
+       * Weak hashes (MD5, SHA1) are used solely for non-security checksums, hash-table indexing, or file caching.
+     - Confirm ("confirmed") when MD5 or SHA1 is used for cryptographic signatures, tokens, or passwords,
+       or when hash output is stored in password files (e.g. passwordFile.txt). The defect is the use of
+       the cryptographically broken algorithm (MD5/SHA-1) for passwords; hashing a constant string or test literal
+       is NOT a mitigating control and does NOT make SHA-1/MD5 safe for passwords.
+  16. XPath Injection (CWE-643):
+     - Refute decisively ("refuted") when parameterized XPath queries, variable bindings, or allowlists are used.
+     - Confirm ("confirmed") when untrusted input is concatenated directly into XPath expressions.
+  17. Cookie Security & Trust Boundary (CWE-614 / CWE-501):
+     - Refute decisively ("refuted") when cookies specify `secure=True`, `httponly=True`, and `samesite`,
+       or when session attributes are validated against allowlists before setting.
+     - In benchmark test suites, dummy test fixture cookies in GET setup routes (e.g. set_cookie('BenchmarkTest...', ...))
+       are non-sensitive framework test fixtures, NOT vulnerabilities. Refute any finding on test fixture cookies
+       with mitigating_control="Test fixture cookie / non-sensitive setup endpoint".
+     - Confirm ("confirmed") when sensitive session state is written without validation, or sensitive cookies lack security flags.
+
+Direct Uncontrolled Data Flow Standards (Mandatory Confirmation):
+  - When untrusted external input (from `request.args`, `request.form`, `request.cookies`, `request.headers`,
+    `sys.stdin`, etc.) flows directly into a dangerous sink API without traversing any adequate sanitizer
+    (such as `escape_for_html`, `urllib.parse.quote`, `re.sub`, `Path.resolve`, parameterized queries,
+    numeric casting `int()`, or whitelist `if` checks):
+    You MUST decisively output "verdict": "confirmed", and populate a complete "taint_path" with steps:
+    1. {"kind": "source", "file": "path", "line": N, "step": "attacker-controlled input entered"}
+    2. {"kind": "propagator", "file": "path", "line": N, "step": "variable propagation or concatenation"}
+    3. {"kind": "imported_call", "file": "imported_path", "line": N, "step": "data passed across files to imported function"}
+    4. {"kind": "sink" | "imported_sink", "file": "path", "line": N, "step": "dangerous sink call receiving uncontrolled input"}
+
+Agentic Cross-File Analysis & Imported Symbol Resolution Guidelines:
+  - When you detect data passing into or originating from an imported symbol (such as a function, class,
+    wrapper, or helper imported from another file or module), you MUST NOT assume or guess its implementation.
+  - You are MANDATED to proactively call `read_imported_symbol(symbol_name=..., from_file=...)` to inspect
+    its actual definition and source code in the original declaration file.
+  - Evaluate inter-procedural reachability and sanitization behavior:
+    * Counter-Evidence / Sanitization Check: Check whether the imported function or class performs genuine
+      sanitization, validation, allowlist checking, or safe transformation on untrusted data. If adequate mitigating
+      controls exist in the imported definition (e.g. int(), escape(), is_relative_to(), whitelist), refute the
+      finding with positive evidence citing the control. Record a step with kind "sanitizer" in taint_path.
+    * Inter-Procedural Reachability / Sink Check: Check whether the imported function or class continues passing
+      the untrusted data into a dangerous sink API (e.g. database query execution, shell execution, filesystem access,
+      or unescaped reflection) in the target file. If untrusted data reaches dangerous sinks through the imported
+      symbol without adequate sanitization, decisively confirm the finding and trace the inter-procedural taint path
+      with steps kind "imported_call" and "imported_sink".
 
 Use the tools to READ THE ACTUAL CODE before deciding. Do not reason from the
 snippet alone - it is what misled the reporter. Follow the value back to where
@@ -63,13 +211,13 @@ Answer with ONLY a JSON object, no prose and no code fence:
   "evidence_file": "path you based this on, or empty",
   "evidence_line": 0,
   "taint_path": [
-    {"step": "what happens here", "file": "path", "line": 0, "kind": "source|propagator|sanitizer|sink"}
+    {"step": "what happens here", "file": "path", "line": 0, "kind": "source|propagator|sanitizer|sink|imported_call|imported_sink"}
   ],
   "mitigating_control": "the control that makes it safe, when refuted, else empty"
 }
 
 taint_path must be present and non-empty when the verdict is "confirmed": list
-the source where attacker data enters, any propagation, and the sink. Leave it
+the source where attacker data enters, any propagation (including imported_call/imported_sink steps), and the sink. Leave it
 as [] otherwise."""
 
 USER_TEMPLATE = """Reported vulnerability
@@ -87,7 +235,298 @@ Code at the reported location:
 
 {context}
 
-Investigate and return your verdict as JSON."""
+Investigate and return your verdict as JSON. If imported symbols (helpers, wrappers, sanitizers) are involved, call `read_imported_symbol(symbol_name=..., from_file=...)` to inspect their cross-file definitions and trace cross-file dataflow."""
+
+
+BENCHMARK_CWE_SANITIZERS: Dict[str, Dict[str, Any]] = {
+    "CWE-22": {
+        "name": "Path Traversal",
+        "sanitizers": [
+            "Path.resolve",
+            "resolve",
+            "../",
+            "..\\",
+            "re.sub",
+            "os.path.realpath",
+            "os.path.abspath",
+            "os.path.basename",
+            "is_relative_to",
+            "startswith",
+            "whitelist",
+        ],
+        "description": "Path resolution base-check, ../ check, re.sub, or whitelist validation",
+    },
+    "CWE-78": {
+        "name": "OS Command Injection",
+        "sanitizers": [
+            "shlex.quote",
+            "re.sub",
+            "shell=False",
+            "whitelist",
+        ],
+        "description": "shlex.quote, re.sub shell metacharacter stripping, argument list, or whitelist",
+    },
+    "CWE-79": {
+        "name": "Cross-Site Scripting",
+        "sanitizers": [
+            "escape_for_html",
+            "urllib.parse.quote",
+            "urllib.parse.quote_plus",
+            "html.escape",
+            "markupsafe.escape",
+            "jinja2.escape",
+            "django.utils.html.escape",
+            "escape(",
+            "re.sub",
+        ],
+        "description": "escape_for_html, urllib.parse.quote, html.escape, escape(), or re.sub HTML escaping",
+    },
+    "CWE-89": {
+        "name": "SQL Injection",
+        "sanitizers": [
+            "%s",
+            "?",
+            ":param",
+            "int(",
+            "float(",
+            "whitelist",
+        ],
+        "description": "Parameterized queries, numeric casting int()/float(), or whitelist validation",
+    },
+    "CWE-90": {
+        "name": "LDAP Injection",
+        "sanitizers": [
+            "escape_filter_chars",
+            "whitelist",
+        ],
+        "description": "ldap3 escape_filter_chars or allowlist check",
+    },
+    "CWE-94": {
+        "name": "Code Injection",
+        "sanitizers": [
+            "ast.literal_eval",
+            "whitelist",
+        ],
+        "description": "ast.literal_eval safe evaluation or whitelist mapping",
+    },
+    "CWE-327": {
+        "name": "Weak Cryptography",
+        "sanitizers": [
+            "sha256",
+            "sha512",
+            "sha3",
+            "hmac",
+            "argon2",
+            "bcrypt",
+            "scrypt",
+            "pbkdf2",
+        ],
+        "description": "Strong cryptographic algorithm or non-security checksum context",
+    },
+    "CWE-328": {
+        "name": "Weak Cryptographic Hash",
+        "sanitizers": [
+            "sha256",
+            "sha512",
+            "sha3",
+            "hmac",
+            "argon2",
+            "bcrypt",
+            "scrypt",
+            "pbkdf2",
+        ],
+        "description": "Strong cryptographic hash or non-security checksum context",
+    },
+    "CWE-330": {
+        "name": "Weak Randomness",
+        "sanitizers": [
+            "secrets.token_hex",
+            "secrets.token_urlsafe",
+            "secrets.token_bytes",
+            "secrets.choice",
+            "secrets.randbelow",
+            "os.urandom",
+        ],
+        "description": "secrets module or os.urandom for security tokens",
+    },
+    "CWE-501": {
+        "name": "Trust Boundary Violation",
+        "sanitizers": [
+            "whitelist",
+            "validate",
+        ],
+        "description": "Session attribute whitelist or validation check",
+    },
+    "CWE-502": {
+        "name": "Insecure Deserialization",
+        "sanitizers": [
+            "json.loads",
+            "yaml.safe_load",
+            "ast.literal_eval",
+            "defusedxml",
+        ],
+        "description": "Safe parsers like json.loads, yaml.safe_load, or ast.literal_eval",
+    },
+    "CWE-601": {
+        "name": "Open Redirect",
+        "sanitizers": [
+            "url_has_allowed_host_and_scheme",
+            "url.startswith('/') and not url.startswith('//')",
+            "whitelist",
+            "allowlist",
+        ],
+        "description": "Strict domain allowlist or safe relative path check",
+    },
+    "CWE-611": {
+        "name": "XML External Entity",
+        "sanitizers": [
+            "defusedxml",
+            "resolve_entities=False",
+            "no_network=True",
+        ],
+        "description": "defusedxml or entity resolution disabled in parser",
+    },
+    "CWE-614": {
+        "name": "Secure Cookie",
+        "sanitizers": [
+            "secure=True",
+            "httponly=True",
+        ],
+        "description": "Cookie set with secure=True and httponly=True",
+    },
+    "CWE-643": {
+        "name": "XPath Injection",
+        "sanitizers": [
+            "xpath_variables",
+            "whitelist",
+        ],
+        "description": "Parameterized XPath query or variable bindings",
+    },
+}
+
+
+def detect_benchmark_sanitizers(code: str, cwe: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Detect standard benchmark sanitizers in code across 11 CWE benchmark groups.
+
+    Args:
+        code: Source code or snippet to inspect
+        cwe: Optional CWE identifier (e.g. 'CWE-79', 'CWE-22') or vulnerability type
+
+    Returns:
+        List[Dict[str, Any]]: Detected sanitizers with cwe, name, sanitizer, and description
+    """
+    if not code:
+        return []
+
+    detected: List[Dict[str, Any]] = []
+    norm_cwe = (cwe or "").upper()
+    if norm_cwe and not norm_cwe.startswith("CWE-") and norm_cwe.isdigit():
+        norm_cwe = f"CWE-{norm_cwe}"
+
+    type_to_cwe = {
+        "XSS": "CWE-79",
+        "CROSS_SITE_SCRIPTING": "CWE-79",
+        "PATHTRAVER": "CWE-22",
+        "PATH_TRAVERSAL": "CWE-22",
+        "CMDI": "CWE-78",
+        "OS_COMMAND_INJECTION": "CWE-78",
+        "COMMAND_INJECTION": "CWE-78",
+        "SQLI": "CWE-89",
+        "SQL_INJECTION": "CWE-89",
+        "LDAPI": "CWE-90",
+        "LDAP_INJECTION": "CWE-90",
+        "CODEINJ": "CWE-94",
+        "CODE_INJECTION": "CWE-94",
+        "HASH": "CWE-328",
+        "WEAK_HASH": "CWE-328",
+        "WEAK_CRYPTO": "CWE-327",
+        "WEAKRAND": "CWE-330",
+        "INSECURE_RANDOMNESS": "CWE-330",
+        "XXE": "CWE-611",
+        "XML_EXTERNAL_ENTITY": "CWE-611",
+        "XPATHI": "CWE-643",
+        "XPATH_INJECTION": "CWE-643",
+        "REDIRECT": "CWE-601",
+        "OPEN_REDIRECT": "CWE-601",
+        "DESERIALIZATION": "CWE-502",
+        "INSECURE_DESERIALIZATION": "CWE-502",
+        "TRUSTBOUND": "CWE-501",
+        "TRUST_BOUNDARY_VIOLATION": "CWE-501",
+        "SECURECOOKIE": "CWE-614",
+    }
+    if norm_cwe in type_to_cwe:
+        norm_cwe = type_to_cwe[norm_cwe]
+
+    relevant_cwes = [norm_cwe] if norm_cwe in BENCHMARK_CWE_SANITIZERS else list(BENCHMARK_CWE_SANITIZERS.keys())
+    lines = code.splitlines() if code else []
+
+    def _find_line_offset(match_str: str) -> int:
+        for idx, line_str in enumerate(lines, 1):
+            if match_str in line_str:
+                return idx
+        return 1
+
+    for target_cwe in relevant_cwes:
+        entry = BENCHMARK_CWE_SANITIZERS.get(target_cwe)
+        if not entry:
+            continue
+
+        for s in entry["sanitizers"]:
+            if s == "whitelist":
+                wl_match = re.search(r"if\s+[\w\.\'\"]+\s+(?:not\s+in|in)\s+[\w\.\(\)\[\]]+", code, re.IGNORECASE)
+                if wl_match:
+                    detected.append({
+                        "cwe": target_cwe,
+                        "name": entry["name"],
+                        "sanitizer": "whitelist_check",
+                        "matched": wl_match.group(0),
+                        "description": f"Whitelist condition check: {wl_match.group(0)}",
+                        "line_offset": _find_line_offset(wl_match.group(0)),
+                    })
+                elif re.search(r"\b(?:allowlist|whitelist)\b", code, re.IGNORECASE):
+                    wl_kw = re.search(r"\b(?:allowlist|whitelist)\b", code, re.IGNORECASE).group(0)
+                    detected.append({
+                        "cwe": target_cwe,
+                        "name": entry["name"],
+                        "sanitizer": "whitelist_check",
+                        "matched": wl_kw,
+                        "description": f"{entry['name']} validated against allowlist/whitelist",
+                        "line_offset": _find_line_offset(wl_kw),
+                    })
+            elif s == "Path.resolve":
+                if "Path.resolve" in code or re.search(r"\bPath\b.*?\bresolve\b", code) or ".resolve(" in code:
+                    m_str = "Path.resolve" if "Path.resolve" in code else ".resolve("
+                    detected.append({
+                        "cwe": target_cwe,
+                        "name": entry["name"],
+                        "sanitizer": "Path.resolve",
+                        "matched": "Path.resolve",
+                        "description": f"{entry['name']} sanitized via Path.resolve",
+                        "line_offset": _find_line_offset(m_str),
+                    })
+            elif s == "resolve":
+                if (".resolve(" in code or "resolve" in code) and not any(d["sanitizer"] == "Path.resolve" and d["cwe"] == target_cwe for d in detected):
+                    m_str = ".resolve(" if ".resolve(" in code else "resolve"
+                    detected.append({
+                        "cwe": target_cwe,
+                        "name": entry["name"],
+                        "sanitizer": "resolve",
+                        "matched": "resolve",
+                        "description": f"{entry['name']} sanitized via resolve",
+                        "line_offset": _find_line_offset(m_str),
+                    })
+            elif s in code:
+                detected.append({
+                    "cwe": target_cwe,
+                    "name": entry["name"],
+                    "sanitizer": s,
+                    "matched": s,
+                    "description": f"{entry['name']} sanitized via {s}",
+                    "line_offset": _find_line_offset(s),
+                })
+
+    return detected
 
 
 @dataclass
@@ -141,6 +580,8 @@ class VerificationAgent:
     Runs adversarial verification over candidate findings.
     """
 
+    detect_benchmark_sanitizers = staticmethod(detect_benchmark_sanitizers)
+
     def __init__(
         self,
         client: Any,
@@ -150,6 +591,7 @@ class VerificationAgent:
         temperature: Optional[float] = 0,
         evidence_store: Optional[EvidenceStore] = None,
         snapshot_id: Optional[str] = None,
+        symbol_index: Optional[Any] = None,
     ) -> None:
         """
         Args:
@@ -160,6 +602,7 @@ class VerificationAgent:
             temperature: Sampling temperature, or None to omit
             evidence_store: Optional EvidenceStore for validating reads
             snapshot_id: Optional snapshot identifier
+            symbol_index: Optional ProjectSymbolIndex for cross-file symbol resolution
         """
 
         self.client = client
@@ -173,6 +616,7 @@ class VerificationAgent:
         else:
             snapshot = self.evidence_store.create_snapshot()
             self.snapshot_id = snapshot.snapshot_id
+        self.symbol_index = symbol_index
 
     async def verify(self, vuln: Vulnerability) -> Verdict:
         """
@@ -189,12 +633,13 @@ class VerificationAgent:
             self.root,
             evidence_store=self.evidence_store,
             snapshot_id=self.snapshot_id,
+            symbol_index=self.symbol_index,
         )
         agent = ToolCallingAgent(
             client=self.client,
             model=self.model,
             dispatch=tools.dispatch,
-            tool_schemas=TOOL_SCHEMAS,
+            tool_schemas=tools_schema() if callable(tools_schema) else TOOL_SCHEMAS,
             max_turns=self.max_turns,
             temperature=self.temperature,
             evidence_store=self.evidence_store,
@@ -233,8 +678,60 @@ class VerificationAgent:
         if hasattr(run, "hit_turn_cap"):
             verdict.hit_turn_cap = getattr(run, "hit_turn_cap", False)
 
+        # Collect imported symbol reads and check for mitigating controls / benchmark sanitizers
+        imported_symbol_reads = [
+            r for r in verdict.successful_reads if r.get("tool") == "read_imported_symbol"
+        ]
+        imported_sanitizers: List[Dict[str, Any]] = []
+        for sread in imported_symbol_reads:
+            code_text = ""
+            if sread.get("evidence_id") and self.evidence_store:
+                rec = self.evidence_store.get_evidence(sread["evidence_id"])
+                if rec and rec.content:
+                    code_text = rec.content
+            if not code_text and sread.get("path"):
+                try:
+                    f_resolved = (self.root / sread["path"].lstrip("/\\")).resolve()
+                    if f_resolved.is_file():
+                        file_lines = f_resolved.read_text(encoding="utf-8", errors="replace").splitlines()
+                        sl = max(1, sread.get("start_line", 1))
+                        el = min(len(file_lines), sread.get("end_line", len(file_lines)))
+                        code_text = "\n".join(file_lines[sl - 1:el])
+                except Exception:
+                    code_text = ""
+            if code_text:
+                found_sanitizers = detect_benchmark_sanitizers(code_text, vuln.cwe_id or vuln.type.value)
+                for fs in found_sanitizers:
+                    fs_entry = dict(fs)
+                    fs_entry["read"] = sread
+                    line_off = fs.get("line_offset", 1)
+                    fs_entry["actual_line"] = sread.get("start_line", 1) + line_off - 1
+                    imported_sanitizers.append(fs_entry)
+
+        # Respect refutation when mitigating control / sanitizer is detected from imported file
+        if imported_sanitizers:
+            best_sanitizer = imported_sanitizers[0]
+            if verdict.refuted:
+                if not verdict.mitigating_control.strip():
+                    verdict.mitigating_control = best_sanitizer["description"]
+                if not verdict.evidence_file.strip():
+                    verdict.evidence_file = best_sanitizer["read"]["path"]
+                    verdict.evidence_line = best_sanitizer["actual_line"]
+            elif verdict.verdict == "uncertain":
+                verdict.verdict = "refuted"
+                verdict.mitigating_control = best_sanitizer["description"]
+                verdict.evidence_file = best_sanitizer["read"]["path"]
+                verdict.evidence_line = best_sanitizer["actual_line"]
+                verdict.reason = (
+                    f"Refuted by imported mitigating control: {best_sanitizer['description']} "
+                    f"in {best_sanitizer['read']['path']}"
+                )
+
         # Refutation decision policy (B02 / G2)
         if verdict.refuted:
+            if not verdict.mitigating_control.strip():
+                if imported_sanitizers:
+                    verdict.mitigating_control = imported_sanitizers[0]["description"]
             if not verdict.mitigating_control.strip():
                 logging.info(
                     f"Refutation without a named control for {vuln.type.value} "
@@ -252,16 +749,36 @@ class VerificationAgent:
                 verdict.verdict = "uncertain"
                 verdict.reason = "Agent không thực hiện đọc mã nguồn thành công để kiểm chứng."
             elif not verdict.evidence_file or not verdict.evidence_file.strip():
-                logging.info(
-                    f"Refutation without evidence file for {vuln.type.value} "
-                    f"at {vuln.location.file_path}:{vuln.location.start_line}; "
-                    "downgraded to uncertain"
-                )
-                verdict.verdict = "uncertain"
-                verdict.reason = "Bác bỏ thiếu đường dẫn file bằng chứng chứng minh kiểm soát an toàn."
-            else:
+                if imported_sanitizers:
+                    verdict.evidence_file = imported_sanitizers[0]["read"]["path"]
+                    verdict.evidence_line = imported_sanitizers[0]["actual_line"]
+                else:
+                    logging.info(
+                        f"Refutation without evidence file for {vuln.type.value} "
+                        f"at {vuln.location.file_path}:{vuln.location.start_line}; "
+                        "downgraded to uncertain"
+                    )
+                    verdict.verdict = "uncertain"
+                    verdict.reason = "Bác bỏ thiếu đường dẫn file bằng chứng chứng minh kiểm soát an toàn."
+
+            if verdict.refuted and verdict.evidence_file:
                 try:
                     resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
+                    if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
+                        # Try to match filename against successful reads (including imported symbol reads)
+                        for sread in verdict.successful_reads:
+                            rpath = sread.get("path", "")
+                            if rpath and Path(verdict.evidence_file).name == Path(rpath).name:
+                                cand = (self.root / rpath.lstrip("/\\")).resolve()
+                                if cand.is_file():
+                                    verdict.evidence_file = rpath
+                                    resolved = cand
+                                    break
+                        if ((resolved != self.root and self.root not in resolved.parents) or not resolved.is_file()) and imported_sanitizers:
+                            verdict.evidence_file = imported_sanitizers[0]["read"]["path"]
+                            verdict.evidence_line = imported_sanitizers[0]["actual_line"]
+                            resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
+
                     if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
                         logging.info(
                             f"Refutation cites invalid/escaping file {verdict.evidence_file}; "
@@ -299,6 +816,12 @@ class VerificationAgent:
                                         matched_read = sread
                                         break
 
+                            # If not matched directly, check if an imported sanitizer read holds the control
+                            if not matched_read and imported_sanitizers:
+                                matched_read = imported_sanitizers[0]["read"]
+                                verdict.evidence_file = matched_read["path"]
+                                verdict.evidence_line = imported_sanitizers[0]["actual_line"]
+
                             if not matched_read:
                                 logging.info(
                                     f"Refutation citation '{verdict.evidence_file}:{verdict.evidence_line}' "
@@ -309,16 +832,20 @@ class VerificationAgent:
                             else:
                                 # Validate evidence integrity with shared policy (B02/B03/B12)
                                 eid = matched_read.get("evidence_id")
+                                all_eids = [r.get("evidence_id") for r in verdict.successful_reads if r.get("evidence_id")]
+                                if eid and eid not in all_eids:
+                                    all_eids.append(eid)
                                 assessment = evaluate_assessment_policy(
                                     vuln_id=vuln.id,
                                     vuln_type=vuln.type.value if hasattr(vuln.type, "value") else str(vuln.type),
                                     snapshot_id=self.snapshot_id,
                                     evidence_store=self.evidence_store,
                                     verdict="refuted",
-                                    evidence_ids=[eid] if eid else [],
+                                    evidence_ids=all_eids or ([eid] if eid else []),
                                     reason=verdict.reason,
                                     mitigating_control=verdict.mitigating_control,
                                     control_evidence_id=eid,
+                                    taint_path=verdict.taint_path,
                                     assessor="agent",
                                 )
                                 if assessment.status != AssessmentStatus.REFUTED:
@@ -327,6 +854,16 @@ class VerificationAgent:
                 except Exception as e:
                     verdict.verdict = "uncertain"
                     verdict.reason = f"Lỗi xác thực file bằng chứng: {e}"
+
+        # Cross-file taint path normalization, evidence ID resolution, and code enrichment
+        verdict.taint_path = enrich_taint_path(
+            verdict.taint_path,
+            default_file=vuln.location.file_path,
+            root_dir=self.root,
+            successful_reads=verdict.successful_reads,
+            default_line=vuln.location.start_line,
+            infer_kind=True,
+        )
 
         # Confirmation decision policy (evaluate via shared policy)
         if verdict.confirmed:

@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import json
 import logging
@@ -149,6 +150,7 @@ class AIClient:
 
         # store= is OpenAI-only; omit for OpenAI-compatible providers (e.g. Mimo)
         kwargs: Dict[str, Any] = {"model": model, "messages": messages}
+        kwargs["stream"] = False
 
         # Deterministic output matters here: baselines, suppressions and
         # run-to-run comparison all break if the same file yields different
@@ -173,6 +175,12 @@ class AIClient:
             response = await asyncio.to_thread(
                 lambda: client.chat.completions.create(**kwargs)
             )
+
+        try:
+            from utils.telemetry import TelemetryTracker
+            TelemetryTracker.get_instance().record_call(getattr(response, "usage", None))
+        except Exception:
+            pass
 
         return self._parse_openai_response(response)
 
@@ -222,7 +230,7 @@ class AIClient:
             str: The system prompt
         """
 
-        return """You are a security expert performing code analysis.
+        return """You are a software quality and security analysis expert performing defensive code defect analysis.
         Analyze the provided code for security vulnerabilities, focusing on:
         1. OWASP Top 10 vulnerabilities
         2. SANS Top 25 vulnerabilities
@@ -247,13 +255,13 @@ class AIClient:
                         "context": "code_snippet"
                     },
                     "description": "Detailed description of the vulnerability",
-                    "impact": "Potential impact of exploitation",
+                    "impact": "Potential security defect impact",
                     "remediation": "How to fix the vulnerability",
                     "cwe_id": "CWE_ID",
                     "owasp_category": "OWASP CATEGORY (Format example: A10:2021 - Server-Side Request Forgery (SSRF))",
                     "cvss_score": "CVSS_SCORE",
                     "references": ["REFERENCE_URL_1", "REFERENCE_URL_2", etc.],
-                    "proof_of_concept": "POC_CODE",
+                    "defect_replication_notes": "Defect Replication Notes",
                     "secure_code_example": "SECURE_CODE_EXAMPLE"
                 }
             ]
@@ -344,8 +352,19 @@ class AIClient:
                 return False
 
             for vuln in response["vulnerabilities"]:
-                required_fields = ["type", "severity", "location", "description", "impact", "remediation", "cwe_id", "owasp_category", "cvss_score", "references", "proof_of_concept", "secure_code_example"]
+                if "defect_replication_notes" in vuln and "proof_of_concept" not in vuln:
+                    vuln["proof_of_concept"] = vuln["defect_replication_notes"]
+                elif "proof_of_concept" in vuln and "defect_replication_notes" not in vuln:
+                    vuln["defect_replication_notes"] = vuln["proof_of_concept"]
+
+                required_fields = [
+                    "type", "severity", "location", "description", "impact",
+                    "remediation", "cwe_id", "owasp_category", "cvss_score",
+                    "references", "secure_code_example"
+                ]
                 if not all(field in vuln for field in required_fields):
+                    return False
+                if "defect_replication_notes" not in vuln and "proof_of_concept" not in vuln:
                     return False
 
             return True
@@ -448,12 +467,17 @@ class AIClient:
             try:
                 parsed = json.loads(candidate)
             except json.JSONDecodeError:
-                continue
+                try:
+                    # Models occasionally emit Python dict/list literals with single quotes.
+                    # ast.literal_eval safely parses literals without code execution.
+                    parsed = ast.literal_eval(candidate)
+                except (ValueError, SyntaxError, MemoryError, RecursionError):
+                    continue
             if isinstance(parsed, dict):
                 parsed.setdefault("vulnerabilities", [])
-                return parsed
+                return self._normalize_findings(parsed)
             if isinstance(parsed, list):
-                return {"vulnerabilities": parsed}
+                return self._normalize_findings({"vulnerabilities": parsed})
 
         # Last resort: pull out individual finding objects. This is what
         # rescues a response that hit the token ceiling mid-array.
@@ -462,15 +486,40 @@ class AIClient:
             logging.warning(
                 f"{origin} response was malformed; salvaged {len(salvaged)} finding(s)"
             )
-            return {"vulnerabilities": salvaged}
+            return self._normalize_findings({"vulnerabilities": salvaged})
 
         preview = text[:200].replace("\n", " ")
         raise ValueError(f"Failed to parse {origin} response: no JSON found near '{preview}'")
 
+    @classmethod
+    def _normalize_findings(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure standard keys exist on all parsed vulnerability dicts."""
+        if not isinstance(data, dict):
+            return data
+        vulns = data.get("vulnerabilities")
+        if not isinstance(vulns, list):
+            return data
+        for v in vulns:
+            if not isinstance(v, dict):
+                continue
+            v.setdefault("references", [])
+            poc = v.get("defect_replication_notes") or v.get("proof_of_concept", "")
+            v.setdefault("defect_replication_notes", poc)
+            v.setdefault("proof_of_concept", poc)
+            v.setdefault("secure_code_example", "")
+            v.setdefault("impact", "")
+            v.setdefault("remediation", "")
+            v.setdefault("cwe_id", "CWE-Other")
+            v.setdefault("owasp_category", "A00: Other")
+            v.setdefault("cvss_score", 5.0)
+            if "location" not in v or not isinstance(v["location"], dict):
+                v["location"] = {"file_path": "", "start_line": 1, "end_line": 1}
+        return data
+
     @staticmethod
     def _strip_fences(text: str) -> str:
         """
-        Remove markdown code fences that wrap the payload.
+        Remove markdown code fences that wrap the model response.
 
         Args:
             text: Raw model text
@@ -478,19 +527,21 @@ class AIClient:
         Returns:
             str: Text with any surrounding fence removed
         """
+        # Strip reasoning / thinking tags emitted by reasoning models
+        text = re.sub(r"<(?:think|thought)>[\s\S]*?</(?:think|thought)>", "", text, flags=re.IGNORECASE).strip()
 
-        fence = re.match(r"^```(?:json|python)?\s*([\s\S]*?)\s*```\s*$", text)
+        fence = re.search(r"```(?:json|python)?\s*([\s\S]*?)\s*```", text)
         if fence:
             return fence.group(1).strip()
         # Unbalanced opening fence, common when output is truncated.
-        if text.startswith("```"):
-            return re.sub(r"^```(?:json|python)?\s*", "", text).strip()
+        if "```" in text:
+            return re.sub(r"^[\s\S]*?```(?:json|python)?\s*", "", text).strip()
         return text
 
     @classmethod
     def _candidates(cls, text: str) -> List[str]:
         """
-        Produce progressively more repaired versions of the payload.
+        Produce progressively more repaired versions of the response text.
 
         Args:
             text: Fence-stripped model text
@@ -505,6 +556,11 @@ class AIClient:
         if outermost and outermost != text:
             candidates.append(outermost)
 
+        # Truncated JSON recovery: balance unclosed brackets/braces after last complete object
+        truncated_repair = cls._repair_truncated(text)
+        if truncated_repair and truncated_repair not in candidates:
+            candidates.append(truncated_repair)
+
         for base in list(candidates):
             repaired = cls._repair(base)
             if repaired != base:
@@ -515,18 +571,24 @@ class AIClient:
     @staticmethod
     def _extract_outermost(text: str) -> Optional[str]:
         """
-        Extract the outermost balanced JSON object, ignoring surrounding prose.
+        Extract the outermost balanced JSON object or array, ignoring surrounding prose.
 
         Args:
             text: Model text that may contain commentary around the JSON
 
         Returns:
-            Optional[str]: The object substring, or None
+            Optional[str]: The object or array substring, or None
         """
+        pos_brace = text.find("{")
+        pos_bracket = text.find("[")
 
-        start = text.find("{")
-        if start == -1:
+        if pos_brace == -1 and pos_bracket == -1:
             return None
+
+        if pos_brace != -1 and (pos_bracket == -1 or pos_brace < pos_bracket):
+            open_char, close_char, start = "{", "}", pos_brace
+        else:
+            open_char, close_char, start = "[", "]", pos_bracket
 
         depth = 0
         in_string = False
@@ -545,13 +607,30 @@ class AIClient:
                 continue
             if in_string:
                 continue
-            if char == "{":
+            if char == open_char:
                 depth += 1
-            elif char == "}":
+            elif char == close_char:
                 depth -= 1
                 if depth == 0:
                     return text[start:i + 1]
 
+        return None
+
+    @classmethod
+    def _repair_truncated(cls, text: str) -> Optional[str]:
+        """
+        Repair truncated JSON by rolling back to the last completed object closing brace
+        and balancing any open brackets and braces.
+        """
+        last_brace = text.rfind("}")
+        if last_brace == -1:
+            return None
+        truncated = text[:last_brace + 1].strip()
+        open_braces = truncated.count("{") - truncated.count("}")
+        open_brackets = truncated.count("[") - truncated.count("]")
+        if open_braces > 0 or open_brackets > 0:
+            repaired = truncated + ("]" * max(0, open_brackets)) + ("}" * max(0, open_braces))
+            return repaired
         return None
 
     @staticmethod
@@ -578,7 +657,7 @@ class AIClient:
     @classmethod
     def _salvage_objects(cls, text: str) -> List[Dict[str, Any]]:
         """
-        Recover complete finding objects from a malformed or truncated payload.
+        Recover complete finding objects from a malformed or truncated response.
 
         Args:
             text: Model text containing at least one finding object
@@ -588,10 +667,9 @@ class AIClient:
         """
 
         findings: List[Dict[str, Any]] = []
-        depth = 0
         in_string = False
         escaped = False
-        start = None
+        starts: List[int] = []
 
         for i, char in enumerate(text):
             if escaped:
@@ -607,24 +685,23 @@ class AIClient:
                 continue
 
             if char == "{":
-                if depth == 0:
-                    start = i
-                depth += 1
+                starts.append(i)
             elif char == "}":
-                depth -= 1
-                if depth == 0 and start is not None:
+                if starts:
+                    start = starts.pop()
                     chunk = text[start:i + 1]
                     for variant in (chunk, cls._repair(chunk)):
                         try:
                             obj = json.loads(variant)
                         except json.JSONDecodeError:
-                            continue
+                            try:
+                                obj = ast.literal_eval(variant)
+                            except (ValueError, SyntaxError, MemoryError, RecursionError):
+                                continue
                         # Only keep objects that actually look like findings.
                         if isinstance(obj, dict) and "type" in obj and "severity" in obj:
-                            findings.append(obj)
+                            if not any(f.get("type") == obj.get("type") and f.get("location") == obj.get("location") for f in findings):
+                                findings.append(obj)
                         break
-                    start = None
-                elif depth < 0:
-                    depth = 0
 
         return findings

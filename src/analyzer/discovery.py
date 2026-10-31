@@ -23,6 +23,8 @@ DEFAULT_EXCLUDES = (
     "build", "dist", ".eggs", "*.egg-info",
     ".idea", ".vscode",
     "migrations",
+    "tests", "test", "testing", "fixtures",
+    "docs", "site", "example", "examples",
 )
 
 SOURCE_SUFFIXES = (".py",)
@@ -44,6 +46,10 @@ RISK_SIGNALS: Tuple[Tuple[str, int, str], ...] = (
     (r"\bhashlib\b|\bcrypt\b|\bcipher\b|\brandom\.", 2, "crypto/random"),
     (r"render_template_string|\.innerHTML|mark_safe|\|\s*safe", 3, "template injection"),
     (r"\bpermissions?\b|\bCORS\b|allow_origins", 2, "security config"),
+    (r"\bHTML\s*\(|\brender_output\b|<div|<html", 3, "html component output"),
+    (r"\.loads\s*\(|\.unserialize\s*\(|\.unpickle\s*\(|\.decode_payload\b|\bserial\b|\bpcrypt\b", 4, "custom deserialization"),
+    (r"\bldap\b|\bsearch_s\b|\bxpath\b|\.xpath\s*\(", 3, "ldap/xpath query"),
+    (r"set_cookie\b|Set-Cookie\b|\bsecure\s*=\s*False", 3, "cookie security"),
 )
 
 
@@ -236,13 +242,15 @@ def route_to_llm(
     files: Sequence[DiscoveredFile],
     rule_hits: Optional[Dict[str, int]] = None,
     min_risk: int = 3,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    ast_sink_files: Optional[Iterable[str]] = None,
 ) -> List[DiscoveredFile]:
     """
     Choose which files get an LLM call.
 
     A file qualifies when the rule tier already flagged something in it, or
-    when its own risk signals clear the threshold. Note this selects *which
+    when its own risk signals clear the threshold, or when AST Slicer identified
+    a sink anchor in it. Note this selects *which
     files the LLM reads*, not which findings survive - inside a selected file
     the LLM still reports freely, so the recall advantage over a rule-only
     scan is preserved.
@@ -252,15 +260,22 @@ def route_to_llm(
         rule_hits: Finding counts per relative path from the rule tier
         min_risk: Minimum risk score to qualify on signals alone
         limit: Cap on the number of files routed, highest risk first
+        ast_sink_files: Paths (relative or absolute) of files with AST sink anchors
 
     Returns:
         List[DiscoveredFile]: Files to send to the LLM tier
     """
 
     rule_hits = rule_hits or {}
+    sink_set = set(ast_sink_files or ())
     selected = [
         f for f in files
-        if rule_hits.get(f.relative, 0) > 0 or f.risk_score >= min_risk
+        if (
+            rule_hits.get(f.relative, 0) > 0
+            or f.risk_score >= min_risk
+            or f.relative in sink_set
+            or str(f.path) in sink_set
+        )
     ]
 
     if limit is not None and len(selected) > limit:

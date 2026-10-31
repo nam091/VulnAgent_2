@@ -1,0 +1,311 @@
+{
+  "target_repository": "apache/superset",
+  "recommended_target_tag": "2.0.1",
+  "supported_tags": [
+    "1.5.0",
+    "2.0.0",
+    "2.0.1"
+  ],
+  "tag_selection_notes": "Tag 2.0.1 (or 2.0.0) is the optimal baseline target version. It contains representative vulnerable source code across major modules (e.g. default SECRET_KEY in config.py, sqla/models.py, views/core.py, tasks/slack_util.py, utils/core.py) prior to the 2.1.0/3.0.0 mitigation wave.",
+  "categories": [
+    {
+      "cwe": "CWE-89",
+      "name": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-39265",
+          "ghsa_id": "GHSA-j8cw-7r72-4mgx",
+          "title": "SQL Injection vulnerability in SQL Lab / Database connection queries",
+          "vulnerable_versions": "< 2.1.1",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/connectors/sqla/models.py",
+            "superset/models/sql_lab.py"
+          ],
+          "affected_functions_or_components": [
+            "Table.get_sqla_query",
+            "Query execution and SQL templating"
+          ],
+          "description": "SQL Injection issue allowing authenticated users with access to SQL Lab or dataset exploration to inject arbitrary SQL statements or bypass AST validation filters."
+        },
+        {
+          "cve_id": "CVE-2022-41703",
+          "ghsa_id": "GHSA-56pq-f5m2-757r",
+          "title": "SQL Injection in SQLLab via malicious Jinja templating",
+          "vulnerable_versions": "< 2.0.1",
+          "target_tag": "2.0.0",
+          "target_files": [
+            "superset/jinja_context.py",
+            "superset/models/sql_lab.py"
+          ],
+          "affected_functions_or_components": [
+            "SafeCacheProcessor",
+            "jinja_context macro evaluation"
+          ],
+          "description": "Improper input validation in Jinja template processing allows crafted templates within SQL Lab queries to execute unauthorized SQL dialect commands."
+        },
+        {
+          "cve_id": "CVE-2021-37839",
+          "ghsa_id": "GHSA-8g9x-7p33-rw46",
+          "title": "SQL Injection via improper query parameters in charts/views",
+          "vulnerable_versions": "< 1.3.0",
+          "target_tag": "1.5.0",
+          "target_files": [
+            "superset/connectors/sqla/models.py",
+            "superset/views/database/views.py"
+          ],
+          "affected_functions_or_components": [
+            "DatabaseView",
+            "SqlaTable.get_query_str"
+          ],
+          "description": "Improper neutralization in legacy chart and database parameter parsing leading to query parameter injection."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-78",
+      "name": "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')",
+      "cves": [
+        {
+          "cve_id": "CVE-2020-13948",
+          "ghsa_id": "GHSA-952g-4c4c-28j7",
+          "title": "Remote Code Execution via Celery task Slack integration parameter passing",
+          "vulnerable_versions": "< 0.38.0",
+          "target_tag": "1.5.0",
+          "target_files": [
+            "superset/tasks/slack_util.py",
+            "superset/tasks/schedules.py"
+          ],
+          "affected_functions_or_components": [
+            "deliver_slack_msg",
+            "slack_util subprocess/command invocation"
+          ],
+          "description": "Unsanitized external notification hooks and Celery task payload processing that can lead to command injection or unauthorized process spawning."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-502",
+      "name": "Deserialization of Untrusted Data",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-37941",
+          "ghsa_id": "GHSA-3829-q986-mvv2",
+          "title": "Unsafe deserialization of cached chart data or connection configuration",
+          "vulnerable_versions": "< 2.1.1",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/utils/core.py",
+            "superset/utils/cache_manager.py"
+          ],
+          "affected_functions_or_components": [
+            "superset.utils.core.zlib_decompress_to_string",
+            "pickle deserialization in cache/session store"
+          ],
+          "description": "Deserialization of untrusted payloads through caching backend or payload decompressors, leading to arbitrary code execution if backend cache is manipulated."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-918",
+      "name": "Server-Side Request Forgery (SSRF)",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-36388",
+          "ghsa_id": "GHSA-4f7f-h35c-c76q",
+          "title": "SSRF in URL and asset import/export endpoints",
+          "vulnerable_versions": "< 2.1.1",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/views/core.py",
+            "superset/databases/commands/create.py"
+          ],
+          "affected_functions_or_components": [
+            "Superset.fetch_datasource_metadata",
+            "Database connection test endpoints"
+          ],
+          "description": "Internal network scanning and metadata retrieval via unvalidated database connection strings and URL fetching handlers."
+        },
+        {
+          "cve_id": "CVE-2021-41973",
+          "ghsa_id": "GHSA-q8v6-2m87-wprv",
+          "title": "SSRF via database connection testing endpoints",
+          "vulnerable_versions": "< 1.4.0",
+          "target_tag": "1.5.0",
+          "target_files": [
+            "superset/views/core.py",
+            "superset/views/database/views.py"
+          ],
+          "affected_functions_or_components": [
+            "DatabaseView.testconn",
+            "validate_parameters"
+          ],
+          "description": "Missing network address validation allowing requests to internal network services via crafted database connection strings."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-798",
+      "name": "Use of Hard-coded Credentials",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-27524",
+          "ghsa_id": "GHSA-v237-7v2w-x424",
+          "title": "Default Flask SECRET_KEY leading to session forgery and admin RCE",
+          "vulnerable_versions": "<= 2.0.1",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/config.py"
+          ],
+          "affected_functions_or_components": [
+            "SECRET_KEY = '\\x02\\x01thisismyscretkey\\x01\\x02\\\\e\\\\y\\\\y\\\\h'",
+            "Flask session cookie signer"
+          ],
+          "description": "Apache Superset installations defaulted to a known SECRET_KEY value, allowing unauthenticated attackers to forge session cookies with administrator privileges."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-79",
+      "name": "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-49657",
+          "ghsa_id": "GHSA-5gq9-485m-5879",
+          "title": "Stored XSS via dashboard markdown / title rendering",
+          "vulnerable_versions": "< 2.1.2",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/views/base.py",
+            "superset/views/dashboard/views.py"
+          ],
+          "affected_functions_or_components": [
+            "BaseSupersetView.render_template",
+            "Dashboard title sanitization"
+          ],
+          "description": "Stored XSS triggered when an authenticated user crafts title or markdown metadata rendered without strict escaping to other users."
+        },
+        {
+          "cve_id": "CVE-2021-44445",
+          "ghsa_id": "GHSA-87cr-9694-r554",
+          "title": "Reflected XSS via error messages and query feedback",
+          "vulnerable_versions": "< 1.4.1",
+          "target_tag": "1.5.0",
+          "target_files": [
+            "superset/views/base.py",
+            "superset/views/core.py"
+          ],
+          "affected_functions_or_components": [
+            "BaseSupersetView.json_error_response",
+            "render_template"
+          ],
+          "description": "Unescaped user input reflected in error responses or parameter validation dialogs."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-352",
+      "name": "Cross-Site Request Forgery (CSRF)",
+      "cves": [
+        {
+          "cve_id": "CVE-2022-43719",
+          "ghsa_id": "GHSA-wcfh-fcm7-vffr",
+          "title": "CSRF in state-changing endpoints without CSRF token enforcement",
+          "vulnerable_versions": "< 2.0.1",
+          "target_tag": "2.0.0",
+          "target_files": [
+            "superset/views/core.py",
+            "superset/app.py"
+          ],
+          "affected_functions_or_components": [
+            "CSRF token exemption handlers",
+            "Superset.explore_json"
+          ],
+          "description": "Certain state-changing REST/JSON endpoints were exempt from CSRF token validation, enabling cross-site request exploitation."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-200",
+      "name": "Exposure of Sensitive Information to an Unauthorized Actor / Metadata Leak",
+      "cves": [
+        {
+          "cve_id": "CVE-2024-53948",
+          "ghsa_id": "GHSA-h6m6-x734-77w3",
+          "title": "Sensitive database connection credential disclosure in error payloads",
+          "vulnerable_versions": "< 3.0.3",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/views/base.py",
+            "superset/views/database/views.py"
+          ],
+          "affected_functions_or_components": [
+            "DatabaseView.get",
+            "handle_api_exception"
+          ],
+          "description": "Detailed error responses and tracebacks expose underlying database connection parameters, passwords, or internal metadata to non-admin users."
+        },
+        {
+          "cve_id": "CVE-2023-30776",
+          "ghsa_id": "GHSA-c774-8h25-cfhh",
+          "title": "Information disclosure via chart export / telemetry metadata",
+          "vulnerable_versions": "< 2.1.1",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/views/core.py",
+            "superset/charts/data/api.py"
+          ],
+          "affected_functions_or_components": [
+            "ChartDataRestApi.data",
+            "Superset.slice_json"
+          ],
+          "description": "Chart metadata endpoints leaked database schema and table structure information beyond the authenticated user's permissions."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-20",
+      "name": "Improper Input Validation",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-25504",
+          "ghsa_id": "GHSA-4jh2-q66m-5rhv",
+          "title": "Improper query parameters parsing allowing access control bypass",
+          "vulnerable_versions": "< 2.1.0",
+          "target_tag": "2.0.1",
+          "target_files": [
+            "superset/views/core.py",
+            "superset/utils/core.py"
+          ],
+          "affected_functions_or_components": [
+            "get_form_data",
+            "QueryContextFactory.create"
+          ],
+          "description": "Inadequate parsing and validation of nested JSON query parameters leading to validation bypass and unauthorized data access."
+        }
+      ]
+    },
+    {
+      "cwe": "CWE-1188",
+      "name": "Insecure Default Initialization of Resource / Insecure Default Configuration",
+      "cves": [
+        {
+          "cve_id": "CVE-2022-45438",
+          "ghsa_id": "GHSA-f529-g6v6-5r3r",
+          "title": "Insecure default database engine specifications permitting arbitrary file reads / local connections",
+          "vulnerable_versions": "< 2.0.1",
+          "target_tag": "2.0.0",
+          "target_files": [
+            "superset/db_engine_specs/base.py",
+            "superset/db_engine_specs/sqlite.py"
+          ],
+          "affected_functions_or_components": [
+            "BaseEngineSpec.get_engine",
+            "SqliteEngineSpec"
+          ],
+          "description": "Default engine specifications lacked restrictive sandbox flags, allowing SQLite and local connectors to read local files or connect to unauthorized sockets."
+        }
+      ]
+    }
+  ]
+}

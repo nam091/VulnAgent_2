@@ -1,0 +1,313 @@
+{
+  "version": "1.0",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.14.0",
+    "executable": "C:\\Python314\\python.exe",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent"
+    },
+    "engines": {
+      "semgrep": "1.156.0",
+      "bandit": "python.exe C:\\Users\\Knowm\\AppData\\Roaming\\Python\\Python314\\Scripts\\bandit 1.9.4"
+    }
+  },
+  "dataset": {
+    "name": "Apache Superset 2.0.1 Vulnerability Benchmark",
+    "source": "https://github.com/apache/superset/tree/2.0.1",
+    "match_mode": "file",
+    "labels": 10,
+    "files": 10,
+    "partial_labels": false,
+    "labels_sha256": "d17998f6373a89623bc1ef839fe1c1d68dcf495e9d514381a063c957a37c3ad1",
+    "samples_sha256": "e0a5091cb172ce7693dab16ec49224f8184e7b82ec6edcc8840b1f9096ef04a1",
+    "git": {
+      "commit": "69a549a8b3a1299a4bc9e08b1ca8483ad416c011",
+      "dirty": true,
+      "repo_root": "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\superset"
+    }
+  },
+  "integrity": {
+    "verified": true,
+    "mismatches": [],
+    "initial_labels_sha256": "d17998f6373a89623bc1ef839fe1c1d68dcf495e9d514381a063c957a37c3ad1",
+    "initial_samples_sha256": "e0a5091cb172ce7693dab16ec49224f8184e7b82ec6edcc8840b1f9096ef04a1"
+  },
+  "rules": {
+    "configs": [
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml"
+    ],
+    "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+    "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+    "entries": [
+      {
+        "type": "file",
+        "path": "F:\\PERSIONAL\\Projects\\VulnAgent\\rules\\pinned_security_rules.yaml",
+        "sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "post_sha256": "b436a6a3633070e4bf86f94056b79d34d48af23e2ffc8bf3a5025bb5f18c500e",
+        "status": "verified"
+      }
+    ]
+  },
+  "protocol": {
+    "line_tolerance": 3,
+    "exact_cwe": false,
+    "cache_policy": "disabled",
+    "cache_state": "disabled",
+    "cache_mode": "disabled",
+    "cache_hits": 0,
+    "cache_misses": 12,
+    "concurrency": 8,
+    "timestamp": 1792760966.5862014,
+    "iso_timestamp": "2026-10-23T20:09:26.586204"
+  },
+  "results": [
+    {
+      "name": "LLM only",
+      "status": "degraded",
+      "degraded": false,
+      "errors": [],
+      "tp": 2,
+      "fp": 29,
+      "fn": 8,
+      "precision": 0.0645,
+      "recall": 0.2,
+      "f1": 0.0976,
+      "unmatched": 0,
+      "fp_on_clean_files": 5,
+      "fp_duplicate_sink": 0,
+      "fp_wrong_line_tolerance": 3,
+      "fp_wrong_type_right_file": 21,
+      "partial_ground_truth": false,
+      "seconds": 34.22,
+      "coverage": {
+        "files_scanned": 15,
+        "files_requested": [
+          "utils_core.py",
+          "views_core.py",
+          "db_engine_base.py",
+          "superset_config.py",
+          "views_base.py",
+          "clean_encrypt.py",
+          "views_api.py",
+          "clean_date_parser.py",
+          "database_views.py",
+          "slack_util.py",
+          "clean_hashing.py",
+          "query_context_factory.py",
+          "clean_logging_config.py",
+          "clean_schema.py",
+          "sql_lab_models.py"
+        ],
+        "total_seconds": 34.21,
+        "cache_hits": 0,
+        "cache_misses": 12,
+        "cache_policy": "disabled",
+        "cache_state": "disabled",
+        "cache_mode": "disabled",
+        "rule_tier_seconds": 0.0,
+        "llm_tier_seconds": 33.63
+      },
+      "missed": [
+        "sql_lab_models.py:0 SQL_INJECTION",
+        "slack_util.py:0 COMMAND_INJECTION",
+        "utils_core.py:0 DESERIALIZATION",
+        "views_core.py:0 SSRF",
+        "views_base.py:0 XSS",
+        "views_api.py:0 CSRF",
+        "query_context_factory.py:0 INPUT_VALIDATION",
+        "db_engine_base.py:0 INSECURE_CONFIGURATION"
+      ],
+      "spurious": [
+        "utils_core.py:687 PATH_TRAVERSAL",
+        "utils_core.py:941 INSECURE_FILE_READ",
+        "utils_core.py:1542 SENSITIVE_DATA_EXPOSURE",
+        "views_core.py:2664 SENSITIVE_DATA_EXPOSURE",
+        "views_core.py:1441 BROKEN_ACCESS_CONTROL",
+        "views_core.py:2644 INJECTION",
+        "db_engine_base.py:1116 SQL_INJECTION",
+        "db_engine_base.py:1259 SQL_INJECTION",
+        "db_engine_base.py:1472 SENSITIVE_DATA_EXPOSURE",
+        "superset_config.py:181 HARDCODED_CREDENTIALS",
+        "superset_config.py:1269 EXPOSED_SECRET",
+        "superset_config.py:233 SENSITIVE_DATA_EXPOSURE",
+        "superset_config.py:977 HARDCODED_CREDENTIALS",
+        "superset_config.py:1219 INSECURE_CONFIGURATION_SETTING",
+        "views_base.py:116 EXPOSED_SENSITIVE_INFORMATION",
+        "views_base.py:355 SENSITIVE_DATA_EXPOSURE",
+        "clean_encrypt.py:118 SQL_INJECTION",
+        "clean_encrypt.py:168 SQL_INJECTION",
+        "views_api.py:61 INJECTION",
+        "views_api.py:83 SQL_INJECTION",
+        "clean_date_parser.py:79 REGULAR_EXPRESSION_DENIAL_OF_SERVICE",
+        "clean_date_parser.py:388 INSUFFICIENT_INPUT_VALIDATION",
+        "database_views.py:281 PATH_TRAVERSAL",
+        "database_views.py:406 DENIAL_OF_SERVICE",
+        "slack_util.py:54 IMPROPER_ERROR_HANDLING",
+        "slack_util.py:60 IMPROPER_ERROR_HANDLING",
+        "clean_hashing.py:24 WEAK_CRYPTOGRAPHY",
+        "query_context_factory.py:58 INSECURE_DIRECT_OBJECT_REFERENCE_(IDOR)",
+        "query_context_factory.py:62 INSECURE_DIRECT_OBJECT_REFERENCE_(IDOR)"
+      ],
+      "raw_findings": [
+        {
+          "cwe": "CWE-22",
+          "file": "utils_core.py",
+          "line": 687
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "utils_core.py",
+          "line": 941
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "utils_core.py",
+          "line": 1542
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "views_core.py",
+          "line": 2664
+        },
+        {
+          "cwe": "CWE-770",
+          "file": "views_core.py",
+          "line": 1441
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "views_core.py",
+          "line": 2644
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "db_engine_base.py",
+          "line": 1116
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "db_engine_base.py",
+          "line": 1259
+        },
+        {
+          "cwe": "CWE-312",
+          "file": "db_engine_base.py",
+          "line": 1472
+        },
+        {
+          "cwe": "CWE-798",
+          "file": "superset_config.py",
+          "line": 181
+        },
+        {
+          "cwe": "CWE-798",
+          "file": "superset_config.py",
+          "line": 1269
+        },
+        {
+          "cwe": "CWE-798",
+          "file": "superset_config.py",
+          "line": 1278
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "superset_config.py",
+          "line": 233
+        },
+        {
+          "cwe": "CWE-798",
+          "file": "superset_config.py",
+          "line": 977
+        },
+        {
+          "cwe": "CWE-614",
+          "file": "superset_config.py",
+          "line": 1219
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "views_base.py",
+          "line": 116
+        },
+        {
+          "cwe": "CWE-200",
+          "file": "views_base.py",
+          "line": 355
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "clean_encrypt.py",
+          "line": 118
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "clean_encrypt.py",
+          "line": 168
+        },
+        {
+          "cwe": "CWE-915",
+          "file": "views_api.py",
+          "line": 61
+        },
+        {
+          "cwe": "CWE-89",
+          "file": "views_api.py",
+          "line": 83
+        },
+        {
+          "cwe": "CWE-1333",
+          "file": "clean_date_parser.py",
+          "line": 79
+        },
+        {
+          "cwe": "CWE-20",
+          "file": "clean_date_parser.py",
+          "line": 388
+        },
+        {
+          "cwe": "CWE-22",
+          "file": "database_views.py",
+          "line": 281
+        },
+        {
+          "cwe": "CWE-400",
+          "file": "database_views.py",
+          "line": 406
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "database_views.py",
+          "line": 226
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "slack_util.py",
+          "line": 54
+        },
+        {
+          "cwe": "CWE-209",
+          "file": "slack_util.py",
+          "line": 60
+        },
+        {
+          "cwe": "CWE-327",
+          "file": "clean_hashing.py",
+          "line": 24
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "query_context_factory.py",
+          "line": 58
+        },
+        {
+          "cwe": "CWE-639",
+          "file": "query_context_factory.py",
+          "line": 62
+        }
+      ]
+    }
+  ]
+}

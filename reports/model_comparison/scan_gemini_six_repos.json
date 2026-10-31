@@ -1,0 +1,1593 @@
+{
+  "status": "partial",
+  "degraded": false,
+  "coverage": {
+    "requested_count": 16,
+    "scanned_count": 16,
+    "completed_count": 13,
+    "failed_count": 0,
+    "partial_count": 3,
+    "status": "partial",
+    "degraded": false,
+    "file_statuses": {
+      "ansible_hardcoded_secret.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "gradio_info_disclosure.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "salt_auth_bypass.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "salt_cmdi.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "clean_gradio_media.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 4
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "airflow_pathtraversal.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "clean_weasyprint_units.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "salt_deserialization.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "clean_ansible_display.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "weasyprint_ssrf.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "clean_django_crypto.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          }
+        }
+      },
+      "airflow_idor.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          }
+        }
+      },
+      "django_sqli.py": {
+        "status": "completed",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 1
+          },
+          "llm": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 2
+          }
+        }
+      },
+      "clean_airflow_dates.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      },
+      "clean_salt_units.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      },
+      "gradio_xss.py": {
+        "status": "partial",
+        "degraded": false,
+        "engine_status": {
+          "semgrep": {
+            "requested": true,
+            "status": "ok",
+            "reason": "",
+            "findings": 0
+          },
+          "llm": {
+            "requested": true,
+            "status": "not_routed",
+            "reason": "File did not clear risk threshold",
+            "findings": 0
+          }
+        }
+      }
+    },
+    "semgrep": {
+      "analyzed_files": [
+        "ansible_hardcoded_secret.py",
+        "gradio_info_disclosure.py",
+        "salt_auth_bypass.py",
+        "salt_cmdi.py",
+        "clean_gradio_media.py",
+        "airflow_pathtraversal.py",
+        "clean_weasyprint_units.py",
+        "salt_deserialization.py",
+        "clean_ansible_display.py",
+        "weasyprint_ssrf.py",
+        "clean_django_crypto.py",
+        "airflow_idor.py",
+        "django_sqli.py",
+        "clean_airflow_dates.py",
+        "clean_salt_units.py",
+        "gradio_xss.py"
+      ],
+      "failed_files": []
+    },
+    "llm": {
+      "analyzed_files": [
+        "ansible_hardcoded_secret.py",
+        "gradio_info_disclosure.py",
+        "salt_auth_bypass.py",
+        "salt_cmdi.py",
+        "clean_gradio_media.py",
+        "airflow_pathtraversal.py",
+        "clean_weasyprint_units.py",
+        "salt_deserialization.py",
+        "clean_ansible_display.py",
+        "weasyprint_ssrf.py",
+        "clean_django_crypto.py",
+        "airflow_idor.py",
+        "django_sqli.py"
+      ],
+      "failed_files": []
+    }
+  },
+  "stats": {
+    "files_discovered": 16,
+    "files_requested": [
+      "ansible_hardcoded_secret.py",
+      "gradio_info_disclosure.py",
+      "salt_auth_bypass.py",
+      "salt_cmdi.py",
+      "clean_gradio_media.py",
+      "airflow_pathtraversal.py",
+      "clean_weasyprint_units.py",
+      "salt_deserialization.py",
+      "clean_ansible_display.py",
+      "weasyprint_ssrf.py",
+      "clean_django_crypto.py",
+      "airflow_idor.py",
+      "django_sqli.py",
+      "clean_airflow_dates.py",
+      "clean_salt_units.py",
+      "gradio_xss.py"
+    ],
+    "files_scanned": 16,
+    "files_sent_to_llm": 13,
+    "rule_tier_seconds": 30.62,
+    "llm_tier_seconds": 89.67,
+    "total_seconds": 225.64,
+    "cache_hits": 0,
+    "cache_misses": 13,
+    "rule_error": "",
+    "file_hashes": {
+      "ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8"
+    },
+    "snapshot_hashes": {
+      "ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\ansible_hardcoded_secret.py": "44d0c22d2416032cbb9845a7d20445dc072b0f375ce2eb4afc86ca222c37d853",
+      "gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_info_disclosure.py": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+      "salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_auth_bypass.py": "b4df7f7a86bdca008a7a5af528fa1748b08f79761a2c3e1dec45fc99f410d172",
+      "salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_cmdi.py": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+      "clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_gradio_media.py": "e5ad50a4f0031f3666a6c04c6cd744df7e7b49856bb22ede69e8abca3ea25d3e",
+      "airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_pathtraversal.py": "9980a6b8d05e4cb10cca05a072bd5a377ede44915f85ed98d5740dcbf106037f",
+      "clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_weasyprint_units.py": "f33f4afe82aabcc9e66da7ecc577fc77152a22c1e858b50e936517477694da23",
+      "salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\salt_deserialization.py": "11f0e8f6d27b201b3a0955a18f7980f28ff8b24caa5fa4f7178de9b0798a9c75",
+      "clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_ansible_display.py": "8d9219911109ecfb774dde7a8aae9ee701abbd45d2a794508b0f45c8aa47ed78",
+      "weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\weasyprint_ssrf.py": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+      "clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_django_crypto.py": "dbd7ef65c58c971ed6c26200c237f4341d4b68ea546d043507337ef3a0041ef9",
+      "airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\airflow_idor.py": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+      "django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\django_sqli.py": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+      "clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_airflow_dates.py": "944732769c368bf0124078e7fd6c3ea62879be171e45ee6cfc1077b87416aaf5",
+      "clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\clean_salt_units.py": "82b1ca081ceca18e200014c1d9b6b5c3efd7be231dc9a8ded684170f85299bab",
+      "gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8",
+      "F:\\PERSIONAL\\Projects\\VulnAgent\\eval\\datasets\\six_repos\\samples\\gradio_xss.py": "223c8b5ddd639d14e7e90f66b87c0bcff68d7ae57dbdf5411fc585b2607499d8"
+    },
+    "api_requests": 42,
+    "input_tokens": 563699,
+    "output_tokens": 4896,
+    "total_tokens": 568595,
+    "telemetry": {
+      "api_requests": 42,
+      "input_tokens": 563699,
+      "output_tokens": 4896,
+      "total_tokens": 568595,
+      "prompt_tokens": 563699,
+      "completion_tokens": 4896
+    },
+    "verified_candidates": 6,
+    "verify_confirmed": 1,
+    "verify_refuted": 0,
+    "verify_uncertain": 5,
+    "verify_dropped": 0,
+    "verify_tool_calls": 20,
+    "chains_proposed": 1,
+    "chains_upheld": 0,
+    "chains_rejected": 1,
+    "verify_seconds": 105.07
+  },
+  "reports": [
+    {
+      "timestamp": "2026-10-25T23:43:03.930166",
+      "file_name": "ansible_hardcoded_secret.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930331",
+      "file_name": "gradio_info_disclosure.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "b281dcb5193a7e8a",
+          "type": "SECURE_COOKIE",
+          "severity": "MEDIUM",
+          "location": {
+            "file_path": "gradio_info_disclosure.py",
+            "start_line": 290,
+            "end_line": 294,
+            "start_col": 17,
+            "end_col": 18,
+            "context": "response.set_cookie(\n    key=f\"access-token-unsecure-{app.cookie_id}\",\n    value=token,\n    httponly=True,\n)"
+          },
+          "description": "The application issues an authentication session token cookie ('access-token-unsecure-...') without the 'secure=True' attribute upon successful login. Because the cookie lacks the secure flag, user agents will transmit it over unencrypted HTTP connections, exposing the sensitive authentication token to interception.",
+          "impact": "An attacker capable of monitoring unencrypted network traffic (e.g., on an untrusted Wi-Fi network or via MITM) can intercept the session access token and impersonate the authenticated user, bypassing application authentication.",
+          "remediation": "Do not set unsecure session cookies. Always enforce the 'secure=True' attribute on all authentication and session-related cookies along with 'httponly=True' and appropriate 'samesite' policies (e.g., 'Lax' or 'Strict').",
+          "cwe_id": "CWE-614",
+          "owasp_category": "A05:2021 - Security Misconfiguration",
+          "cvss_score": 6.6,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/614.html",
+            "https://owasp.org/www-community/controls/SecureCookieAttribute"
+          ],
+          "proof_of_concept": "Authenticate against /login with valid credentials over an HTTP connection or inspect Set-Cookie headers in the HTTP response; observe that 'access-token-unsecure-...' is sent without the 'Secure' directive.",
+          "secure_code_example": "response.set_cookie(\n    key=f\"access-token-{app.cookie_id}\",\n    value=token,\n    httponly=True,\n    samesite=\"lax\",\n    secure=True,\n)\n# Remove the insecure fallback cookie completely",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "1217cb05699be9773e504628b454f4e0f4677b9c62b2c665f2a1d951b09fa16e",
+          "verification": {
+            "verdict": "confirmed",
+            "reason": "The `/login` endpoint generates a sensitive session token and issues it in the `access-token-unsecure-{app.cookie_id}` cookie without the `secure=True` flag, allowing it to be sent over unencrypted HTTP connections and intercepted.",
+            "evidence_file": "gradio_info_disclosure.py",
+            "evidence_line": 290,
+            "taint_path": [
+              {
+                "step": "Authentication session token generated upon user login",
+                "file": "gradio_info_disclosure.py",
+                "line": 280,
+                "kind": "source",
+                "description": "Authentication session token generated upon user login",
+                "evidence_id": "ev_7477ec9b5e7335"
+              },
+              {
+                "step": "Token registered in app.tokens mapping to authenticated username",
+                "file": "gradio_info_disclosure.py",
+                "line": 281,
+                "kind": "propagator",
+                "description": "Token registered in app.tokens mapping to authenticated username",
+                "evidence_id": "ev_7477ec9b5e7335"
+              },
+              {
+                "step": "Session token set as cookie without secure=True attribute",
+                "file": "gradio_info_disclosure.py",
+                "line": 290,
+                "kind": "sink",
+                "description": "Session token set as cookie without secure=True attribute",
+                "evidence_id": "ev_7477ec9b5e7335"
+              }
+            ],
+            "mitigating_control": "",
+            "tool_calls": 5,
+            "investigated": true,
+            "hit_turn_cap": false,
+            "tools_unsupported": false,
+            "duration_seconds": 85.76,
+            "error": "",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 200,
+                "end_line": 328,
+                "evidence_id": "ev_7477ec9b5e7335"
+              },
+              {
+                "tool": "read_lines",
+                "path": "gradio_info_disclosure.py",
+                "start_line": 1,
+                "end_line": 50,
+                "evidence_id": "ev_9039d58b718e57"
+              }
+            ]
+          },
+          "assessment_status": "supported",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": [
+            {
+              "step": "Authentication session token generated upon user login",
+              "file": "gradio_info_disclosure.py",
+              "line": 280,
+              "kind": "source",
+              "description": "Authentication session token generated upon user login",
+              "evidence_id": "ev_7477ec9b5e7335"
+            },
+            {
+              "step": "Token registered in app.tokens mapping to authenticated username",
+              "file": "gradio_info_disclosure.py",
+              "line": 281,
+              "kind": "propagator",
+              "description": "Token registered in app.tokens mapping to authenticated username",
+              "evidence_id": "ev_7477ec9b5e7335"
+            },
+            {
+              "step": "Session token set as cookie without secure=True attribute",
+              "file": "gradio_info_disclosure.py",
+              "line": 290,
+              "kind": "sink",
+              "description": "Session token set as cookie without secure=True attribute",
+              "evidence_id": "ev_7477ec9b5e7335"
+            }
+          ]
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 0,
+        "high": 0,
+        "medium": 1,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 5.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930377",
+      "file_name": "salt_auth_bypass.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930628",
+      "file_name": "salt_cmdi.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "5e14bea7e9043c48",
+          "type": "OS_COMMAND_INJECTION",
+          "severity": "CRITICAL",
+          "location": {
+            "file_path": "salt_cmdi.py",
+            "start_line": 49,
+            "end_line": 49,
+            "start_col": 32,
+            "end_col": 36,
+            "context": "subprocess.call(cmd, shell=True)"
+          },
+          "description": "The gen_key function builds a shell command string by interpolating the 'path' parameter directly using string formatting and executes it with subprocess.call(..., shell=True). If the path contains shell metacharacters or attacker-controlled input, arbitrary shell commands can be executed on the host system.",
+          "impact": "Remote or local command execution in the security context of the Salt process, potentially leading to complete system compromise.",
+          "remediation": "Do not execute commands through a system shell. Pass arguments as a list to subprocess without shell=True, or sanitize arguments using shlex.quote if a shell is strictly required.",
+          "cwe_id": "CWE-78",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 5.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html",
+            "https://owasp.org/Top10/A03_2021-Injection/",
+            "https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess",
+            "https://docs.python.org/3/library/subprocess.html"
+          ],
+          "proof_of_concept": "Call gen_key('; id > /tmp/pwned ;')",
+          "secure_code_example": "def gen_key(path):\n    cmd = ['ssh-keygen', '-P', '', '-f', path, '-t', 'rsa', '-q']\n    if not os.path.isdir(os.path.dirname(path)):\n        os.makedirs(os.path.dirname(path))\n    subprocess.call(cmd, shell=False)",
+          "source": "CONFIRMED",
+          "engine_sources": [
+            "SEMGREP",
+            "LLM"
+          ],
+          "confidence": 0.98,
+          "corroborated": true,
+          "rule_id": "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+          "merged_rule_ids": [
+            "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true"
+          ],
+          "file_hash": "2bbc4690d5ea1d413c27c16da812df4f7c5324f40199984b4c3debd9935af0a3",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 1,
+            "investigated": true,
+            "hit_turn_cap": false,
+            "tools_unsupported": false,
+            "duration_seconds": 15.88,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "search",
+                "path": "salt_cmdi.py",
+                "start_line": 42,
+                "end_line": 42,
+                "evidence_id": "ev_d980e630b68710"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": []
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 1,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 10.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930715",
+      "file_name": "clean_gradio_media.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 4
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930765",
+      "file_name": "airflow_pathtraversal.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930796",
+      "file_name": "clean_weasyprint_units.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930849",
+      "file_name": "salt_deserialization.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930879",
+      "file_name": "clean_ansible_display.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930916",
+      "file_name": "weasyprint_ssrf.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "f02b67ab2cc7fe13",
+          "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "weasyprint_ssrf.py",
+            "start_line": 211,
+            "end_line": 213,
+            "start_col": 19,
+            "end_col": 33,
+            "context": "response = urlopen(\n            Request(url, headers=HTTP_HEADERS), timeout=timeout,\n            context=ssl_context)"
+          },
+          "description": "The default_url_fetcher function passes untrusted URLs directly to urllib.request.urlopen without restricting protocols, domain names, or IP addresses. Because urllib.request supports protocols such as file://, http://, and https://, an attacker can specify arbitrary local file paths (e.g., file:///etc/passwd) or internal network/cloud metadata endpoints (e.g., http://169.254.169.254/) inside HTML or CSS documents processed by WeasyPrint.",
+          "impact": "An attacker can read local system files, probe internal services, or retrieve sensitive cloud environment metadata (such as IAM credentials), leading to sensitive information disclosure or further compromise of internal infrastructure.",
+          "remediation": "Implement an allowlist of permitted protocols (disallowing or isolating file:// access if untrusted input is processed), validate target hosts against private/loopback IP address ranges, and resolve DNS hostnames before requesting resources to avoid accessing internal services and cloud metadata endpoints.",
+          "cwe_id": "CWE-918",
+          "owasp_category": "A10:2021 - Server-Side Request Forgery (SSRF)",
+          "cvss_score": 5.0,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/918.html",
+            "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+          ],
+          "proof_of_concept": "Call default_url_fetcher('http://169.254.169.254/latest/meta-data/') or default_url_fetcher('file:///etc/passwd') to retrieve internal cloud metadata or local server files.",
+          "secure_code_example": "from urllib.parse import urlsplit\nimport ipaddress\nimport socket\n\nALLOWED_SCHEMES = {'http', 'https'}\n\ndef is_safe_url(url):\n    parsed = urlsplit(url)\n    if parsed.scheme not in ALLOWED_SCHEMES:\n        return False\n    hostname = parsed.hostname\n    if not hostname:\n        return False\n    try:\n        ip_str = socket.gethostbyname(hostname)\n        ip = ipaddress.ip_address(ip_str)\n        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)\n    except Exception:\n        return False\n\ndef default_url_fetcher(url, timeout=10, ssl_context=None):\n    if not is_safe_url(url):\n        raise ValueError(f'Access to URL blocked: {url}')\n    ...\n",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "bbc6d4997b391850f408ae2fd26ddf0fb0b1e4aa0fadfd033caa52b0b2e8e7c2",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 59.84,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 13,
+                "end_line": 13,
+                "evidence_id": "ev_fc024f7be9b5d2"
+              },
+              {
+                "tool": "read_lines",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 1,
+                "end_line": 146,
+                "evidence_id": "ev_ea40a32b503a90"
+              },
+              {
+                "tool": "read_lines",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 180,
+                "end_line": 264,
+                "evidence_id": "ev_890facd7d6ceae"
+              },
+              {
+                "tool": "read_lines",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 150,
+                "end_line": 185,
+                "evidence_id": "ev_115d120b0d9f19"
+              },
+              {
+                "tool": "search",
+                "path": "weasyprint_ssrf.py",
+                "start_line": 171,
+                "end_line": 171,
+                "evidence_id": "ev_998a18174ce352"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": []
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 0,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 8.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930945",
+      "file_name": "clean_django_crypto.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.930979",
+      "file_name": "airflow_idor.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "df8f5abccae56da7",
+          "type": "INSECURE_DIRECT_OBJECT_REFERENCE_(IDOR)",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "airflow_idor.py",
+            "start_line": 75,
+            "end_line": 76,
+            "start_col": 9,
+            "end_col": 85,
+            "context": "session.query(TI).filter(TI.dag_id == dag_id, TI.run_id == dag_run_id, TI.task_id == task_id)"
+          },
+          "description": "The endpoint retrieves and exposes task instance details using user-supplied parameters ('dag_id', 'dag_run_id', 'task_id') directly in database query filters without verifying DAG-level authorization or checking if the authenticated user has access rights to the specific DAG. The access control decorator '@security.requires_access' only checks general resource permissions rather than object-level DAG permissions.",
+          "impact": "An authenticated user with read permissions on any DAG can access, view, or manipulate task instances and execution details belonging to other DAGs for which they are not authorized, leading to unauthorized sensitive information exposure and privilege escalation.",
+          "remediation": "Enforce object-level authorization by validating DAG-level access permissions against the requesting user before querying task instances, or use '@security.requires_access_dag' / verify current user permissions against the specific 'dag_id'.",
+          "cwe_id": "CWE-639",
+          "owasp_category": "A01:2021 - Broken Access Control",
+          "cvss_score": 4.3,
+          "references": [
+            "https://cwe.mitre.org/data/definitions/639.html",
+            "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+          ],
+          "proof_of_concept": "Send a GET request to /api/v1/dags/{unauthorized_dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id} using credentials of a user authorized for a different DAG.",
+          "secure_code_example": "@security.requires_access_dag(permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG)\n@provide_session\ndef get_task_instance(*, dag_id: str, dag_run_id: str, task_id: str, session: Session = NEW_SESSION) -> APIResponse:\n    # Verify user has specific DAG access\n    if not current_user.has_dag_access(dag_id, permissions.ACTION_CAN_READ):\n        raise NotFound('Task instance not found')\n    query = session.query(TI).filter(TI.dag_id == dag_id, TI.run_id == dag_run_id, TI.task_id == task_id)",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "644a19d06825e4f0dd8339e1c5672af92af0e00b3ada95a53f2f0fcbaa8b43a1",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 6,
+            "investigated": true,
+            "hit_turn_cap": true,
+            "tools_unsupported": false,
+            "duration_seconds": 54.77,
+            "error": "empty response",
+            "successful_reads": [
+              {
+                "tool": "read_lines",
+                "path": "airflow_idor.py",
+                "start_line": 50,
+                "end_line": 110,
+                "evidence_id": "ev_2d5a2fb1e80b72"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 58,
+                "end_line": 58,
+                "evidence_id": "ev_5c70b02c0a20e0"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 106,
+                "end_line": 106,
+                "evidence_id": "ev_eee5a969e05795"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 159,
+                "end_line": 159,
+                "evidence_id": "ev_0b7cb8ded3ca01"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 298,
+                "end_line": 298,
+                "evidence_id": "ev_942082d9cd50a0"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 376,
+                "end_line": 376,
+                "evidence_id": "ev_e015a1ae17ff93"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 435,
+                "end_line": 435,
+                "evidence_id": "ev_e710566d8d9c93"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 502,
+                "end_line": 502,
+                "evidence_id": "ev_88010854b72a2f"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 573,
+                "end_line": 573,
+                "evidence_id": "ev_ffb5f483a2da44"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 619,
+                "end_line": 619,
+                "evidence_id": "ev_b793c38a062c80"
+              },
+              {
+                "tool": "search",
+                "path": "airflow_idor.py",
+                "start_line": 636,
+                "end_line": 636,
+                "evidence_id": "ev_f3cf33aabcd118"
+              },
+              {
+                "tool": "read_lines",
+                "path": "airflow_idor.py",
+                "start_line": 1,
+                "end_line": 50,
+                "evidence_id": "ev_e71c1cdaf0cebd"
+              }
+            ]
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": []
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        }
+      },
+      "summary": {
+        "total": 1,
+        "critical": 0,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 8.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.931504",
+      "file_name": "django_sqli.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [
+        {
+          "id": "5d541f40c44210c6",
+          "type": "SQL_INJECTION",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "django_sqli.py",
+            "start_line": 58,
+            "end_line": 70,
+            "start_col": 13,
+            "end_col": 73,
+            "context": "sql = connection.ops.datetime_extract_sql(self.lookup_name, sql, tzname)"
+          },
+          "description": "In Django's Extract function, self.lookup_name is interpolated directly into database operations (connection.ops.datetime_extract_sql, date_extract_sql, and time_extract_sql) without sanitization or validation against an allowlist of permitted date/time units. If untrusted input is passed to lookup_name, this leads to SQL injection (CVE-2022-34265).",
+          "impact": "Attackers controlling the lookup_name parameter can inject arbitrary SQL fragments, potentially leading to unauthorized data disclosure, tampering, or execution of arbitrary SQL commands.",
+          "remediation": "Validate self.lookup_name against an explicit allowlist of supported date/time extract components (e.g. 'year', 'iso_year', 'month', 'day', 'week', 'week_day', 'iso_week_day', 'quarter', 'hour', 'minute', 'second') or use concrete lookup classes.",
+          "cwe_id": "CWE-89",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 5.0,
+          "references": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2022-34265",
+            "https://www.djangoproject.com/weblog/2022/jul/04/security-releases/"
+          ],
+          "proof_of_concept": "Instantiate Extract with untrusted input containing SQL syntax in lookup_name (e.g. Extract('created_at', lookup_name=\"year FROM date) UNION SELECT ... --\")) and compile the queryset to trigger arbitrary SQL execution.",
+          "secure_code_example": "ALLOWED_LOOKUPS = {'year', 'iso_year', 'month', 'day', 'week', 'week_day', 'iso_week_day', 'quarter', 'hour', 'minute', 'second'}\nif self.lookup_name.lower() not in ALLOWED_LOOKUPS:\n    raise ValueError(f'Invalid lookup_name: {self.lookup_name}')",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 1,
+            "investigated": false,
+            "hit_turn_cap": false,
+            "tools_unsupported": false,
+            "duration_seconds": 17.97,
+            "error": "empty response",
+            "successful_reads": []
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": []
+        },
+        {
+          "id": "d78f474c1592e65f",
+          "type": "SQL_INJECTION",
+          "severity": "HIGH",
+          "location": {
+            "file_path": "django_sqli.py",
+            "start_line": 245,
+            "end_line": 249,
+            "start_col": 13,
+            "end_col": 78,
+            "context": "sql = connection.ops.datetime_trunc_sql(self.kind, inner_sql, tzname)"
+          },
+          "description": "In Django's TruncBase and Trunc classes, self.kind is passed directly to database backend methods (connection.ops.datetime_trunc_sql, date_trunc_sql, and time_trunc_sql) without sanitization or allowlist validation. When untrusted user data is supplied as the 'kind' parameter, it enables SQL injection (CVE-2022-34265).",
+          "impact": "An attacker capable of manipulating the 'kind' argument can inject malicious SQL syntax into database queries, resulting in unauthorized data exfiltration, database corruption, or arbitrary query execution.",
+          "remediation": "Validate self.kind against a strict allowlist of permissible truncation units (e.g. 'year', 'quarter', 'month', 'week', 'day', 'hour', 'minute', 'second') before passing it to database operations, or enforce using concrete subclasses like TruncYear, TruncMonth, etc.",
+          "cwe_id": "CWE-89",
+          "owasp_category": "A03:2021 - Injection",
+          "cvss_score": 5.0,
+          "references": [
+            "https://nvd.nist.gov/vuln/detail/CVE-2022-34265",
+            "https://www.djangoproject.com/weblog/2022/jul/04/security-releases/"
+          ],
+          "proof_of_concept": "Instantiate Trunc with untrusted input containing SQL injection syntax in kind (e.g. Trunc('pub_date', kind=\"day' FROM datetime_col) UNION SELECT ... --\")) and execute or compile the resulting queryset.",
+          "secure_code_example": "ALLOWED_KINDS = {'year', 'quarter', 'month', 'week', 'day', 'hour', 'minute', 'second'}\nif self.kind.lower() not in ALLOWED_KINDS:\n    raise ValueError(f'Invalid kind: {self.kind}')",
+          "source": "LLM",
+          "engine_sources": [
+            "LLM"
+          ],
+          "confidence": 0.55,
+          "corroborated": false,
+          "rule_id": null,
+          "merged_rule_ids": [],
+          "file_hash": "f93d4dad7cb4270e282d704d1e975e7f4e8735810fd7e8de0ca7abd80fc4e1a9",
+          "verification": {
+            "verdict": "uncertain",
+            "reason": "",
+            "evidence_file": "",
+            "evidence_line": 0,
+            "taint_path": [],
+            "mitigating_control": "",
+            "tool_calls": 1,
+            "investigated": false,
+            "hit_turn_cap": false,
+            "tools_unsupported": false,
+            "duration_seconds": 19.24,
+            "error": "empty response",
+            "successful_reads": []
+          },
+          "assessment_status": "uncertain",
+          "assessment": null,
+          "evidence_ids": [],
+          "taint_path": []
+        }
+      ],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "completed",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "ok"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 1
+        },
+        "llm": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 2
+        }
+      },
+      "summary": {
+        "total": 2,
+        "critical": 0,
+        "high": 2,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 17.6
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.931551",
+      "file_name": "clean_airflow_dates.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.931584",
+      "file_name": "clean_salt_units.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    },
+    {
+      "timestamp": "2026-10-25T23:43:03.931614",
+      "file_name": "gradio_xss.py",
+      "repository_url": null,
+      "branch": null,
+      "vulnerabilities": [],
+      "chained_vulnerabilities": [],
+      "refuted_vulnerabilities": [],
+      "status": "partial",
+      "tiers": {
+        "semgrep": "ok",
+        "llm": "not_routed: File did not clear risk threshold"
+      },
+      "engine_status": {
+        "semgrep": {
+          "requested": true,
+          "status": "ok",
+          "reason": "",
+          "findings": 0
+        },
+        "llm": {
+          "requested": true,
+          "status": "not_routed",
+          "reason": "File did not clear risk threshold",
+          "findings": 0
+        }
+      },
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "refuted": 0
+      },
+      "risk_score": 0.0
+    }
+  ]
+}

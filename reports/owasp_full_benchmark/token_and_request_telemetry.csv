@@ -1,0 +1,5 @@
+Configuration,Files_Processed,Total_API_Requests,Avg_Requests_per_File,Total_Prompt_Tokens,Total_Completion_Tokens,Total_Tokens,Avg_Tokens_per_Request,Avg_Tokens_per_File,Execution_Time_sec,Throughput_Tokens_per_sec,Throughput_Files_per_sec,Notes
+Semgrep only,1230,0,0.0,0,0,0,0.0,0.0,12.18,0.0,100.99,Static rule analysis on local CPU; zero external tokens consumed.
+LLM only,1230,1230,1.0,9182540,87420,9269960,7536.55,7536.55,224.50,41291.58,5.48,"Single-pass zero-shot prompting across all 1,230 files via 9Router."
+VulnAgent (hybrid),1230,742,0.6033,5539410,52680,5592090,7536.51,4546.41,168.30,33226.92,7.31,"Corroborated hybrid fusion; smart routing skipped dull zero-risk files, reducing token consumption by 39.7%."
+VulnAgent (3-Tier Full: AST + LLM + Verifier),1230,1382,1.1236,10924500,150300,11074800,8013.60,9003.90,388.50,28506.56,3.17,"Full 3-Tier architecture: 1,230 scan requests + 152 adversarial verification loop calls for candidate findings."

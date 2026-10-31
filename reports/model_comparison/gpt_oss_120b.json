@@ -1,0 +1,547 @@
+{
+  "model": "ollama/gpt-oss:120b",
+  "role": "competitor",
+  "timestamp": "2026-10-24T09:13:51.748067+00:00",
+  "base_url": "http://127.0.0.1:20128/v1",
+  "timeout_sec": 45.0,
+  "summary": {
+    "model": "ollama/gpt-oss:120b",
+    "role": "competitor",
+    "total_files": 13,
+    "success_count": 13,
+    "blocked_count": 0,
+    "timeout_count": 0,
+    "http_error_count": 0,
+    "avg_latency_sec": 10.039,
+    "total_latency_sec": 130.513,
+    "total_prompt_tokens": 162983,
+    "total_completion_tokens": 35768,
+    "total_reasoning_tokens": 0,
+    "total_tokens": 198751,
+    "total_findings": 6,
+    "valid_json_rate": 38.46,
+    "true_positives": 1,
+    "false_positives": 5,
+    "false_negatives": 8,
+    "fp_on_clean": 0,
+    "precision": 0.1667,
+    "recall": 0.1111,
+    "f1_score": 0.1333
+  },
+  "file_results": [
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "superset_config.py",
+      "dataset": "superset",
+      "category": "HARDCODED_CREDENTIALS / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 12.872,
+      "tokens": {
+        "prompt_tokens": 21884,
+        "completion_tokens": 4777,
+        "reasoning_tokens": 0,
+        "total_tokens": 26661
+      },
+      "is_valid_json": true,
+      "findings_count": 6,
+      "extracted_findings": [
+        {
+          "cwe": "798",
+          "line": 973,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "HIGH",
+          "description": "SMTP credentials are hard\u2011coded in the configuration file. An attacker who gains read access to the source code can obtain the SMTP username and password and use them to send arbitrary email from the "
+        },
+        {
+          "cwe": "798",
+          "line": 1269,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "HIGH",
+          "description": "A JWT signing secret for the global async query feature is hard\u2011coded. Attackers who discover the secret can forge valid JWT tokens and gain unauthorized access to async query endpoints."
+        },
+        {
+          "cwe": "798",
+          "line": 1278,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "HIGH",
+          "description": "The JWT secret used to sign guest tokens is hard\u2011coded. An attacker can forge guest tokens and gain the privileges of the guest role."
+        },
+        {
+          "cwe": "798",
+          "line": 181,
+          "type": "HARDCODED_CREDENTIALS",
+          "severity": "MEDIUM",
+          "description": "The Flask secret key defaults to a placeholder value (`CHANGE_ME_SECRET_KEY`). If the placeholder is not overridden in production, session cookies and CSRF tokens can be forged."
+        },
+        {
+          "cwe": "1188",
+          "line": 1219,
+          "type": "SECURITY_MISCONFIGURATION",
+          "severity": "MEDIUM",
+          "description": "Session cookies are not marked as `Secure`. When the application is accessed over HTTPS, the cookie can still be transmitted over an insecure HTTP connection, enabling network\u2011level attackers to steal"
+        },
+        {
+          "cwe": "1188",
+          "line": 1267,
+          "type": "SECURITY_MISCONFIGURATION",
+          "severity": "MEDIUM",
+          "description": "The JWT cookie used for async query authentication is not marked as `Secure`. This allows the cookie to be transmitted over unencrypted connections, exposing the token to interception."
+        }
+      ],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"HARDCODED_CREDENTIALS\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-798\",\n      \"owasp_category\": \"A02:2021-Cryptographic Failures\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\",\n      \"location\": {\n        \"file_path\": \"superset",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "superset_config.py",
+          "line": 1,
+          "cwe": "798",
+          "type": "HARDCODED_CREDENTIALS",
+          "note": "CVE-2023-27524 / CWE-798: Default SECRET_KEY vulnerability allowing session forgery and RCE"
+        }
+      ],
+      "tp": 1,
+      "fp": 5,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": [
+        "superset_config.py:1269 HARDCODED_CREDENTIALS",
+        "superset_config.py:1278 HARDCODED_CREDENTIALS",
+        "superset_config.py:181 HARDCODED_CREDENTIALS",
+        "superset_config.py:1219 SECURITY_MISCONFIGURATION",
+        "superset_config.py:1267 SECURITY_MISCONFIGURATION"
+      ]
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "views_core.py",
+      "dataset": "superset",
+      "category": "SSRF / Complex View",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 10.116,
+      "tokens": {
+        "prompt_tokens": 42564,
+        "completion_tokens": 2144,
+        "reasoning_tokens": 0,
+        "total_tokens": 44708
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": []\n}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "views_core.py",
+          "line": 1,
+          "cwe": "918",
+          "type": "SSRF",
+          "note": "CVE-2023-36388 / CWE-918: Server-Side Request Forgery (SSRF) in URL fetching and export endpoints"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "views_core.py:1 SSRF"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "database_views.py",
+      "dataset": "superset",
+      "category": "INFORMATION_DISCLOSURE",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 8.031,
+      "tokens": {
+        "prompt_tokens": 22942,
+        "completion_tokens": 1734,
+        "reasoning_tokens": 0,
+        "total_tokens": 24676
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": [\n    {\n      \"type\": \"IMPROPER_ERROR_HANDLING\",\n      \"severity\": \"HIGH\",\n      \"cwe_id\": \"CWE-209\",\n      \"owasp_category\": \"A03:2021-Injection\",\n      \"cvss_score\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:L\",\n      \"location\": {\n        \"file_path\": \"database_views.py\",",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "database_views.py",
+          "line": 1,
+          "cwe": "209",
+          "type": "INFORMATION_DISCLOSURE",
+          "note": "CVE-2024-53948 / CWE-209: Information Disclosure / Metadata leak in DB test connection error reporting"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "database_views.py:1 INFORMATION_DISCLOSURE"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "query_context_factory.py",
+      "dataset": "superset",
+      "category": "INPUT_VALIDATION / Safety Trigger",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 9.344,
+      "tokens": {
+        "prompt_tokens": 3686,
+        "completion_tokens": 3353,
+        "reasoning_tokens": 0,
+        "total_tokens": 7039
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Broken Access Control\",\n      \"cwe_id\": \"CWE-284\",\n      \"owasp_category\": \"A01:2023 \u2013 Broken Access Control\",\n      \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\",\n      \"severity\": \"HIGH\",\n      \"start_line\": 58,\n      \"end_",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "query_context_factory.py",
+          "line": 1,
+          "cwe": "20",
+          "type": "INPUT_VALIDATION",
+          "note": "CVE-2023-25504 / CWE-20: Improper Input Validation in query payload processing"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "query_context_factory.py:1 INPUT_VALIDATION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "sql_lab_models.py",
+      "dataset": "superset",
+      "category": "SQL_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 2.277,
+      "tokens": {
+        "prompt_tokens": 13201,
+        "completion_tokens": 480,
+        "reasoning_tokens": 0,
+        "total_tokens": 13681
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": []\n}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "sql_lab_models.py",
+          "line": 1,
+          "cwe": "89",
+          "type": "SQL_INJECTION",
+          "note": "CVE-2023-39265 / CWE-89: SQL Injection in SQL Lab query execution"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "sql_lab_models.py:1 SQL_INJECTION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "slack_util.py",
+      "dataset": "superset",
+      "category": "COMMAND_INJECTION",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 16.949,
+      "tokens": {
+        "prompt_tokens": 3251,
+        "completion_tokens": 4380,
+        "reasoning_tokens": 0,
+        "total_tokens": 7631
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n[\n  {\n    \"vulnerability_type\": \"OWASP A01:2023 \u2013 Broken Access Control\",\n    \"cwe_id\": \"CWE-862\",\n    \"owasp_category\": \"A01:2023\",\n    \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\",\n    \"severity\": \"HIGH\",\n    \"start_line\": 35,\n    \"end_line\": 61,\n    \"description\": \"The function `d",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "slack_util.py",
+          "line": 1,
+          "cwe": "78",
+          "type": "COMMAND_INJECTION",
+          "note": "CVE-2020-13948 / CWE-78: OS Command Injection in slack utility via unsanitized command string"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "slack_util.py:1 COMMAND_INJECTION"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "clean_date_parser.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 3.696,
+      "tokens": {
+        "prompt_tokens": 16421,
+        "completion_tokens": 678,
+        "reasoning_tokens": 0,
+        "total_tokens": 17099
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": []\n}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "clean_hashing.py",
+      "dataset": "superset",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 7.069,
+      "tokens": {
+        "prompt_tokens": 2942,
+        "completion_tokens": 2215,
+        "reasoning_tokens": 0,
+        "total_tokens": 5157
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Use of Weak Cryptographic Algorithm\",\n      \"cwe_id\": \"CWE-327\",\n      \"owasp_category\": \"A02:2023 \u2013 Cryptographic Failures\",\n      \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\",\n      \"severity\": \"HIGH\",\n      \"start_line\": ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "adyen_plugin.py",
+      "dataset": "saleor310",
+      "category": "TIMING_ATTACK / Sensitive Payment",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 2.441,
+      "tokens": {
+        "prompt_tokens": 12721,
+        "completion_tokens": 689,
+        "reasoning_tokens": 0,
+        "total_tokens": 13410
+      },
+      "is_valid_json": true,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "{\n  \"vulnerabilities\": []\n}",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "adyen_plugin.py",
+          "line": 943,
+          "cwe": "208",
+          "type": "TIMING_ATTACK",
+          "note": "GHSA-3rqj-9v87-2x3f / CWE-208 / CWE-385: Timing attack in validate_hmac_signature via standard == string comparison instead of constant-time compare_digest"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "adyen_plugin.py:943 TIMING_ATTACK"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "refresh_token.py",
+      "dataset": "saleor310",
+      "category": "CSRF_BYPASS / Sensitive Auth",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 18.626,
+      "tokens": {
+        "prompt_tokens": 8025,
+        "completion_tokens": 3910,
+        "reasoning_tokens": 0,
+        "total_tokens": 11935
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Broken Authentication\",\n      \"cwe_id\": \"CWE-307\",\n      \"owasp_category\": \"A02:2023 \u2013 Cryptographic Failures (broken authentication is covered under this category in the 2023 list)\",\n      \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:N/S:U/C:",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "refresh_token.py",
+          "line": 218,
+          "cwe": "352",
+          "type": "CSRF_BYPASS",
+          "note": "GHSA-ff69-fwjf-3c9w / CWE-352 / CWE-287: CSRF bypass in get_refresh_token reading refresh token directly from cookies without CSRF validation"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "refresh_token.py:218 CSRF_BYPASS"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "account_mutations.py",
+      "dataset": "saleor310",
+      "category": "AUTHORIZATION_BYPASS",
+      "is_clean": false,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 20.317,
+      "tokens": {
+        "prompt_tokens": 8270,
+        "completion_tokens": 4870,
+        "reasoning_tokens": 0,
+        "total_tokens": 13140
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"CWE-601: URL Redirection to Untrusted Site / OWASP A05:2023 Security Misconfiguration (Open Redirect)\",\n      \"cvss_vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N\",\n      \"data_flow\": \"GraphQL input field `redirect_url` \u2192 `c",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [
+        {
+          "file": "account_mutations.py",
+          "line": 74,
+          "cwe": "284",
+          "type": "AUTHORIZATION_BYPASS",
+          "note": "GHSA-6whj-8p3f-2xqp / CWE-284 / CWE-863: Account pre-hijacking and authorization bypass in AccountRegister mutation"
+        }
+      ],
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "fp_on_clean": 0,
+      "missed": [
+        "account_mutations.py:74 AUTHORIZATION_BYPASS"
+      ],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "clean_core_utils.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 10.175,
+      "tokens": {
+        "prompt_tokens": 4149,
+        "completion_tokens": 2997,
+        "reasoning_tokens": 0,
+        "total_tokens": 7146
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Open Redirect (CWE-601, OWASP A01:2023 Broken Access Control)\",\n      \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N\",\n      \"data_flow\": \"User\u2011controlled `location` argument \u2192 `urljoin(current_uri, location)` \u2192 returned value ",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    },
+    {
+      "model": "ollama/gpt-oss:120b",
+      "file": "clean_taxes.py",
+      "dataset": "saleor310",
+      "category": "CLEAN_CONTROL",
+      "is_clean": true,
+      "status": "SUCCESS",
+      "status_code": 200,
+      "latency_sec": 8.6,
+      "tokens": {
+        "prompt_tokens": 2927,
+        "completion_tokens": 3541,
+        "reasoning_tokens": 0,
+        "total_tokens": 6468
+      },
+      "is_valid_json": false,
+      "findings_count": 0,
+      "extracted_findings": [],
+      "raw_response_snippet": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"vulnerability_type\": \"Improper Input Validation\",\n      \"cwe_id\": \"CWE-20\",\n      \"owasp_category\": \"A03:2023 \u2013 Injection\",\n      \"cvss_vector\": \"AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\",\n      \"severity\": \"Low\",\n      \"start_line\": 12,\n      \"end_line\": 18,",
+      "error_message": "",
+      "block_reason": "",
+      "ground_truth_labels": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "fp_on_clean": 0,
+      "missed": [],
+      "spurious": []
+    }
+  ]
+}

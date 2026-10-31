@@ -5,7 +5,12 @@ written to their files, so a defect here is either noise they will not
 tolerate or a silent edit they did not ask for.
 """
 
+import pytest
+from unittest.mock import MagicMock
 from pathlib import Path
+
+import httpx
+import openai
 
 from conftest import make_vuln
 
@@ -205,6 +210,25 @@ class TestDiscovery:
         assert "app.py" in found
         assert not any("venv" in name for name in found)
 
+    def test_test_and_doc_directories_are_skipped(self, tmp_project: Path):
+        for dirname in ("tests", "test", "testing", "fixtures", "docs", "site", "example", "examples"):
+            subdir = tmp_project / dirname
+            subdir.mkdir(parents=True, exist_ok=True)
+            (subdir / "sample.py").write_text("import os\nos.system('echo')\n", encoding="utf-8")
+
+        found = {f.relative for f in discover(str(tmp_project))}
+        assert "app.py" in found
+        for dirname in ("tests", "test", "testing", "fixtures", "docs", "site", "example", "examples"):
+            assert not any(dirname in name for name in found)
+
+    def test_direct_scan_into_test_directory_discovers_files(self, tmp_project: Path):
+        tests_dir = tmp_project / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        (tests_dir / "test_sample.py").write_text("import os\nos.system('echo')\n", encoding="utf-8")
+
+        found = {f.relative for f in discover(str(tests_dir))}
+        assert "test_sample.py" in found
+
     def test_risk_scoring_separates_dangerous_from_dull(self, tmp_project: Path):
         risky, _ = score_risk((tmp_project / "app.py").read_text(encoding="utf-8"))
         dull, _ = score_risk((tmp_project / "quiet.py").read_text(encoding="utf-8"))
@@ -223,6 +247,97 @@ class TestDiscovery:
 
         dull = DiscoveredFile(Path("quiet.py"), Path("."), risk_score=0, reasons=[])
         assert route_to_llm([dull], rule_hits={"quiet.py": 1}, min_risk=3) == [dull]
+
+    def test_new_risk_signals_detection(self):
+        # 1. html component output
+        s, r = score_risk("div_out = render_output('<div class=\"user\">' + name + '</div>')")
+        assert "html component output" in r
+        assert s >= 3
+
+        # 2. custom deserialization
+        s, r = score_risk("obj = pcrypt.loads(raw_data)")
+        assert "custom deserialization" in r
+        assert s >= 4
+
+        # 3. ldap/xpath query
+        s, r = score_risk("entries = conn.search_s(base, ldap.SCOPE_SUBTREE, filter_str)")
+        assert "ldap/xpath query" in r
+        assert s >= 3
+
+        # 4. cookie security
+        s, r = score_risk("resp.set_cookie('session_id', val, secure=False)")
+        assert "cookie security" in r
+        assert s >= 3
+
+    def test_ast_sink_files_forces_routing_of_dull_file(self):
+        from analyzer.discovery import DiscoveredFile
+
+        dull = DiscoveredFile(Path("sink_file.py"), Path("."), risk_score=0, reasons=[])
+        res = route_to_llm([dull], rule_hits={}, min_risk=3, ast_sink_files={"sink_file.py"})
+        assert res == [dull]
+
+    def test_scanner_ast_sink_detection_and_routing(self, tmp_path: Path):
+        from analyzer.scanner import ScanOptions, Scanner
+        from analyzer.discovery import discover
+
+        target_file = tmp_path / "sink_demo.py"
+        target_file.write_text("import sqlite3\ndef query(x):\n    c.execute(x)\n", encoding="utf-8")
+        safe_file = tmp_path / "safe.py"
+        safe_file.write_text("X = 1\n", encoding="utf-8")
+
+        files = discover(str(tmp_path))
+        scanner = Scanner(ScanOptions(target=str(tmp_path), min_risk=10, use_ast_slicer=True))
+        sink_files = scanner._find_ast_sink_files(files)
+        assert "sink_demo.py" in sink_files
+        assert "safe.py" not in sink_files
+
+        # When use_ast_slicer=True, sink_demo.py is routed despite min_risk=10
+        routed_slicer = route_to_llm(files, min_risk=10, ast_sink_files=sink_files)
+        routed_names = {f.relative for f in routed_slicer}
+        assert "sink_demo.py" in routed_names
+        assert "safe.py" not in routed_names
+
+        # When use_ast_slicer=False, sink_demo.py is not routed
+        routed_no_slicer = route_to_llm(files, min_risk=10, ast_sink_files=set())
+        assert not any(f.relative == "sink_demo.py" for f in routed_no_slicer)
+
+    def test_scanner_deep_verify_routes_all_files(self, tmp_path: Path):
+        from analyzer.scanner import ScanOptions, Scanner
+        from analyzer.discovery import discover
+
+        f1 = tmp_path / "a.py"
+        f1.write_text("A = 1\n", encoding="utf-8")
+        f2 = tmp_path / "b.py"
+        f2.write_text("B = 2\n", encoding="utf-8")
+
+        files = discover(str(tmp_path))
+        scanner = Scanner(ScanOptions(target=str(tmp_path), min_risk=10, verify=True))
+        effective_min_risk = 0 if getattr(scanner.options, "verify", False) else scanner.options.min_risk
+        routed = route_to_llm(files, min_risk=effective_min_risk)
+        assert len(routed) == 2
+
+    @pytest.mark.asyncio
+    async def test_scanner_scan_routes_ast_sinks_to_llm(self, tmp_path: Path):
+        from analyzer.scanner import ScanOptions, Scanner
+
+        sink_file = tmp_path / "sink.py"
+        sink_file.write_text("def do_cmd(c):\n    subprocess.Popen(c, shell=True)\n", encoding="utf-8")
+        safe_file = tmp_path / "safe.py"
+        safe_file.write_text("x = 1\n", encoding="utf-8")
+
+        opts = ScanOptions(target=str(tmp_path), min_risk=10, use_semgrep=False, use_llm=True, use_ast_slicer=True)
+        scanner = Scanner(opts)
+        routed_files = []
+
+        async def fake_llm_tier(routed):
+            routed_files.extend([f.relative for f in routed])
+            return {}, {}
+
+        scanner._run_llm_tier = fake_llm_tier
+        await scanner.scan()
+
+        assert "sink.py" in routed_files
+        assert "safe.py" not in routed_files
 
 
 class TestTaintChaining:
@@ -316,3 +431,125 @@ class TestJobStore:
         reloaded = JobStore(directory=directory).get(job.id)
         assert reloaded.status == "failed"
         assert "restart" in reloaded.error.lower()
+
+
+class TestStreamParameterCompat:
+    """Verifies that 9router / OpenAI-compatible endpoints receive stream=False explicitly."""
+
+    @pytest.mark.asyncio
+    async def test_ai_client_analyze_with_openai_passes_stream_false(self):
+        from utils.ai_client import AIClient
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message = MagicMock(content='{"vulnerabilities": []}')
+        mock_choice.finish_reason = "stop"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+
+        client_wrapper = AIClient(disabled=True)
+        res = await client_wrapper._analyze_with_openai(
+            client=mock_client,
+            prompt="def test(): pass",
+            model="test-model",
+        )
+
+        mock_client.chat.completions.create.assert_called_once()
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "stream" in kwargs
+        assert kwargs["stream"] is False
+        assert res == {"vulnerabilities": []}
+
+    @pytest.mark.asyncio
+    async def test_ai_client_analyze_with_openai_retry_preserves_stream_false(self):
+        from utils.ai_client import AIClient
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message = MagicMock(content='{"vulnerabilities": []}')
+        mock_choice.finish_reason = "stop"
+        mock_response.choices = [mock_choice]
+
+        req = httpx.Request("POST", "http://test")
+        resp = httpx.Response(400, request=req)
+        mock_client.chat.completions.create.side_effect = [
+            openai.BadRequestError("temperature not supported", response=resp, body=None),
+            mock_response,
+        ]
+
+        client_wrapper = AIClient(disabled=True)
+        res = await client_wrapper._analyze_with_openai(
+            client=mock_client,
+            prompt="def test(): pass",
+            model="custom-reasoner",
+        )
+
+        assert mock_client.chat.completions.create.call_count == 2
+        for call in mock_client.chat.completions.create.call_args_list:
+            assert call.kwargs.get("stream") is False
+        assert res == {"vulnerabilities": []}
+
+    @pytest.mark.asyncio
+    async def test_tool_calling_agent_complete_passes_stream_false(self):
+        from agent.loop import ToolCallingAgent
+
+        mock_client = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message = MagicMock(content="Analysis complete.")
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+
+        agent = ToolCallingAgent(
+            client=mock_client,
+            model="test-model",
+            dispatch=lambda *a: {},
+            tool_schemas=[],
+        )
+
+        msg = await agent._complete(
+            messages=[{"role": "user", "content": "analyze code"}],
+            with_tools=False,
+        )
+
+        mock_client.chat.completions.create.assert_called_once()
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "stream" in kwargs
+        assert kwargs["stream"] is False
+        assert msg.content == "Analysis complete."
+
+    @pytest.mark.asyncio
+    async def test_tool_calling_agent_complete_retry_preserves_stream_false(self):
+        from agent.loop import ToolCallingAgent
+
+        mock_client = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message = MagicMock(content="Retry succeeded.")
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client.chat.completions.create.side_effect = [
+            Exception("temperature parameter is not supported by this model"),
+            mock_response,
+        ]
+
+        agent = ToolCallingAgent(
+            client=mock_client,
+            model="test-model",
+            dispatch=lambda *a: {},
+            tool_schemas=[],
+            temperature=0.2,
+        )
+
+        msg = await agent._complete(
+            messages=[{"role": "user", "content": "analyze code"}],
+            with_tools=False,
+        )
+
+        assert mock_client.chat.completions.create.call_count == 2
+        for call in mock_client.chat.completions.create.call_args_list:
+            assert call.kwargs.get("stream") is False
+        assert msg.content == "Retry succeeded."
+

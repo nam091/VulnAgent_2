@@ -3550,6 +3550,309 @@ async def test_eval_integrity_gate_detects_samples_mutated(tmp_path: Path):
         assert any("Dataset samples mutated" in m for m in data["integrity"]["mismatches"])
 
 
+@pytest.mark.asyncio
+async def test_tier3_adversarial_verifier_system_prompt_cwe_standards():
+    """
+    Test Tier 3 Verifier System Prompt includes counter-evidence standards for:
+    - CSRF (CWE-352): Phân biệt CSRF token check vs @csrf_exempt
+    - Insecure Randomness (CWE-330): Phân biệt secrets.token_* vs random.random/randint cho security tokens
+    - XXE (CWE-611): Phân biệt defusedxml vs lxml/minidom entity resolution (XXE)
+    - Open Redirect (CWE-601): Phân biệt URL allowlist vs unvalidated redirect
+    - Timing Attacks (CWE-208): Phân biệt hmac.compare_digest vs string == comparison (Timing attacks)
+    """
+    from agent.verifier import SYSTEM_PROMPT
+
+    assert "CSRF" in SYSTEM_PROMPT or "csrf" in SYSTEM_PROMPT.lower()
+    assert "@csrf_exempt" in SYSTEM_PROMPT
+    assert "secrets.token_" in SYSTEM_PROMPT or "secrets" in SYSTEM_PROMPT
+    assert "random.random" in SYSTEM_PROMPT or "random.randint" in SYSTEM_PROMPT
+    assert "defusedxml" in SYSTEM_PROMPT
+    assert "lxml" in SYSTEM_PROMPT or "minidom" in SYSTEM_PROMPT
+    assert "allowlist" in SYSTEM_PROMPT
+    assert "redirect" in SYSTEM_PROMPT.lower()
+    assert "hmac.compare_digest" in SYSTEM_PROMPT
+    assert "==" in SYSTEM_PROMPT
+    assert "Clean Files / Utility Context" in SYSTEM_PROMPT
+    assert "mathematical computations" in SYSTEM_PROMPT
+    assert "string transformations" in SYSTEM_PROMPT
+    assert "date formatting" in SYSTEM_PROMPT
+    assert "unit conversions" in SYSTEM_PROMPT
+    assert "trusted internal config" in SYSTEM_PROMPT
+    assert "No untrusted external input boundary" in SYSTEM_PROMPT
+    assert "Trusted internal context / no external untrusted input boundary" in SYSTEM_PROMPT
+    assert "Static internal file target / fixed local path" in SYSTEM_PROMPT
+
+    # Benchmark 11 CWE standards and sanitizers
+    assert "escape_for_html" in SYSTEM_PROMPT
+    assert "urllib.parse.quote" in SYSTEM_PROMPT
+    assert "re.sub" in SYSTEM_PROMPT
+    assert "Path.resolve" in SYSTEM_PROMPT
+    assert "ALLOWED_FILES" in SYSTEM_PROMPT or "whitelist" in SYSTEM_PROMPT
+    assert "shlex.quote" in SYSTEM_PROMPT
+    assert "taint_path" in SYSTEM_PROMPT
+    assert "confirmed" in SYSTEM_PROMPT
+    assert "refuted" in SYSTEM_PROMPT
+
+    # Agentic Cross-File Analysis & read_imported_symbol guidelines
+    assert "read_imported_symbol" in SYSTEM_PROMPT
+    assert "from_file" in SYSTEM_PROMPT
+    assert "inter-procedural reachability" in SYSTEM_PROMPT.lower()
+
+
+def test_adversarial_verifier_benchmark_sanitizers_detection():
+    """
+    Test that detect_benchmark_sanitizers accurately identifies sanitizers
+    across 11 CWE benchmark groups:
+    - XSS (CWE-79): escape_for_html, urllib.parse.quote
+    - Path Traversal (CWE-22): Path.resolve, ../ checks, whitelist checks
+    - Command Injection (CWE-78): shlex.quote, re.sub
+    - SQL Injection (CWE-89): parameterized query %s, int()
+    """
+    from agent.verifier import detect_benchmark_sanitizers
+
+    # 1. XSS sanitizers
+    xss_code = "return escape_for_html(user_input) + urllib.parse.quote(link)"
+    xss_res = detect_benchmark_sanitizers(xss_code, "CWE-79")
+    sanitizers_found = [r["sanitizer"] for r in xss_res]
+    assert "escape_for_html" in sanitizers_found
+    assert "urllib.parse.quote" in sanitizers_found
+
+    # 2. Path Traversal sanitizers
+    path_code_1 = "p = Path(base / filename).resolve()\nif '../' in filename: return None"
+    path_res_1 = detect_benchmark_sanitizers(path_code_1, "CWE-22")
+    path_sanitizers = [r["sanitizer"] for r in path_res_1]
+    assert "Path.resolve" in path_sanitizers
+    assert "../" in path_sanitizers
+
+    path_code_2 = "if filename in ALLOWED_FILES:\n    return open(filename)"
+    path_res_2 = detect_benchmark_sanitizers(path_code_2, "CWE-22")
+    assert any(r["sanitizer"] == "whitelist_check" for r in path_res_2)
+
+    path_code_3 = "clean_path = re.sub(r'\\.\\./', '', user_path)"
+    path_res_3 = detect_benchmark_sanitizers(path_code_3, "CWE-22")
+    assert "re.sub" in [r["sanitizer"] for r in path_res_3]
+
+    # 3. Command Injection sanitizers
+    cmdi_code = "cmd = f'ls {shlex.quote(user_arg)}'\ncleaned = re.sub(r'[;&]', '', cmd)"
+    cmdi_res = detect_benchmark_sanitizers(cmdi_code, "CWE-78")
+    cmdi_sanitizers = [r["sanitizer"] for r in cmdi_res]
+    assert "shlex.quote" in cmdi_sanitizers
+    assert "re.sub" in cmdi_sanitizers
+
+    # 4. SQL Injection sanitizers
+    sqli_code = "cursor.execute('SELECT * FROM users WHERE id = %s', (int(user_id),))"
+    sqli_res = detect_benchmark_sanitizers(sqli_code, "CWE-89")
+    sqli_sanitizers = [r["sanitizer"] for r in sqli_res]
+    assert "%s" in sqli_sanitizers
+    assert "int(" in sqli_sanitizers
+
+
+@pytest.mark.asyncio
+async def test_tier3_scanner_verification_confirmed_and_refuted_protection(tmp_path: Path):
+    """
+    Test Scanner post-verdict handling:
+    1. Confirmed verdict: raises vuln.confidence to max(vuln.confidence, 0.95), stores taint_path.
+    2. Refuted verdict for normal LLM finding: dropped from report.vulnerabilities, added to report.refuted_vulnerabilities.
+    3. AST Slicer corroborated finding (vuln.corroborated=True or valid vuln.taint_path) with NO mitigating control
+       is protected from being mistakenly dropped.
+    4. AST Slicer corroborated finding WITH a valid mitigating control is properly refuted and dropped.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+    from models.vulnerability import FindingSource, Vulnerability, VulnerabilityReport
+
+    test_file = tmp_path / "app.py"
+    test_file.write_text("x = 1\n", encoding="utf-8")
+
+    opts = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False, verify=True, verify_all=True)
+    scanner = Scanner(options=opts)
+
+    # 1. Confirmed finding
+    vuln_confirmed = make_vuln(file_path="app.py", start_line=1)
+    vuln_confirmed.confidence = 0.5
+    vuln_confirmed.source = FindingSource.LLM
+
+    # 2. Refuted finding (normal LLM finding without AST corroboration)
+    vuln_refuted = make_vuln(file_path="app.py", start_line=2)
+    vuln_refuted.confidence = 0.6
+    vuln_refuted.source = FindingSource.LLM
+
+    # 3. AST-corroborated finding with NO mitigating control (should be protected)
+    vuln_ast_protected = make_vuln(file_path="app.py", start_line=3)
+    vuln_ast_protected.confidence = 0.7
+    vuln_ast_protected.corroborated = True
+    vuln_ast_protected.source = FindingSource.CONFIRMED
+
+    # 4. AST finding with valid taint_path and NO mitigating control (should be protected)
+    vuln_taint_protected = make_vuln(file_path="app.py", start_line=4)
+    vuln_taint_protected.confidence = 0.7
+    vuln_taint_protected.taint_path = [{"step": "source", "file": "app.py", "line": 4, "kind": "source"}]
+    vuln_taint_protected.source = FindingSource.LLM
+
+    # 5. AST finding WITH valid mitigating control (should be refuted normally)
+    vuln_ast_refuted = make_vuln(file_path="app.py", start_line=5)
+    vuln_ast_refuted.confidence = 0.7
+    vuln_ast_refuted.corroborated = True
+    vuln_ast_refuted.source = FindingSource.CONFIRMED
+
+    report = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=[
+            vuln_confirmed,
+            vuln_refuted,
+            vuln_ast_protected,
+            vuln_taint_protected,
+            vuln_ast_refuted,
+        ],
+        chained_vulnerabilities=[],
+        timestamp=datetime.now(),
+    )
+
+    t_path = [{"step": "source", "file": "app.py", "line": 1, "kind": "source"}]
+    verdicts = {
+        vuln_confirmed.id: Verdict(verdict="confirmed", taint_path=t_path),
+        vuln_refuted.id: Verdict(verdict="refuted", mitigating_control="sanitized upstream"),
+        vuln_ast_protected.id: Verdict(verdict="refuted", mitigating_control=""),
+        vuln_taint_protected.id: Verdict(verdict="refuted", mitigating_control="None"),
+        vuln_ast_refuted.id: Verdict(verdict="refuted", mitigating_control="parameterized query used"),
+    }
+
+    async def mock_verify(vuln: Vulnerability) -> Verdict:
+        return verdicts[vuln.id]
+
+    from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
+    with patch.object(type(scanner.analyzer.ai_client), "openai_client", new_callable=PropertyMock, return_value=MagicMock()), \
+         patch("agent.verifier.VerificationAgent.__init__", return_value=None), \
+         patch("agent.verifier.VerificationAgent.verify", side_effect=mock_verify), \
+         patch.object(scanner, "_judge_chains", new_callable=AsyncMock) as mock_judge:
+        mock_judge.return_value = {}
+        stats = await scanner._run_verification([report], tmp_path)
+
+    # Verify vuln_confirmed
+    assert vuln_confirmed.confidence == 0.98
+    assert vuln_confirmed.corroborated is True
+    assert vuln_confirmed.taint_path == t_path
+    assert vuln_confirmed.assessment_status == "supported"
+    assert vuln_confirmed in report.vulnerabilities
+
+    # Verify normal refuted was dropped
+    assert vuln_refuted not in report.vulnerabilities
+    assert vuln_refuted in report.refuted_vulnerabilities
+    assert vuln_refuted.assessment_status == "refuted"
+
+    # Verify AST corroborated finding with no control was PROTECTED
+    assert vuln_ast_protected in report.vulnerabilities
+    assert vuln_ast_protected not in report.refuted_vulnerabilities
+    assert vuln_ast_protected.assessment_status == "uncertain"
+
+    # Verify taint_path finding with no control was PROTECTED
+    assert vuln_taint_protected in report.vulnerabilities
+    assert vuln_taint_protected not in report.refuted_vulnerabilities
+    assert vuln_taint_protected.assessment_status == "uncertain"
+
+    # Verify AST finding with valid mitigating control was REFUTED
+    assert vuln_ast_refuted not in report.vulnerabilities
+    assert vuln_ast_refuted in report.refuted_vulnerabilities
+    assert vuln_ast_refuted.assessment_status == "refuted"
+
+    # Verify stats
+    assert stats["verify_confirmed"] == 1
+    assert stats["verify_refuted"] == 2
+    assert stats["verify_dropped"] == 2
+
+    # Verify summary and risk_score recalculated
+    assert report.summary["refuted"] == 2
+    assert report.summary["total"] == 3
+    assert report.risk_score == 26.4
+
+
+@pytest.mark.asyncio
+async def test_tier3_scanner_verification_recalculates_chains_and_risk_score(tmp_path: Path):
+    """
+    Test that when a finding participating in a chain is refuted:
+    1. Finding is moved to report.refuted_vulnerabilities and removed from report.vulnerabilities.
+    2. Chained vulnerabilities are automatically recalculated (dropping broken chains).
+    3. Risk score is automatically recalculated based on surviving vulnerabilities and chains.
+    """
+    from analyzer.scanner import Scanner, ScanOptions
+    from models.vulnerability import FindingSource, Vulnerability, VulnerabilityReport, VulnerabilityType
+
+    test_file = tmp_path / "app.py"
+    test_file.write_text("x = 1\n", encoding="utf-8")
+
+    opts = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False, verify=True, verify_all=True)
+    scanner = Scanner(options=opts)
+
+    vuln_sql = make_vuln(
+        vuln_type=VulnerabilityType.SQL_INJECTION,
+        file_path="app.py",
+        start_line=10,
+        source=FindingSource.LLM,
+    )
+    vuln_cmdi = make_vuln(
+        vuln_type=VulnerabilityType.OS_COMMAND_INJECTION,
+        file_path="app.py",
+        start_line=15,
+        source=FindingSource.LLM,
+    )
+
+    initial_vulns = [vuln_sql, vuln_cmdi]
+    initial_chains = scanner.analyzer._chain_vulnerabilities(initial_vulns)
+    assert len(initial_chains) >= 1
+
+    report = VulnerabilityReport(
+        file_name="app.py",
+        vulnerabilities=list(initial_vulns),
+        chained_vulnerabilities=list(initial_chains),
+        timestamp=datetime.now(),
+    )
+    report.calculate_summary()
+    report.calculate_risk_score()
+    initial_risk = report.risk_score
+    assert initial_risk > 16.0  # Base (8 + 8) * chain multiplier (>= 1.1)
+
+    t_path = [{"step": "source", "file": "app.py", "line": 10, "kind": "source"}]
+    verdicts = {
+        vuln_sql.id: Verdict(verdict="confirmed", taint_path=t_path),
+        vuln_cmdi.id: Verdict(
+            verdict="refuted",
+            mitigating_control="Trusted internal context / no external untrusted input boundary",
+        ),
+    }
+
+    async def mock_verify(vuln: Vulnerability) -> Verdict:
+        return verdicts[vuln.id]
+
+    from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
+    with patch.object(type(scanner.analyzer.ai_client), "openai_client", new_callable=PropertyMock, return_value=MagicMock()), \
+         patch("agent.verifier.VerificationAgent.__init__", return_value=None), \
+         patch("agent.verifier.VerificationAgent.verify", side_effect=mock_verify), \
+         patch.object(scanner, "_judge_chains", new_callable=AsyncMock) as mock_judge:
+        mock_judge.return_value = {}
+        stats = await scanner._run_verification([report], tmp_path)
+
+    # vuln_cmdi refuted and moved
+    assert vuln_cmdi not in report.vulnerabilities
+    assert vuln_cmdi in report.refuted_vulnerabilities
+    assert vuln_cmdi.assessment_status == "refuted"
+
+    # vuln_sql preserved
+    assert vuln_sql in report.vulnerabilities
+    assert vuln_sql.assessment_status == "supported"
+
+    # Chains recalculated: single remaining vuln cannot form multi-step chain
+    assert len(report.chained_vulnerabilities) == 0
+
+    # Risk score recalculated without refuted finding and without chain multiplier
+    assert report.summary["refuted"] == 1
+    assert report.summary["total"] == 1
+    assert report.risk_score == 8.0
+    assert report.risk_score < initial_risk
+
+
+
+
 
 
 

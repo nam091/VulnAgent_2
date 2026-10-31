@@ -130,6 +130,167 @@ class TestFusion:
     def test_empty_input(self):
         assert fusion.fuse([], []).vulnerabilities == []
 
+    def test_suppress_unconfirmed_rules_when_file_analyzed_by_llm(self):
+        """When suppress_unconfirmed_rules=True and file_analyzed_by_llm=True,
+        unconfirmed rule findings are discarded."""
+        rule_unconfirmed = make_vuln(
+            vuln_type=VulnerabilityType.SQL_INJECTION, cwe_id="CWE-89",
+            source=FindingSource.SEMGREP, start_line=10, context="rule"
+        )
+        rule_confirmed = make_vuln(
+            vuln_type=VulnerabilityType.PATH_TRAVERSAL, cwe_id="CWE-22",
+            source=FindingSource.SEMGREP, start_line=20, context="rule2"
+        )
+        llm_match = make_vuln(
+            vuln_type=VulnerabilityType.PATH_TRAVERSAL, cwe_id="CWE-22",
+            source=FindingSource.LLM, start_line=20
+        )
+        llm_only = make_vuln(
+            vuln_type=VulnerabilityType.HARDCODED_CREDENTIALS, cwe_id="CWE-798",
+            source=FindingSource.LLM, start_line=50
+        )
+
+        result = fusion.fuse(
+            [rule_unconfirmed, rule_confirmed],
+            [llm_match, llm_only],
+            suppress_unconfirmed_rules=True,
+            file_analyzed_by_llm=True,
+        )
+
+        assert len(result.vulnerabilities) == 2
+        sources = {v.source for v in result.vulnerabilities}
+        assert sources == {FindingSource.CONFIRMED, FindingSource.LLM}
+        types = {v.type for v in result.vulnerabilities}
+        assert VulnerabilityType.SQL_INJECTION not in types
+
+    def test_keep_unconfirmed_rules_when_file_not_analyzed_by_llm(self):
+        """When suppress_unconfirmed_rules=True but file_analyzed_by_llm=False,
+        rule findings are preserved because LLM never inspected the file."""
+        rule = make_vuln(
+            vuln_type=VulnerabilityType.SQL_INJECTION, cwe_id="CWE-89",
+            source=FindingSource.SEMGREP, start_line=10, context="rule"
+        )
+        result = fusion.fuse(
+            [rule],
+            [],
+            suppress_unconfirmed_rules=True,
+            file_analyzed_by_llm=False,
+        )
+        assert len(result.vulnerabilities) == 1
+        assert result.vulnerabilities[0].source == FindingSource.SEMGREP
+
+    def test_default_suppress_unconfirmed_rules_false_preserves_semgrep(self):
+        """Default suppress_unconfirmed_rules=False preserves backwards compatibility."""
+        rule = make_vuln(
+            vuln_type=VulnerabilityType.SQL_INJECTION, cwe_id="CWE-89",
+            source=FindingSource.SEMGREP, start_line=10, context="rule"
+        )
+        result = fusion.fuse(
+            [rule],
+            [],
+            suppress_unconfirmed_rules=False,
+            file_analyzed_by_llm=True,
+        )
+        assert len(result.vulnerabilities) == 1
+        assert result.vulnerabilities[0].source == FindingSource.SEMGREP
+
+    def test_agreement_produces_confirmed_with_confidence_098(self):
+        """Tier agreement creates a CONFIRMED finding with confidence 0.98,
+        Semgrep exact position, and LLM explanation prose."""
+        rule = make_vuln(
+            vuln_type=VulnerabilityType.SQL_INJECTION, cwe_id="CWE-89",
+            source=FindingSource.SEMGREP, start_line=42, context="cursor.execute(sql)"
+        )
+        rule.rule_id = "rules.python-sql-injection"
+        llm = make_vuln(
+            vuln_type=VulnerabilityType.SQL_INJECTION, cwe_id="CWE-89",
+            source=FindingSource.LLM, start_line=40,
+            description="User-controlled string directly formatted into SQL query",
+            secure_code_example="cursor.execute('SELECT * FROM users WHERE id = %s', (uid,))"
+        )
+        result = fusion.fuse([rule], [llm])
+        assert len(result.vulnerabilities) == 1
+        merged = result.vulnerabilities[0]
+        assert merged.source == FindingSource.CONFIRMED
+        assert merged.confidence == 0.98
+        assert merged.location.start_line == 42
+        assert merged.description == "User-controlled string directly formatted into SQL query"
+        assert merged.secure_code_example == "cursor.execute('SELECT * FROM users WHERE id = %s', (uid,))"
+
+    def test_suppress_generic_path_traversal_on_os_path_join(self):
+        """Generic path traversal warnings (e.g. CWE-22, os.path.join) are suppressed
+        to prevent false positive inflation when unconfirmed by LLM."""
+        generic_path_rule = make_vuln(
+            vuln_type=VulnerabilityType.PATH_TRAVERSAL, cwe_id="CWE-22",
+            severity=VulnerabilitySeverity.MEDIUM, source=FindingSource.SEMGREP,
+            start_line=25, context="os.path.join(base_dir, user_file)"
+        )
+        generic_path_rule.rule_id = "rules.python-path-traversal-open"
+
+        # LLM analyzed the file and found an unrelated issue, not path traversal
+        llm_other = make_vuln(
+            vuln_type=VulnerabilityType.HARDCODED_CREDENTIALS, cwe_id="CWE-798",
+            source=FindingSource.LLM, start_line=80
+        )
+
+        result = fusion.fuse(
+            [generic_path_rule],
+            [llm_other],
+            suppress_unconfirmed_rules=True,
+            file_analyzed_by_llm=True,
+        )
+        assert len(result.vulnerabilities) == 1
+        assert result.vulnerabilities[0].source == FindingSource.LLM
+        assert result.vulnerabilities[0].type == VulnerabilityType.HARDCODED_CREDENTIALS
+
+    def test_preserve_reliable_high_risk_semgrep_rule_when_unconfirmed(self):
+        """Specific reliable high-risk rules (CRITICAL/HIGH specific rule_id)
+        are kept as SEMGREP even if unconfirmed by LLM to protect recall."""
+        reliable_rule = make_vuln(
+            vuln_type=VulnerabilityType.OS_COMMAND_INJECTION, cwe_id="CWE-78",
+            severity=VulnerabilitySeverity.CRITICAL, source=FindingSource.SEMGREP,
+            start_line=50, context="subprocess.run(cmd, shell=True)"
+        )
+        reliable_rule.rule_id = "rules.python-insecure-subprocess-shell"
+
+        result = fusion.fuse(
+            [reliable_rule],
+            [],
+            suppress_unconfirmed_rules=True,
+            file_analyzed_by_llm=True,
+        )
+        assert len(result.vulnerabilities) == 1
+        kept = result.vulnerabilities[0]
+        assert kept.source == FindingSource.SEMGREP
+        assert kept.confidence == 0.90
+        assert kept.rule_id == "rules.python-insecure-subprocess-shell"
+
+    def test_preserve_llm_only_findings_full_recall(self):
+        """All LLM findings without Semgrep rules are preserved to guarantee
+        100% Recall for logic flaws, auth issues, and exposed secrets."""
+        llm1 = make_vuln(
+            vuln_type=VulnerabilityType.HARDCODED_CREDENTIALS, cwe_id="CWE-798",
+            source=FindingSource.LLM, start_line=15
+        )
+        llm2 = make_vuln(
+            vuln_type=VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY, cwe_id="CWE-918",
+            source=FindingSource.LLM, start_line=30
+        )
+        llm3 = make_vuln(
+            vuln_type=VulnerabilityType.INSECURE_DESERIALIZATION, cwe_id="CWE-502",
+            source=FindingSource.LLM, start_line=45
+        )
+
+        result = fusion.fuse(
+            [],
+            [llm1, llm2, llm3],
+            suppress_unconfirmed_rules=True,
+            file_analyzed_by_llm=True,
+        )
+        assert len(result.vulnerabilities) == 3
+        assert all(v.source == FindingSource.LLM for v in result.vulnerabilities)
+        assert {v.cwe_id for v in result.vulnerabilities} == {"CWE-798", "CWE-918", "CWE-502"}
+
 
 class TestRuleTierMapping:
     def test_wrong_cwe_metadata_is_corrected(self):
