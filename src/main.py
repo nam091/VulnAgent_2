@@ -391,6 +391,62 @@ def _resolve_mode(mode: str, verify: bool = False) -> tuple[bool, bool, bool]:
         return True, True, True
 
 
+def format_model_short_name(raw_model: Optional[str]) -> str:
+    if not raw_model:
+        return "beam"
+    m = raw_model.strip().lower()
+    if "deepseek" in m:
+        return "deepseek"
+    if "glm-5.3-flash" in m or "glm53flash" in m:
+        return "glm-5.3-flash"
+    if "glm-5.3" in m or "glm53" in m:
+        return "glm-5.3"
+    if "beam" in m:
+        return "beam"
+    if "solar" in m:
+        return "solar-mini"
+    if "gemma4" in m or "gemma" in m:
+        return "gemma4"
+    if "luna" in m:
+        return "luna"
+    leaf = raw_model.split("/")[-1].split(":")[0]
+    return leaf.replace("-free", "") or "ai"
+
+
+def format_mode_display(mode: Optional[str], verify: Optional[bool] = None) -> str:
+    m = str(mode or "").strip().lower()
+    if m in ("deep-verify", "deepverify", "3tier") or verify:
+        return "DeepVerify"
+    if m in ("llm", "llm-only"):
+        return "LLM"
+    if m in ("semgrep", "rule", "rules", "rule-only"):
+        return "Semgrep"
+    return "DeepVerify"
+
+
+def build_job_standard_label(
+    source: str,
+    mode: str = "deep-verify",
+    model_id: Optional[str] = None,
+    verify: Optional[bool] = None
+) -> str:
+    """
+    Format scan job title as: Source · Mode by <model>
+    e.g. 'student_portal.py · DeepVerify by glm-5.3-flash'
+    """
+    clean_src = Path(str(source or "Target")).name
+    if not clean_src or clean_src == ".":
+        clean_src = str(source).rstrip("/\\").split("/")[-1].split("\\")[-1] or "Target"
+    clean_src = clean_src.replace(".zip", "")
+
+    mode_str = format_mode_display(mode, verify)
+    model_short = format_model_short_name(model_id or os.getenv("OPENAI_MODEL", "beam"))
+
+    if mode_str == "Semgrep":
+        return f"{clean_src} · Semgrep"
+    return f"{clean_src} · {mode_str} by {model_short}"
+
+
 def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[str, Any]:
     """
     Attach progress reporting and queue the scan.
@@ -421,18 +477,18 @@ def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[
             res = await Scanner(options).scan()
             if not job.options.get("custom_name"):
                 try:
-                    smart_title = await generate_smart_scan_title(
-                        files=getattr(res, "reports", []),
-                        findings=getattr(res, "vulnerabilities", []),
-                        kind=job.kind,
-                        fallback_seed=job.label,
+                    src_name = job.options.get("source_name") or job.label.split(" · ")[0]
+                    standard_title = build_job_standard_label(
+                        source=src_name,
                         mode=job.options.get("mode", "deep-verify"),
+                        model_id=os.getenv("OPENAI_MODEL"),
+                        verify=job.options.get("verify")
                     )
-                    if smart_title and smart_title != job.label:
-                        job.label = smart_title
-                        store.update(job, label=smart_title)
+                    if standard_title and standard_title != job.label:
+                        job.label = standard_title
+                        store.update(job, label=standard_title)
                 except Exception as e:
-                    logging.debug(f"Failed to auto-name job with AI: {e}")
+                    logging.debug(f"Failed to set standard job title: {e}")
             return res
 
         await run_job(store, job, scan_and_auto_name, _package)
@@ -570,13 +626,16 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "%d uploaded file(s) exceeded the per-file limit and were skipped", oversized
         )
 
+    src_name = Path(root_name or "upload").stem or (root_name or "upload")
+    job_label = build_job_standard_label(src_name, mode, os.getenv("OPENAI_MODEL"), verify)
     job = store.create(
         kind="folder",
-        label=f"{root_name or 'upload'} ({written} files)",
+        label=job_label,
         options={
             "mode": mode, "verify": verify, "files": written,
             "concurrency": concurrency,
             "skipped_oversized": oversized,
+            "source_name": src_name,
         },
         workspace=str(workspace),
     )
@@ -621,13 +680,15 @@ async def scan_snippet(
     (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
+    src_name = _safe_label(request.filename) or "snippet.py"
+    job_label = build_job_standard_label(src_name, request.mode, os.getenv("OPENAI_MODEL"), verify)
     job = store.create(
         kind="snippet",
-        # Client text that ends up on disk and on screen. Only the basename
-        # is meaningful, and keeping the rest lets a caller write "../../.."
-        # into the job list for no benefit.
-        label=_safe_label(request.filename),
-        options={"mode": request.mode, "verify": verify, "concurrency": request.concurrency},
+        label=job_label,
+        options={
+            "mode": request.mode, "verify": verify, "concurrency": request.concurrency,
+            "source_name": src_name,
+        },
         workspace=str(workspace),
     )
     options = ScanOptions(
@@ -689,10 +750,16 @@ async def scan_repository(
 
     workspace = Path(tempfile.mkdtemp(prefix="vulnagent_repo_"))
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
+    repo_name = url.rstrip("/").split("/")[-1]
+    src_name = f"{repo_name}@{request.branch}"
+    job_label = build_job_standard_label(src_name, request.mode, os.getenv("OPENAI_MODEL"), verify)
     job = store.create(
         kind="repository",
-        label=f"{url.rstrip('/').split('/')[-1]}@{request.branch}",
-        options={"mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency},
+        label=job_label,
+        options={
+            "mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency,
+            "source_name": src_name,
+        },
         workspace=str(workspace),
     )
 
@@ -1067,26 +1134,21 @@ Requirements:
 @app.post("/api/jobs/{job_id}/suggest_name")
 async def suggest_job_name(job_id: str) -> Dict[str, Any]:
     """
-    Use AI or intelligent heuristics to generate a concise, fitting name for a scan based on its target and findings.
+    Generate a standardized name for a scan: Source · Mode by <model>.
     """
     job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="No such job")
 
-    result = job.result or {}
-    files_list = result.get("files", [])
-    findings = result.get("findings", [])
-    mode = job.options.get("mode", "deep-verify")
-
-    smart_title = await generate_smart_scan_title(
-        files=files_list,
-        findings=findings,
-        kind=job.kind,
-        fallback_seed=job.label,
-        mode=mode
+    src_name = job.options.get("source_name") or job.label.split(" · ")[0]
+    standard_title = build_job_standard_label(
+        source=src_name,
+        mode=job.options.get("mode", "deep-verify"),
+        model_id=os.getenv("OPENAI_MODEL"),
+        verify=job.options.get("verify")
     )
 
-    return {"status": "ok", "suggested_label": smart_title, "model": os.getenv("OPENAI_MODEL", "ai")}
+    return {"status": "ok", "suggested_label": standard_title, "model": os.getenv("OPENAI_MODEL", "ai")}
 
 
 @app.post("/api/jobs/clear")

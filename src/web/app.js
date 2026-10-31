@@ -246,8 +246,12 @@ function jobRow(job) {
       </div>
       <div class="job-right">
         ${badges || `<span class="muted">${job.status === 'done' ? 'clean' : ''}</span>`}
-        <button class="btn-edit-label" title="Rename scan" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}', event)">✎</button>
-        <button class="btn-del" title="Delete scan" onclick="deleteJob('${esc(job.id)}', event)">🗑</button>
+        <button class="btn-edit-label" title="Rename scan" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}', event)">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        </button>
+        <button class="btn-del" title="Delete scan" onclick="deleteJob('${esc(job.id)}', event)">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
       </div>
     </div>`;
 }
@@ -581,9 +585,15 @@ function paintJob(job) {
           <p>${esc(job.kind)} · ${esc(job.status)} · started ${ago(job.created_at)}</p>
         </div>
         <div class="spacer"></div>
-        <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">✎ Rename</button>
-        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">✨ AI Name</button>
-        <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">Delete scan</button>
+        <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Rename
+        </button>
+        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg> AI Name
+        </button>
+        <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Delete scan
+        </button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
       ${isBenchSupported ? `
@@ -592,7 +602,7 @@ function paintJob(job) {
           Findings &amp; Code Analysis (${totalFindings})
         </button>
         <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
-          🎯 Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
         </button>
       </div>` : ''}
     </div>
@@ -836,7 +846,7 @@ function progressCard(job) {
           const active = key === job.phase;
           const note = phaseNote(job, key);
           return `<span class="phase ${active ? 'active' : (done ? 'done' : '')}">
-            ${done ? '✓' : (active ? '●' : '○')} ${label}
+            ${done ? `<svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><polyline points="20 6 9 17 4 12"></polyline></svg>` : (active ? '●' : '○')} ${label}
             ${note ? `<br><span style="opacity:.75">${esc(note)}</span>` : ''}
           </span>`;
         }).join('')}
@@ -1176,7 +1186,9 @@ function openRenameModal(jobId, currentLabel, e) {
       <div class="modal-card">
         <div class="modal-head">
           <h3>Rename Scan</h3>
-          <button type="button" class="modal-close" onclick="closeRenameModal()">✕</button>
+          <button type="button" class="modal-close" onclick="closeRenameModal()">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
         <div class="modal-body">
           <label class="field" style="font-weight:700">Scan Label</label>
@@ -1185,7 +1197,7 @@ function openRenameModal(jobId, currentLabel, e) {
           </div>
           <div class="row" style="align-items:center;gap:10px">
             <button type="button" class="btn ghost sm" id="modal-ai-btn" onclick="aiSuggestInModal('${esc(jobId)}')">
-              ✨ Auto-Generate with AI
+              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg> Auto-Generate with AI
             </button>
             <span id="modal-ai-status" class="muted"></span>
           </div>
@@ -1237,7 +1249,7 @@ async function aiSuggestInModal(jobId) {
     const res = await api(`/api/jobs/${jobId}/suggest_name`, { method: 'POST' });
     if (res && res.suggested_label) {
       input.value = res.suggested_label;
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--low)">✓ AI title generated</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Title generated</span>';
     } else {
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--crit)">Could not generate title</span>';
     }
@@ -1302,7 +1314,7 @@ async function aiAutoNameAndSave(jobId) {
       if (headerTitle) {
         headerTitle.textContent = res.suggested_label;
       }
-      if (btn) btn.innerHTML = '✓ Renamed!';
+      if (btn) btn.innerHTML = '<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Renamed!';
       setTimeout(() => { if (btn) { btn.innerHTML = wasText; btn.disabled = false; } }, 1500);
     }
   } catch (err) {
@@ -1403,13 +1415,27 @@ async function renderSettings() {
       <div style="margin-bottom:24px;padding:14px;background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm)">
         <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;color:var(--text)">Quick Presets:</div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn ghost sm" onclick="applyPreset('9router')">⚡ 9Router Local (beam:free)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('solar')">☀️ Solar Mini (solar-mini4:free)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53')">🔮 GLM-5.3 Proxy (Default)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash')">⚡ GLM-5.3 Flash Proxy (8080)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash9r')">⚡ 9Router (glm-5.3-flash-free)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('luna')">🌙 Codex Luna (gpt-5.6-luna)</button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('ollama')">🦙 9Router (ollama/gemma4)</button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('9router')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> 9Router (beam:free)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('solar')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> Solar Mini (solar-mini4:free)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg> GLM-5.3 Proxy (Default)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> GLM-5.3 Flash Proxy (8080)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash9r')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> 9Router (glm-5.3-flash-free)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('luna')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> Codex Luna (gpt-5.6-luna)
+          </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('ollama')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg> 9Router (ollama/gemma4)
+          </button>
         </div>
         <div style="margin-top:12px;padding-top:10px;border-top:var(--border) solid var(--edge);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:5px">
           <div>
@@ -1516,7 +1542,7 @@ async function saveSettings() {
         openai_api_key: key
       })
     });
-    statusEl.innerHTML = '<span style="color:var(--low)">✓ Saved successfully</span>';
+    statusEl.innerHTML = '<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Saved successfully</span>';
     banner.innerHTML = `<div class="banner" style="background:rgba(16,185,129,0.1);border-color:var(--low);color:var(--text);margin-bottom:16px">
       <b>Configuration saved!</b> Active model: <code>${esc(model)}</code> (Endpoint: <code>${esc(url)}</code>)
     </div>`;
@@ -1549,12 +1575,12 @@ async function testConnection() {
       })
     });
     if (res.status === 'ok') {
-      statusEl.innerHTML = `<span style="color:var(--low)">✓ ${esc(res.message)}</span>`;
+      statusEl.innerHTML = `<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> ${esc(res.message)}</span>`;
     } else {
-      statusEl.innerHTML = `<span style="color:var(--crit)">✗ ${esc(res.message)}</span>`;
+      statusEl.innerHTML = `<span style="color:var(--crit)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${esc(res.message)}</span>`;
     }
   } catch (err) {
-    statusEl.innerHTML = `<span style="color:var(--crit)">✗ Connection failed: ${esc(err.message)}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--crit)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Connection failed: ${esc(err.message)}</span>`;
   } finally {
     testBtn.disabled = false;
   }
@@ -1607,7 +1633,7 @@ function renderBenchmarkTabContent(job) {
       <div class="row" style="align-items:flex-start">
         <div style="min-width:0;flex:1">
           <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">
-            🎯 Automated Ground-Truth Benchmark Evaluation
+            <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Automated Ground-Truth Benchmark Evaluation
           </div>
           <p class="muted" style="margin:0">
             Dataset: <b>${esc(bench.dataset_name)}</b> (<code>${esc(bench.dataset_key)}</code>) ·
@@ -1616,7 +1642,7 @@ function renderBenchmarkTabContent(job) {
         </div>
         <div class="row" style="gap:8px">
           <button type="button" class="btn ghost sm" onclick="copyBenchmarkMarkdown('${esc(job.id)}')">
-            📋 Copy Thesis Markdown Table
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Thesis Markdown Table
           </button>
         </div>
       </div>
@@ -1731,7 +1757,7 @@ async function copyBenchmarkMarkdown(jobId) {
     }
 
     await navigator.clipboard.writeText(md);
-    alert('✓ Benchmark Markdown summary copied to clipboard! You can paste it directly into Chapter 4 of your thesis.');
+    alert('Benchmark Markdown summary copied to clipboard! You can paste it directly into Chapter 4 of your thesis.');
   } catch (err) {
     alert('Copy failed: ' + err.message);
   }
@@ -1740,7 +1766,7 @@ async function copyBenchmarkMarkdown(jobId) {
 async function renderBenchmarkCenter() {
   view.innerHTML = `
     <div class="page-head">
-      <h1>🎯 Benchmark Evaluation Center</h1>
+      <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
       <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
     </div>
     <div class="empty"><span class="spinner"></span>Loading benchmark evaluations...</div>`;
@@ -1776,7 +1802,7 @@ async function renderBenchmarkCenter() {
             </p>
           </div>
           <a class="btn sm" href="#/job/${esc(j.id)}/benchmark">
-            View Evaluation ➔
+            View Evaluation <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;margin-right:0"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
           </a>
         </div>
         <div class="bench-grid" style="margin-top:14px;margin-bottom:0">
@@ -1802,7 +1828,7 @@ async function renderBenchmarkCenter() {
 
   view.innerHTML = `
     <div class="page-head">
-      <h1>🎯 Benchmark Evaluation Center</h1>
+      <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
       <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
     </div>
 

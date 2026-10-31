@@ -110,7 +110,19 @@ body::before {
 }
 .nav-item:hover { color: var(--text-dim); background: var(--raised); }
 .nav-item.on { color: var(--signal); background: var(--signal-dim); }
-.nav-icon { font-size: 12px; width: 12px; text-align: center; }
+.nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; margin-right: 2px; flex-shrink: 0;
+}
+.nav-icon svg { width: 14px; height: 14px; stroke: currentColor; }
+
+.svg-icon {
+  display: inline-block; vertical-align: -2px; flex-shrink: 0;
+  stroke: currentColor; margin-right: 5px;
+}
+.btn-del .svg-icon, .btn-edit-label .svg-icon, .modal-close .svg-icon {
+  margin-right: 0; vertical-align: middle;
+}
 
 .sidebar-foot {
   margin-top: auto; padding: 14px 18px 0; border-top: var(--border) solid var(--edge);

@@ -497,7 +497,7 @@ async def _run_scan(args: argparse.Namespace) -> int:
     if not getattr(args, "no_dashboard", False):
         try:
             from jobs import JobStore
-            from main import _package, generate_smart_scan_title
+            from main import _package, build_job_standard_label
             from datetime import datetime, timezone
 
             store = JobStore()
@@ -505,16 +505,12 @@ async def _run_scan(args: argparse.Namespace) -> int:
             label_name = target_p.name if target_p.name else str(options.target)
             mode_tag = "deep-verify" if options.verify else ("llm" if not options.use_semgrep else "semgrep")
 
-            try:
-                smart_label = await generate_smart_scan_title(
-                    files=getattr(result, "reports", []),
-                    findings=getattr(result, "vulnerabilities", []),
-                    kind="folder" if target_p.is_dir() else "snippet",
-                    fallback_seed=label_name,
-                    mode=mode_tag
-                )
-            except Exception:
-                smart_label = f"CLI [{mode_tag.title()}]: {label_name}"
+            smart_label = build_job_standard_label(
+                source=label_name,
+                mode=mode_tag,
+                model_id=os.getenv("OPENAI_MODEL"),
+                verify=options.verify
+            )
 
             job = store.create(
                 kind="folder" if target_p.is_dir() else "snippet",
