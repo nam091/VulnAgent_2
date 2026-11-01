@@ -698,9 +698,6 @@ function paintJob(job) {
         <button class="btn ghost sm" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Rename
         </button>
-        <button class="btn ghost sm" id="detail-ai-name-btn" onclick="aiAutoNameAndSave('${esc(job.id)}')">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg> AI Name
-        </button>
         <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Delete scan
         </button>
@@ -1301,19 +1298,10 @@ function openRenameModal(jobId, currentLabel, e) {
           </button>
         </div>
         <div class="modal-body">
-          <label class="field" style="font-weight:700">Scan Label</label>
+          <label class="field" style="font-weight:700">Scan Title</label>
           <div style="margin-bottom:14px">
             <input type="text" id="rename-input" value="${esc(currentLabel)}" placeholder="Enter scan title..." autocomplete="off">
           </div>
-          <div class="row" style="align-items:center;gap:10px">
-            <button type="button" class="btn ghost sm" id="modal-ai-btn" onclick="aiSuggestInModal('${esc(jobId)}')">
-              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg> Auto-Generate with AI
-            </button>
-            <span id="modal-ai-status" class="muted"></span>
-          </div>
-          <p class="muted" style="margin-top:10px">
-            Click <b>Auto-Generate with AI</b> to automatically generate a concise, professional title based on the scanned files and discovered defects.
-          </p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn ghost sm" onclick="closeRenameModal()">Cancel</button>
@@ -1346,29 +1334,6 @@ function onModalBackdropClick(e) {
   }
 }
 
-async function aiSuggestInModal(jobId) {
-  const aiBtn = document.getElementById('modal-ai-btn');
-  const statusEl = document.getElementById('modal-ai-status');
-  const input = document.getElementById('rename-input');
-  if (!input) return;
-
-  if (aiBtn) aiBtn.disabled = true;
-  if (statusEl) statusEl.innerHTML = '<span class="spinner"></span>Analyzing code with AI...';
-
-  try {
-    const res = await api(`/api/jobs/${jobId}/suggest_name`, { method: 'POST' });
-    if (res && res.suggested_label) {
-      input.value = res.suggested_label;
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Title generated</span>';
-    } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--crit)">Could not generate title</span>';
-    }
-  } catch (err) {
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--crit)">Error: ${esc(err.message)}</span>`;
-  } finally {
-    if (aiBtn) aiBtn.disabled = false;
-  }
-}
 
 async function saveRenameFromModal(jobId) {
   const input = document.getElementById('rename-input');
@@ -1404,34 +1369,6 @@ async function saveRenameFromModal(jobId) {
   }
 }
 
-async function aiAutoNameAndSave(jobId) {
-  const btn = document.getElementById('detail-ai-name-btn');
-  const wasText = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Naming with AI...';
-  }
-
-  try {
-    const res = await api(`/api/jobs/${jobId}/suggest_name`, { method: 'POST' });
-    if (res && res.suggested_label) {
-      await api(`/api/jobs/${jobId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: res.suggested_label })
-      });
-      const headerTitle = document.getElementById('job-title-header');
-      if (headerTitle) {
-        headerTitle.textContent = res.suggested_label;
-      }
-      if (btn) btn.innerHTML = '<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Renamed!';
-      setTimeout(() => { if (btn) { btn.innerHTML = wasText; btn.disabled = false; } }, 1500);
-    }
-  } catch (err) {
-    alert('AI naming failed: ' + err.message);
-    if (btn) { btn.innerHTML = wasText; btn.disabled = false; }
-  }
-}
 
 async function deleteJob(id, e) {
   if (e) {
@@ -2322,6 +2259,128 @@ function exportSuiteCSV(datasetKey) {
   URL.revokeObjectURL(url);
 }
 
+
+function renderOwaspOfficialSpecsCard() {
+  const specs = [
+    { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, sink: 'sqlite3.execute, cursor.execute (string formatting)' },
+    { cwe: 'CWE-78', name: 'Command Injection (OS CmdI)', b100: 5, b1000: 13, sink: 'os.system, subprocess.call, popen' },
+    { cwe: 'CWE-79', name: 'Cross-Site Scripting (XSS)', b100: 5, b1000: 31, sink: 'render_template_string, unescaped HTTP response' },
+    { cwe: 'CWE-22', name: 'Path Traversal', b100: 5, b1000: 65, sink: 'open(), os.path.join with relative traversal' },
+    { cwe: 'CWE-94', name: 'Code Injection', b100: 5, b1000: 20, sink: 'eval(), exec(), dynamic compilation' },
+    { cwe: 'CWE-502', name: 'Insecure Deserialization', b100: 5, b1000: 18, sink: 'pickle.loads, yaml.load, marshal.loads' },
+    { cwe: 'CWE-643', name: 'XPath Injection', b100: 5, b1000: 51, sink: 'etree.xpath, unparameterized XML queries' },
+    { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, sink: 'xml.etree.ElementTree, external DTD loading' },
+    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, sink: 'ldap3.Connection.search, unescaped user filter' },
+    { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, sink: 'hashlib.md5, hashlib.sha1' },
+    { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, sink: 'random.random, random.randint in security context' },
+    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, sink: 'flask.redirect to unvalidated destination' },
+    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, sink: 'Set-Cookie missing Secure / HttpOnly flags' },
+    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, sink: 'Untrusted user input written into session context' },
+    { cwe: 'Control', name: 'Clean Testcases (True Negatives / Controls)', b100: 50, b1000: 778, sink: 'Sanitized/defensive implementations (FP check)' },
+  ];
+
+  const rows = specs.map(s => `
+    <tr style="${s.cwe === 'Control' ? 'background:rgba(184,194,207,0.06);font-style:italic' : ''}">
+      <td style="font-weight:700"><code>${esc(s.cwe)}</code></td>
+      <td class="wrap-cell" style="font-weight:600">${esc(s.name)}</td>
+      <td style="text-align:center;font-weight:700;color:${s.b100 > 0 ? 'var(--text)' : 'var(--text-faint)'}">${s.b100}</td>
+      <td style="text-align:center;font-weight:700;color:${s.b1000 > 0 ? 'var(--text)' : 'var(--text-faint)'}">${s.b1000}</td>
+      <td class="wrap-cell muted" style="font-size:12px"><code>${esc(s.sink)}</code></td>
+    </tr>`).join('');
+
+  return `
+    <div class="card" style="margin-bottom:28px">
+      <div class="row" style="margin-bottom:12px;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:3px">
+            Official OWASP Benchmark Ground-Truth Specifications
+          </div>
+          <p class="muted" style="margin:0;font-size:12.5px">
+            Authoritative testcase distribution officially published for the OWASP Benchmark for Python v0.1 corpus.
+          </p>
+        </div>
+        <button type="button" class="btn ghost sm" onclick="copyOwaspSpecMarkdown()">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Specification Table
+        </button>
+      </div>
+
+      <div class="bench-grid" style="margin-bottom:18px">
+        <div class="bench-metric-card neutral" style="padding:12px 16px">
+          <div class="bench-metric-val" style="font-size:22px">100 / 1,230</div>
+          <div class="bench-metric-label">Total Testcases</div>
+          <div class="bench-metric-sub">Benchmark100 / Benchmark1000</div>
+        </div>
+        <div class="bench-metric-card good" style="padding:12px 16px">
+          <div class="bench-metric-val" style="font-size:22px">50 / 452</div>
+          <div class="bench-metric-label">True Positives (Vuln)</div>
+          <div class="bench-metric-sub">Actual exploitable defects</div>
+        </div>
+        <div class="bench-metric-card warn" style="padding:12px 16px">
+          <div class="bench-metric-val" style="font-size:22px">50 / 778</div>
+          <div class="bench-metric-label">True Negatives (Clean)</div>
+          <div class="bench-metric-sub">Clean control files for FP test</div>
+        </div>
+        <div class="bench-metric-card neutral" style="padding:12px 16px">
+          <div class="bench-metric-val" style="font-size:22px">11 / 14</div>
+          <div class="bench-metric-label">CWE Categories</div>
+          <div class="bench-metric-sub">Core injection &amp; logic flaws</div>
+        </div>
+      </div>
+
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th style="width:100px">CWE ID</th>
+              <th class="wrap-cell">OWASP Vulnerability Category</th>
+              <th style="text-align:center;width:130px">Benchmark 100 (TP)</th>
+              <th style="text-align:center;width:140px">Benchmark 1000 (TP)</th>
+              <th class="wrap-cell">Primary Sink &amp; Detection Anchor</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr style="background:var(--raised);font-weight:700">
+              <td>TOTAL</td>
+              <td class="wrap-cell">ALL TESTCASES (VULNERABLE + CLEAN)</td>
+              <td style="text-align:center;color:var(--signal)">100 Files</td>
+              <td style="text-align:center;color:var(--signal)">1,230 Files</td>
+              <td class="wrap-cell muted" style="font-size:12px">Official OWASP Benchmark Ground Truth</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function copyOwaspSpecMarkdown() {
+  let md = `### Official OWASP Benchmark Ground-Truth Specifications\n\n`;
+  md += `| CWE ID | Vulnerability Category | Benchmark 100 (TP) | Benchmark 1000 (TP) | Primary Sink & Detection Anchor |\n`;
+  md += `| :--- | :--- | :---: | :---: | :--- |\n`;
+  md += `| **CWE-89** | SQL Injection (SQLi) | 5 | 5 | \`sqlite3.execute\`, raw query string concatenation |\n`;
+  md += `| **CWE-78** | Command Injection (OS CmdI) | 5 | 13 | \`os.system\`, \`subprocess.call\`, \`popen\` |\n`;
+  md += `| **CWE-79** | Cross-Site Scripting (XSS) | 5 | 31 | \`render_template_string\`, unescaped reflected output |\n`;
+  md += `| **CWE-22** | Path Traversal | 5 | 65 | \`open()\`, relative traversal resolution |\n`;
+  md += `| **CWE-94** | Code Injection | 5 | 20 | \`eval()\`, \`exec()\`, dynamic compilation |\n`;
+  md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | \`pickle.loads\`, \`yaml.load\`, \`marshal.loads\` |\n`;
+  md += `| **CWE-643** | XPath Injection | 5 | 51 | \`etree.xpath\`, unparameterized XML queries |\n`;
+  md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | \`xml.etree.ElementTree\`, external DTD resolution |\n`;
+  md += `| **CWE-90** | LDAP Injection | 0 | 16 | \`ldap3.Connection.search\`, unescaped filters |\n`;
+  md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | \`hashlib.md5\`, \`hashlib.sha1\` |\n`;
+  md += `| **CWE-330** | Insecure Randomness | 5 | 99 | \`random.random\`, \`random.randint\` for secret generation |\n`;
+  md += `| **CWE-601** | Open Redirect | 2 | 13 | \`flask.redirect\` to untrusted destinations |\n`;
+  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | \`Set-Cookie\` missing \`Secure\` or \`HttpOnly\` flag |\n`;
+  md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | Untrusted input placed into trusted session context |\n`;
+  md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | *Sanitized/defensive implementations (FP evaluation)* |\n`;
+  md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **Official OWASP Benchmark Python v0.1 Corpus** |\n`;
+
+  try {
+    await navigator.clipboard.writeText(md);
+    alert('OWASP Benchmark specifications table copied to clipboard! You can paste it directly into Chapter 4.');
+  } catch (err) {
+    alert('Copy failed: ' + err.message);
+  }
+}
 async function renderBenchmarkCenter() {
   view.innerHTML = `
     <div class="page-head">
@@ -2352,6 +2411,8 @@ async function renderBenchmarkCenter() {
       <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
       <p>Automated ground-truth scoring and aggregated comparative matrices for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
     </div>
+
+    ${renderOwaspOfficialSpecsCard()}
 
     <div class="card" style="margin-bottom:22px;background:var(--raised)">
       <div style="font-weight:700;margin-bottom:4px">Strict Benchmark Dataset Scope &amp; Run Aggregation</div>
@@ -2433,6 +2494,32 @@ function applyTheme(name) {
     b.classList.toggle('on', b.dataset.themeName === theme));
 }
 
+
+/* ---------------- sidebar toggle ---------------- */
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.toggle('collapsed');
+  const btn = document.getElementById('sidebar-toggle-btn');
+  if (btn) {
+    btn.title = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  }
+  try {
+    localStorage.setItem('vulnagent-sidebar-collapsed', isCollapsed ? 'true' : 'false');
+  } catch (e) {}
+}
+
+function initSidebar() {
+  try {
+    if (localStorage.getItem('vulnagent-sidebar-collapsed') === 'true') {
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) sidebar.classList.add('collapsed');
+      const btn = document.getElementById('sidebar-toggle-btn');
+      if (btn) btn.title = 'Expand sidebar';
+    }
+  } catch (e) {}
+}
 function initTheme() {
   // Follow the operating system on a first visit, then respect whatever the
   // user picked here afterwards.
@@ -2447,6 +2534,7 @@ function initTheme() {
 
 window.addEventListener('hashchange', route);
 window.addEventListener('beforeunload', stopFollowing);
+initSidebar();
 initTheme();
 route();
 checkHealth();

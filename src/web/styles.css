@@ -84,6 +84,97 @@ body::before {
   border-right: var(--border) solid var(--edge);
   padding: 20px 0 16px; display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh;
+  transition: width .2s cubic-bezier(.4, 0, .2, 1);
+  position: relative;
+}
+
+/* Sidebar collapse/expand toggle button:
+   Hidden by default (opacity: 0). Appears only on sidebar hover.
+   Padded from the top edge (top: 14px; right: 12px;). */
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  border: var(--border) solid var(--edge);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, background .14s, color .14s, transform .2s ease;
+  z-index: 100;
+  padding: 0;
+}
+.sidebar:hover .sidebar-toggle-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+.sidebar-toggle-btn:hover {
+  background: var(--edge-hot);
+  color: var(--text);
+  border-color: var(--signal);
+}
+
+/* Collapsed sidebar state */
+.sidebar.collapsed {
+  width: 68px;
+}
+.sidebar.collapsed .sidebar-toggle-btn {
+  right: 50%;
+  transform: translateX(50%);
+}
+.sidebar.collapsed .toggle-icon-collapse {
+  display: none !important;
+}
+.sidebar.collapsed .toggle-icon-expand {
+  display: block !important;
+}
+.sidebar.collapsed .brand {
+  padding: 0 10px 20px;
+  justify-content: center;
+}
+.sidebar.collapsed .brand .brand-text {
+  display: none;
+}
+.sidebar.collapsed .nav-item {
+  width: 44px;
+  padding: 11px 0;
+  margin: 3px auto;
+  justify-content: center;
+}
+.sidebar.collapsed .nav-item .nav-icon {
+  margin-right: 0;
+}
+.sidebar.collapsed .nav-item .nav-label {
+  display: none;
+}
+.sidebar.collapsed .sidebar-foot {
+  padding: 14px 6px 0;
+}
+.sidebar.collapsed #health,
+.sidebar.collapsed #health-model {
+  justify-content: center;
+}
+.sidebar.collapsed #health span:last-child,
+.sidebar.collapsed #health-model span:last-child {
+  display: none;
+}
+.sidebar.collapsed .theme-picker {
+  flex-direction: column;
+  padding: 8px 4px 0;
+  gap: 4px;
+}
+.sidebar.collapsed .theme-btn {
+  min-width: unset;
+  width: 100%;
+  padding: 5px 2px;
+  font-size: 8.5px;
 }
 .brand {
   display: flex; align-items: center; gap: 11px;

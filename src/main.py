@@ -492,25 +492,7 @@ def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[
     options.on_partial = publish_partial
 
     async def execute() -> None:
-        async def scan_and_auto_name() -> Any:
-            res = await Scanner(options).scan()
-            if not job.options.get("custom_name"):
-                try:
-                    src_name = job.options.get("source_name") or job.label.split(" · ")[0]
-                    standard_title = build_job_standard_label(
-                        source=src_name,
-                        mode=job.options.get("mode", "deep-verify"),
-                        model_id=os.getenv("OPENAI_MODEL"),
-                        verify=job.options.get("verify")
-                    )
-                    if standard_title and standard_title != job.label:
-                        job.label = standard_title
-                        store.update(job, label=standard_title)
-                except Exception as e:
-                    logging.debug(f"Failed to set standard job title: {e}")
-            return res
-
-        await run_job(store, job, scan_and_auto_name, _package)
+        await run_job(store, job, lambda: Scanner(options).scan(), _package)
 
     background.add_task(execute)
     return job.as_summary()
@@ -1190,119 +1172,6 @@ async def rename_job(job_id: str, req: RenameJobRequest) -> Dict[str, Any]:
     job.options["custom_name"] = True
     store.update(job, label=new_label, options=job.options)
     return {"status": "ok", "id": job_id, "label": job.label}
-
-
-async def generate_smart_scan_title(
-    files: Any,
-    findings: Any,
-    kind: str = "folder",
-    fallback_seed: str = "Scan",
-    mode: str = "deep-verify"
-) -> str:
-    """
-    Generate a smart, concise, professional report title (4 to 7 words)
-    using AI reasoning or intelligent heuristics based on target files and detected security defects.
-    """
-    file_names = []
-    for f in (files or [])[:6]:
-        if isinstance(f, dict):
-            fn = f.get("file") or f.get("file_name") or ""
-        elif hasattr(f, "file_name"):
-            fn = f.file_name or ""
-        elif hasattr(f, "location") and getattr(f.location, "file_path", None):
-            fn = f.location.file_path or ""
-        else:
-            fn = Path(str(f)).name
-        if fn:
-            file_names.append(Path(fn).name)
-    file_names = [f for f in file_names if f]
-
-    findings_summary = []
-    for f in (findings or [])[:6]:
-        if isinstance(f, dict):
-            f_type = f.get("type") or "Vulnerability"
-            f_cwe = f.get("cwe") or ""
-            f_file = Path(f.get("file", "")).name
-        elif hasattr(f, "type"):
-            f_type = f.type.value if hasattr(f.type, "value") else str(f.type)
-            f_cwe = getattr(f, "cwe_id", "") or ""
-            f_file = Path(getattr(f.location, "file_path", "")).name
-        else:
-            continue
-        findings_summary.append(f"{f_type} {f_cwe} in {f_file}".strip())
-
-    files_str = ", ".join(file_names) if file_names else str(fallback_seed)
-    findings_str = "; ".join(findings_summary) if findings_summary else "Clean code / No vulnerabilities detected"
-
-    clean_seed = Path(fallback_seed).stem if fallback_seed else "Application"
-    fallback_title = f"{clean_seed.replace('_', ' ').title()} Security Audit"
-    if findings:
-        first_f = findings[0]
-        first_type = (first_f.get("type") if isinstance(first_f, dict) else getattr(first_f.type, "value", str(first_f.type))).replace("_", " ").title()
-        target_fn = Path((first_f.get("file") if isinstance(first_f, dict) else getattr(first_f.location, "file_path", ""))).stem
-        if target_fn and target_fn.lower() not in ("app", "main", "test", "snippet"):
-            fallback_title = f"{target_fn.replace('_', ' ').title()} {first_type} Audit"
-        else:
-            fallback_title = f"{first_type} Security Audit"
-
-    prompt = f"""You are a senior security engineer and audit report specialist.
-Generate a concise, highly professional, descriptive title (maximum 4 to 7 words) for a security scan report based on the audited components and detected defects:
-
-Scanned Target / Components: {files_str}
-Security Findings / Flaws: {findings_str}
-Scan Type: {kind} ({mode})
-
-Requirements:
-1. Clearly identify the primary subject, service, or component being audited (e.g. 'Django ORM Datetime SQLi Audit', 'Airflow Task Instance IDOR Scan', 'FastAPI User Authentication Security Review', 'OWASP Benchmark Suite Evaluation', 'Clean Application Security Verification').
-2. Keep it strictly between 4 and 7 words.
-3. Return ONLY the exact title text string. Do not include quotes, markdown bold, labels like 'Title:', or trailing punctuation."""
-
-    try:
-        from utils.ai_client import AIClient
-        client = AIClient()
-        model = os.getenv("OPENAI_MODEL", "cmc/reflection/beam:free")
-        messages = [
-            {"role": "system", "content": "You are a professional security report naming assistant. Respond with ONLY the concise title."},
-            {"role": "user", "content": prompt}
-        ]
-        kwargs = {"model": model, "messages": messages, "stream": False}
-        if not client._is_reasoning_model(model):
-            kwargs["temperature"] = 0.2
-
-        response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: client.openai_client.chat.completions.create(**kwargs)),
-            timeout=8.0
-        )
-        raw_title = response.choices[0].message.content or ""
-        raw_title = re.sub(r'<(?:think|thought)>[\s\S]*?</(?:think|thought)>', '', raw_title, flags=re.I).strip()
-        clean_title = raw_title.strip("\"'`").split("\n")[0].strip()
-        clean_title = re.sub(r'^(Title|Suggested Title|Report Name):\s*', '', clean_title, flags=re.I).strip()
-        if clean_title and len(clean_title) >= 3:
-            return clean_title
-    except Exception as e:
-        logging.debug(f"AI auto-naming failed ({e}); falling back to heuristic title")
-
-    return fallback_title
-
-
-@app.post("/api/jobs/{job_id}/suggest_name")
-async def suggest_job_name(job_id: str) -> Dict[str, Any]:
-    """
-    Generate a standardized name for a scan: Source · Mode by <model>.
-    """
-    job = store.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="No such job")
-
-    src_name = job.options.get("source_name") or job.label.split(" · ")[0]
-    standard_title = build_job_standard_label(
-        source=src_name,
-        mode=job.options.get("mode", "deep-verify"),
-        model_id=os.getenv("OPENAI_MODEL"),
-        verify=job.options.get("verify")
-    )
-
-    return {"status": "ok", "suggested_label": standard_title, "model": os.getenv("OPENAI_MODEL", "ai")}
 
 
 @app.post("/api/jobs/clear")
