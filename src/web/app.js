@@ -2041,6 +2041,7 @@ async function copyBenchmarkMarkdown(jobId) {
 }
 
 let cachedBenchmarkAggregations = {};
+let selectedBenchmarkRuns = {}; // { 'benchmark100': Set([id1, id2, ...]) }
 
 function toggleSuiteMatrix(datasetKey) {
   const container = document.getElementById(`matrix-container-${datasetKey}`);
@@ -2049,12 +2050,257 @@ function toggleSuiteMatrix(datasetKey) {
   const isHidden = container.classList.contains('hide');
   if (isHidden) {
     container.classList.remove('hide');
-    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Comparative Matrix ▴`;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Comparison Table ▴`;
   } else {
     container.classList.add('hide');
-    const count = (cachedBenchmarkAggregations[datasetKey]?.runs || []).length;
-    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> View Comparative Matrix (${count} runs) ▾`;
+    const selectedCount = (selectedBenchmarkRuns[datasetKey] || new Set()).size;
+    const totalCount = (cachedBenchmarkAggregations[datasetKey]?.runs || []).length;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${totalCount} selected) ▾`;
   }
+}
+
+function onBenchmarkRunToggle(datasetKey, runId, isChecked) {
+  if (!selectedBenchmarkRuns[datasetKey]) {
+    selectedBenchmarkRuns[datasetKey] = new Set();
+  }
+  if (isChecked) {
+    selectedBenchmarkRuns[datasetKey].add(runId);
+  } else {
+    selectedBenchmarkRuns[datasetKey].delete(runId);
+  }
+  updateSuiteComparisonView(datasetKey);
+}
+
+function toggleSelectAllSuiteRuns(datasetKey, selectAll) {
+  const agg = cachedBenchmarkAggregations[datasetKey];
+  if (!agg || !agg.runs) return;
+  if (!selectedBenchmarkRuns[datasetKey]) {
+    selectedBenchmarkRuns[datasetKey] = new Set();
+  }
+  if (selectAll) {
+    agg.runs.forEach(r => selectedBenchmarkRuns[datasetKey].add(r.id));
+  } else {
+    selectedBenchmarkRuns[datasetKey].clear();
+  }
+  updateSuiteComparisonView(datasetKey);
+}
+
+function selectPresetRunsFilter(datasetKey, filterType) {
+  const agg = cachedBenchmarkAggregations[datasetKey];
+  if (!agg || !agg.runs) return;
+  selectedBenchmarkRuns[datasetKey] = new Set();
+  agg.runs.forEach(r => {
+    const l = (r.label || '').toLowerCase();
+    if (filterType === 'deep-verify') {
+      if (l.includes('deepverify') || l.includes('3tier') || l.includes('deep-verify')) {
+        selectedBenchmarkRuns[datasetKey].add(r.id);
+      }
+    } else if (filterType === 'llm') {
+      if (l.includes(' · llm') || l.includes('llm only')) {
+        selectedBenchmarkRuns[datasetKey].add(r.id);
+      }
+    } else if (filterType === 'semgrep') {
+      if (l.includes('semgrep')) {
+        selectedBenchmarkRuns[datasetKey].add(r.id);
+      }
+    }
+  });
+  updateSuiteComparisonView(datasetKey);
+}
+
+function updateSuiteComparisonView(datasetKey) {
+  const agg = cachedBenchmarkAggregations[datasetKey];
+  if (!agg) return;
+  const container = document.getElementById(`matrix-container-${datasetKey}`);
+  if (!container) return;
+
+  const contentHolder = document.getElementById(`suite-content-${datasetKey}`);
+  if (contentHolder) {
+    contentHolder.innerHTML = renderSuiteComparisonInner(agg, datasetKey);
+  }
+
+  // Update toggle button text if visible
+  const btn = document.getElementById(`btn-toggle-matrix-${datasetKey}`);
+  if (btn && container.classList.contains('hide')) {
+    const selectedCount = (selectedBenchmarkRuns[datasetKey] || new Set()).size;
+    btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${agg.runs.length} selected) ▾`;
+  }
+}
+
+function renderSuiteComparisonInner(agg, datasetKey) {
+  const runs = agg.runs || [];
+  const selectedSet = selectedBenchmarkRuns[datasetKey] || new Set();
+  const selectedRuns = runs.filter(r => selectedSet.has(r.id));
+  const cweMatrix = agg.cwe_matrix || [];
+
+  const allSelected = runs.length > 0 && selectedRuns.length === runs.length;
+  const bestSelectedRun = selectedRuns.length > 1
+    ? [...selectedRuns].sort((a, b) => ((b.metrics?.f1 || 0) - (a.metrics?.f1 || 0)))[0]
+    : null;
+
+  const summaryRows = runs.map(r => {
+    const isChecked = selectedSet.has(r.id);
+    const m = r.metrics || {};
+    const prec = (m.precision * 100).toFixed(1);
+    const rec = (m.recall * 100).toFixed(1);
+    const f1 = (m.f1 || 0).toFixed(4);
+    const isBest = bestSelectedRun && r.id === bestSelectedRun.id;
+
+    return `
+      <tr style="${isChecked ? (isBest ? 'background:rgba(78,148,120,0.08);' : '') : 'opacity:0.42;'}">
+        <td class="chk-col">
+          <input type="checkbox" class="bench-run-check" ${isChecked ? 'checked' : ''} onchange="onBenchmarkRunToggle('${esc(datasetKey)}', '${esc(r.id)}', this.checked)">
+        </td>
+        <td class="wrap-cell">
+          <div style="font-weight:700">
+            <a href="#/job/${esc(r.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(r.label)}</a>
+            ${isBest ? `<span class="bench-status-badge perfect" style="margin-left:6px;font-size:10px">Best F1</span>` : ''}
+          </div>
+          <div class="muted" style="font-size:11px">${ago(r.finished_at || r.created_at)} · ID: <code>${esc(r.id)}</code></div>
+        </td>
+        <td class="num-col" style="font-weight:700">${r.findings_count}</td>
+        <td class="num-col" style="color:var(--low);font-weight:700">${m.tp}</td>
+        <td class="num-col" style="color:${m.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700">${m.fp}</td>
+        <td class="num-col" style="color:${m.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'}">${m.fn}</td>
+        <td class="num-col" style="font-weight:700">${prec}%</td>
+        <td class="num-col" style="font-weight:700">${rec}%</td>
+        <td class="num-col" style="font-weight:700;color:var(--signal)">${f1}</td>
+        <td class="num-col" style="color:${m.fp_on_clean_files > 0 ? 'var(--high)' : 'var(--text-faint)'}">${m.fp_on_clean_files || 0}</td>
+        <td class="num-col">
+          <a class="btn ghost sm" href="#/job/${esc(r.id)}/benchmark" style="padding:4px 8px">
+            View
+          </a>
+        </td>
+      </tr>`;
+  }).join('');
+
+  let cweMatrixHtml = '';
+  if (selectedRuns.length >= 2 && cweMatrix.length > 0) {
+    const cweMatrixRows = cweMatrix.map(row => {
+      const scanCells = selectedRuns.map(r => {
+        const sc = (row.scans || {})[r.id] || {};
+        const tp = sc.tp || 0;
+        const rec = ((sc.recall || 0) * 100).toFixed(1);
+        const badgeCls = sc.recall >= 1.0 ? 'perfect' : (sc.recall > 0 ? 'partial' : 'zero');
+        return `
+          <td class="matrix-col">
+            <span class="bench-status-badge ${badgeCls}" title="${tp} of ${row.total} detected">
+              ${tp}/${row.total} (${rec}%)
+            </span>
+          </td>`;
+      }).join('');
+
+      return `
+        <tr>
+          <td style="font-weight:700"><code>${esc(row.cwe)}</code></td>
+          <td class="wrap-cell">${esc(row.category)}</td>
+          <td style="font-weight:700;text-align:center">${row.total}</td>
+          ${scanCells}
+        </tr>`;
+    }).join('');
+
+    // Overall recall footer row across selected runs
+    const overallCols = selectedRuns.map(r => {
+      const tp = r.metrics?.tp || 0;
+      const gt = agg.total_ground_truth || 1;
+      const pct = ((tp / gt) * 100).toFixed(1);
+      return `<td class="matrix-col" style="font-weight:700;color:var(--signal)">${tp}/${gt} (${pct}%)</td>`;
+    }).join('');
+
+    cweMatrixHtml = `
+      <div style="margin-top:24px">
+        <div class="row" style="margin-bottom:8px">
+          <div class="card-title" style="margin:0">Head-to-Head Per-CWE Recall Comparison (${selectedRuns.length} runs selected)</div>
+          <div class="spacer"></div>
+          <span class="muted" style="font-size:11.5px">${cweMatrix.length} CWE categories evaluated</span>
+        </div>
+        <div class="bench-table-wrap">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th style="width:90px">CWE ID</th>
+                <th class="wrap-cell">Vulnerability Category</th>
+                <th style="text-align:center;width:65px">Total</th>
+                ${selectedRuns.map(r => `<th class="matrix-col wrap-cell" style="font-weight:700">${esc(r.label.split(' · ')[1] || r.label)}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${cweMatrixRows}
+              <tr style="background:var(--raised);font-weight:700">
+                <td>OVERALL</td>
+                <td class="wrap-cell">OVERALL RECALL RATE</td>
+                <td style="text-align:center">${agg.total_ground_truth}</td>
+                ${overallCols}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } else if (selectedRuns.length === 1) {
+    cweMatrixHtml = `
+      <div class="banner info" style="margin-top:18px">
+        Select 1 more scan run above (at least 2 runs) to display the Head-to-Head Per-CWE comparative matrix.
+      </div>`;
+  } else if (selectedRuns.length === 0) {
+    cweMatrixHtml = `
+      <div class="banner warn" style="margin-top:18px">
+        No scan runs selected. Use the checkboxes above to select runs for head-to-head comparison.
+      </div>`;
+  }
+
+  return `
+    <div class="bench-selection-bar">
+      <div class="row" style="gap:8px;align-items:center">
+        <span style="font-weight:700;font-size:12.5px;color:var(--text)">
+          Comparing <b>${selectedRuns.length}</b> of ${runs.length} runs
+        </span>
+        <button type="button" class="bench-pill-btn ${allSelected ? 'active' : ''}" onclick="toggleSelectAllSuiteRuns('${esc(datasetKey)}', true)">
+          Select All
+        </button>
+        <button type="button" class="bench-pill-btn" onclick="selectPresetRunsFilter('${esc(datasetKey)}', 'deep-verify')">
+          DeepVerify Only
+        </button>
+        <button type="button" class="bench-pill-btn" onclick="toggleSelectAllSuiteRuns('${esc(datasetKey)}', false)">
+          Clear
+        </button>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="gap:8px">
+        <button type="button" class="btn ghost sm" onclick="copySuiteMarkdown('${esc(datasetKey)}')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Markdown Table
+        </button>
+        <button type="button" class="btn ghost sm" onclick="exportSuiteCSV('${esc(datasetKey)}')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Export CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th class="chk-col">
+              <input type="checkbox" class="bench-run-check" ${allSelected ? 'checked' : ''} onchange="toggleSelectAllSuiteRuns('${esc(datasetKey)}', this.checked)" title="Select/Deselect All">
+            </th>
+            <th class="wrap-cell">Configuration / Model</th>
+            <th class="num-col">Findings</th>
+            <th class="num-col" style="color:var(--low)">TP</th>
+            <th class="num-col" style="color:var(--crit)">FP</th>
+            <th class="num-col">FN</th>
+            <th class="num-col">Precision</th>
+            <th class="num-col">Recall</th>
+            <th class="num-col">F1-Score</th>
+            <th class="num-col">Clean FP</th>
+            <th class="num-col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${summaryRows}
+        </tbody>
+      </table>
+    </div>
+
+    ${cweMatrixHtml}`;
 }
 
 function renderBenchmarkSuiteAggregation(agg, datasetKey) {
@@ -2063,63 +2309,10 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
   }
 
   const runs = agg.runs;
-  const cweMatrix = agg.cwe_matrix || [];
-  const bestRunId = agg.best_run_id;
-
-  const summaryRows = runs.map(r => {
-    const m = r.metrics || {};
-    const prec = (m.precision * 100).toFixed(1);
-    const rec = (m.recall * 100).toFixed(1);
-    const f1 = (m.f1 || 0).toFixed(4);
-    const isBest = r.id === bestRunId && runs.length > 1;
-
-    return `
-      <tr style="${isBest ? 'background:rgba(78,148,120,0.08)' : ''}">
-        <td class="wrap-cell">
-          <div style="font-weight:700">
-            <a href="#/job/${esc(r.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(r.label)}</a>
-            ${isBest ? `<span class="bench-status-badge perfect" style="margin-left:6px;font-size:10px">Best F1</span>` : ''}
-          </div>
-          <div class="muted" style="font-size:11px">${ago(r.finished_at || r.created_at)} · ID: <code>${esc(r.id)}</code></div>
-        </td>
-        <td style="font-weight:700;text-align:center">${r.findings_count}</td>
-        <td style="color:var(--low);font-weight:700;text-align:center">${m.tp}</td>
-        <td style="color:${m.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700;text-align:center">${m.fp}</td>
-        <td style="color:${m.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'};text-align:center">${m.fn}</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${prec}%</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${rec}%</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--signal);text-align:center">${f1}</td>
-        <td style="color:${m.fp_on_clean_files > 0 ? 'var(--high)' : 'var(--text-faint)'};text-align:center">${m.fp_on_clean_files || 0}</td>
-        <td style="text-align:center">
-          <a class="btn ghost sm" href="#/job/${esc(r.id)}/benchmark" style="padding:4px 9px">
-            View <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;margin-right:0"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-          </a>
-        </td>
-      </tr>`;
-  }).join('');
-
-  const cweMatrixRows = cweMatrix.map(row => {
-    const scanCells = runs.map(r => {
-      const sc = (row.scans || {})[r.id] || {};
-      const tp = sc.tp || 0;
-      const rec = ((sc.recall || 0) * 100).toFixed(1);
-      const badgeCls = sc.recall >= 1.0 ? 'perfect' : (sc.recall > 0 ? 'partial' : 'zero');
-      return `
-        <td style="text-align:center">
-          <span class="bench-status-badge ${badgeCls}" title="${tp} of ${row.total} detected">
-            ${tp}/${row.total} (${rec}%)
-          </span>
-        </td>`;
-    }).join('');
-
-    return `
-      <tr>
-        <td style="font-weight:700"><code>${esc(row.cwe)}</code></td>
-        <td class="wrap-cell">${esc(row.category)}</td>
-        <td style="font-weight:700;text-align:center">${row.total}</td>
-        ${scanCells}
-      </tr>`;
-  }).join('');
+  if (!selectedBenchmarkRuns[datasetKey]) {
+    selectedBenchmarkRuns[datasetKey] = new Set(runs.map(r => r.id));
+  }
+  const selectedCount = selectedBenchmarkRuns[datasetKey].size;
 
   return `
     <div class="card" style="margin-bottom:30px">
@@ -2129,73 +2322,22 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
             ${esc(agg.dataset_name)}
           </h2>
           <p class="muted" style="margin-top:4px;font-size:12px">
-            Suite: <code>${esc(datasetKey)}</code> · <b>${agg.total_ground_truth}</b> Ground-Truth Defects · <b>${runs.length}</b> Comparative Scan Run(s) Grouped
+            Suite: <code>${esc(datasetKey)}</code> · <b>${agg.total_ground_truth}</b> Ground-Truth Defects · <b>${runs.length}</b> Scan Runs Available
           </p>
         </div>
         <div class="row" style="gap:8px">
           <button type="button" class="btn sm" id="btn-toggle-matrix-${esc(datasetKey)}" onclick="toggleSuiteMatrix('${esc(datasetKey)}')">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            <span>View Comparative Matrix (${runs.length} runs) ▾</span>
+            <span>Compare Scans (${selectedCount}/${runs.length} selected) ▾</span>
           </button>
         </div>
       </div>
 
       <!-- Collapsible Comparative Matrix Container (Hidden by Default) -->
       <div id="matrix-container-${esc(datasetKey)}" class="hide" style="margin-top:16px;border-top:var(--border) solid var(--edge);padding-top:16px">
-        <div class="row" style="margin-bottom:12px;gap:8px">
-          <button type="button" class="btn ghost sm" onclick="copySuiteMarkdown('${esc(datasetKey)}')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Markdown Table
-          </button>
-          <button type="button" class="btn ghost sm" onclick="exportSuiteCSV('${esc(datasetKey)}')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Export CSV
-          </button>
+        <div id="suite-content-${esc(datasetKey)}">
+          ${renderSuiteComparisonInner(agg, datasetKey)}
         </div>
-
-        <div class="bench-table-wrap">
-          <table class="bench-table">
-            <thead>
-              <tr>
-                <th class="wrap-cell">Configuration / Model</th>
-                <th style="text-align:center">Findings</th>
-                <th style="color:var(--low);text-align:center">TP</th>
-                <th style="color:var(--crit);text-align:center">FP</th>
-                <th style="text-align:center">FN</th>
-                <th style="text-align:center">Precision</th>
-                <th style="text-align:center">Recall</th>
-                <th style="text-align:center">F1-Score</th>
-                <th style="text-align:center">Clean FP</th>
-                <th style="text-align:center">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${summaryRows}
-            </tbody>
-          </table>
-        </div>
-
-        ${cweMatrix.length && runs.length > 0 ? `
-        <div style="margin-top:24px">
-          <div class="row" style="margin-bottom:8px">
-            <div class="card-title" style="margin:0">Head-to-Head Per-CWE Recall Comparison Matrix</div>
-            <div class="spacer"></div>
-            <span class="muted" style="font-size:11.5px">${cweMatrix.length} CWE categories mapped</span>
-          </div>
-          <div class="bench-table-wrap">
-            <table class="bench-table">
-              <thead>
-                <tr>
-                  <th style="width:90px">CWE ID</th>
-                  <th class="wrap-cell">Category</th>
-                  <th style="text-align:center;width:65px">Total</th>
-                  ${runs.map(r => `<th style="text-align:center">${esc(r.label.split(' · ')[1] || r.label)}</th>`).join('')}
-                </tr>
-              </thead>
-              <tbody>
-                ${cweMatrixRows}
-              </tbody>
-            </table>
-          </div>
-        </div>` : ''}
       </div>
     </div>`;
 }
@@ -2207,21 +2349,28 @@ async function copySuiteMarkdown(datasetKey) {
     return;
   }
 
+  const selectedSet = selectedBenchmarkRuns[datasetKey] || new Set(agg.runs.map(r => r.id));
+  const selectedRuns = agg.runs.filter(r => selectedSet.has(r.id));
+  if (!selectedRuns.length) {
+    alert('Please select at least 1 scan run to copy.');
+    return;
+  }
+
   let md = `### Benchmark Comparative Summary: ${agg.dataset_name} (${agg.total_ground_truth} Ground-Truth Defects)\n\n`;
   md += `| Configuration / Scan Run | Findings | TP | FP | FN | Precision | Recall | F1-Score | Clean-File FP |\n`;
   md += `| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n`;
-  for (const r of agg.runs) {
+  for (const r of selectedRuns) {
     const m = r.metrics || {};
     md += `| **${r.label}** | ${r.findings_count} | ${m.tp} | ${m.fp} | ${m.fn} | ${(m.precision * 100).toFixed(2)}% | ${(m.recall * 100).toFixed(2)}% | **${(m.f1 || 0).toFixed(4)}** | ${m.fp_on_clean_files || 0} |\n`;
   }
 
-  if (agg.cwe_matrix && agg.cwe_matrix.length) {
+  if (agg.cwe_matrix && agg.cwe_matrix.length && selectedRuns.length >= 2) {
     md += `\n#### Head-to-Head Per-CWE Recall Comparison Matrix\n\n`;
-    const runHeaders = agg.runs.map(r => r.label.split(' · ')[1] || r.label).join(' | ');
+    const runHeaders = selectedRuns.map(r => r.label.split(' · ')[1] || r.label).join(' | ');
     md += `| CWE ID | Vulnerability Category | Ground Truth | ${runHeaders} |\n`;
-    md += `| :--- | :--- | :---: | ${agg.runs.map(() => ':---:').join(' | ')} |\n`;
+    md += `| :--- | :--- | :---: | ${selectedRuns.map(() => ':---:').join(' | ')} |\n`;
     for (const row of agg.cwe_matrix) {
-      const runCols = agg.runs.map(r => {
+      const runCols = selectedRuns.map(r => {
         const sc = (row.scans || {})[r.id] || {};
         const tp = sc.tp || 0;
         const rec = ((sc.recall || 0) * 100).toFixed(1);
@@ -2233,7 +2382,7 @@ async function copySuiteMarkdown(datasetKey) {
 
   try {
     await navigator.clipboard.writeText(md);
-    alert('Benchmark comparative Markdown tables copied to clipboard! You can paste them directly into Chapter 4 of your thesis.');
+    alert(`Comparative Markdown table (${selectedRuns.length} runs) copied to clipboard! You can paste it directly into Chapter 4 of your thesis.`);
   } catch (err) {
     alert('Copy failed: ' + err.message);
   }
@@ -2245,8 +2394,14 @@ function exportSuiteCSV(datasetKey) {
     alert('No benchmark data to export for ' + datasetKey);
     return;
   }
+  const selectedSet = selectedBenchmarkRuns[datasetKey] || new Set(agg.runs.map(r => r.id));
+  const selectedRuns = agg.runs.filter(r => selectedSet.has(r.id));
+  if (!selectedRuns.length) {
+    alert('Please select at least 1 scan run to export.');
+    return;
+  }
   let csv = "Scan_Label,Dataset,Findings,True_Positives,False_Positives,False_Negatives,Precision,Recall,F1_Score,Clean_File_FP\n";
-  for (const r of agg.runs) {
+  for (const r of selectedRuns) {
     const m = r.metrics || {};
     csv += `"${r.label.replace(/"/g, '""')}","${agg.dataset_key}",${r.findings_count},${m.tp},${m.fp},${m.fn},${m.precision},${m.recall},${m.f1},${m.fp_on_clean_files || 0}\n`;
   }
@@ -2258,7 +2413,6 @@ function exportSuiteCSV(datasetKey) {
   a.click();
   URL.revokeObjectURL(url);
 }
-
 
 function renderOwaspOfficialSpecsCard() {
   const specs = [

@@ -930,3 +930,58 @@ pre.diff .del { color: var(--crit); display: block; }
 .bench-status-badge.partial { background: var(--signal-dim); color: var(--high); border: 1px solid var(--high); }
 .bench-status-badge.zero { background: var(--signal-dim); color: var(--crit); border: 1px solid var(--crit); }
 
+
+/* Enhanced benchmark table responsiveness and selection bar */
+.bench-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--raised);
+  border: var(--border) solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.bench-pill-btn {
+  padding: 5px 12px;
+  border-radius: 99px;
+  font: 600 11.5px/1.2 var(--ui-font);
+  background: var(--panel);
+  border: var(--border) solid var(--edge);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .14s ease;
+}
+.bench-pill-btn:hover {
+  background: var(--edge-hot);
+  color: var(--text);
+  border-color: var(--signal);
+}
+.bench-run-check {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--signal);
+  vertical-align: middle;
+}
+.bench-table th.num-col, .bench-table td.num-col {
+  text-align: center;
+  padding: 7px 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bench-table th.chk-col, .bench-table td.chk-col {
+  width: 38px;
+  text-align: center;
+  padding: 7px 4px;
+}
+.bench-table th.matrix-col, .bench-table td.matrix-col {
+  white-space: normal;
+  text-align: center;
+  min-width: 95px;
+  max-width: 145px;
+  padding: 6px 8px;
+  font-size: 12px;
+  word-break: break-word;
+}
