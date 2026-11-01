@@ -269,7 +269,7 @@ async function renderScan() {
     <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash</option>
     <option value="nous/upstage/solar-mini4:free">Solar Mini</option>
     <option value="ollama/gemma4">Gemma4</option>
-    <option value="cx/gpt-5.6-luna">Codex Luna</option>
+    <option value="cx/gpt-5.6-luna">gpt-5.6-luna</option>
   `;
 
   try {
@@ -2402,12 +2402,22 @@ async function checkHealth() {
   const model = document.getElementById('health-model');
   try {
     const h = await api('/health');
-    el.innerHTML = `<span class="dot ${h.rule_engine ? 'up' : 'down'}"></span>` +
-      `rule engine ${h.rule_engine ? 'ready' : 'missing'}`;
-    model.innerHTML = `<span class="dot ${h.llm_configured ? 'up' : 'down'}"></span>` +
-      esc(h.llm_configured ? h.model : 'LLM not configured');
+    const ruleColor = h.rule_engine ? 'var(--low)' : 'var(--crit)';
+    const llmColor = h.llm_configured ? 'var(--low)' : 'var(--crit)';
+    const cleanModelName = h.model_name || h.model || 'LLM not configured';
+
+    if (el) {
+      el.innerHTML = `
+        <svg class="svg-icon" width="7" height="7" viewBox="0 0 24 24" fill="${ruleColor}" stroke="none" style="margin-right:7px;flex-shrink:0"><circle cx="12" cy="12" r="10"></circle></svg>
+        <span>rule engine ${h.rule_engine ? 'ready' : 'missing'}</span>`;
+    }
+    if (model) {
+      model.innerHTML = `
+        <svg class="svg-icon" width="7" height="7" viewBox="0 0 24 24" fill="${llmColor}" stroke="none" style="margin-right:7px;flex-shrink:0"><circle cx="12" cy="12" r="10"></circle></svg>
+        <span title="${esc(h.model)}">${esc(cleanModelName)}</span>`;
+    }
   } catch (e) {
-    el.innerHTML = '<span class="dot down"></span>server unreachable';
+    if (el) el.innerHTML = '<svg class="svg-icon" width="7" height="7" viewBox="0 0 24 24" fill="var(--crit)" stroke="none" style="margin-right:7px;flex-shrink:0"><circle cx="12" cy="12" r="10"></circle></svg><span>server unreachable</span>';
   }
 }
 

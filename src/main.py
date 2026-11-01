@@ -427,7 +427,7 @@ def format_model_short_name(raw_model: Optional[str]) -> str:
     if "gemma4" in m or "gemma" in m:
         return "gemma4"
     if "luna" in m:
-        return "luna"
+        return "gpt-5.6-luna"
     leaf = raw_model.split("/")[-1].split(":")[0]
     return leaf.replace("-free", "") or "ai"
 
@@ -1561,7 +1561,7 @@ def load_model_profiles() -> List[Dict[str, Any]]:
             {"id": "deepseek", "name": "DeepSeek V4.1 Flash", "model": "oc/deepseek-v4.1-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
             {"id": "solar", "name": "Solar Mini", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
             {"id": "gemma4", "name": "Gemma4", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "luna", "name": "Codex Luna", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "luna", "name": "gpt-5.6-luna", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
             {"id": "glm53proxy", "name": "GLM-5.3 Proxy", "model": "glm-5.3", "base_url": "http://localhost:8080/v1", "api_key": "your-proxy-secret", "is_default": False},
         ]
         save_model_profiles(default_profiles)
@@ -1759,11 +1759,16 @@ async def health_check() -> Dict[str, Any]:
     from analyzer.semgrep_runner import SemgrepRunner
 
     runner = SemgrepRunner()
+    raw_model = os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12")
+    prof = resolve_model_profile(raw_model)
+    model_name = prof["name"] if prof else format_model_short_name(raw_model)
+
     return {
         "status": "healthy",
         "rule_engine": runner.available,
         "llm_configured": bool(os.getenv("OPENAI_API_KEY")),
-        "model": os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12"),
+        "model": raw_model,
+        "model_name": model_name,
         "jobs": len(store.list(limit=1000)),
     }
 

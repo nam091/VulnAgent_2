@@ -125,10 +125,23 @@ body::before {
 }
 
 .sidebar-foot {
-  margin-top: auto; padding: 14px 18px 0; border-top: var(--border) solid var(--edge);
-  font: 400 13px/1.9 var(--data-font); color: var(--text-faint);
+  margin-top: auto; padding: 14px 16px 0; border-top: var(--border) solid var(--edge);
+  font: 400 12.5px/1.8 var(--data-font); color: var(--text-faint);
 }
-.dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; background: var(--info); }
+#health, #health-model {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.6;
+  margin-bottom: 3px;
+}
+#health span, #health-model span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; background: var(--info); flex-shrink: 0; }
 .dot.up { background: var(--low); } .dot.down { background: var(--crit); }
 
 .theme-picker { display: flex; gap: 4px; padding: 12px 14px 0; }
