@@ -264,22 +264,18 @@ async function renderScan() {
   pendingFiles = [];
 
   let modelOptionsHtml = `
-    <option value="oc/glm-5.3-flash-free" selected>GLM-5.3 Flash (Zhipu Free)</option>
-    <option value="cmc/reflection/beam:free">Beam Free (Reflection Reasoning)</option>
-    <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash (Code Specialist)</option>
-    <option value="nous/upstage/solar-mini4:free">Solar Mini (Upstage Free)</option>
-    <option value="ollama/gemma4">Gemma4 (Local 9Router)</option>
-    <option value="cx/gpt-5.6-luna">Codex Luna (GPT-5.6 Luna)</option>
+    <option value="oc/glm-5.3-flash-free" selected>GLM-5.3 Flash</option>
+    <option value="cmc/reflection/beam:free">Beam Free</option>
+    <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash</option>
+    <option value="nous/upstage/solar-mini4:free">Solar Mini</option>
+    <option value="ollama/gemma4">Gemma4</option>
+    <option value="cx/gpt-5.6-luna">Codex Luna</option>
   `;
 
   try {
     const res = await api('/api/models');
     if (res && res.models && res.models.length) {
-      modelOptionsHtml = res.models.map(p => `
-        <option value="${esc(p.model)}" ${p.is_default ? 'selected' : ''}>
-          ${esc(p.name)} (${esc(p.model)})
-        </option>
-      `).join('');
+      modelOptionsHtml = res.models.map(p => `<option value="${esc(p.model)}" ${p.is_default ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     }
   } catch (e) {
     // fallback to preset list
@@ -295,6 +291,7 @@ async function renderScan() {
         <button class="tab on" data-pane="folder">Upload folder</button>
         <button class="tab" data-pane="snippet">Paste code</button>
         <button class="tab" data-pane="repo">Repository</button>
+        <button class="tab" data-pane="benchmark">Sample Benchmark</button>
       </div>
 
       <div id="pane-folder">
@@ -319,6 +316,53 @@ async function renderScan() {
         <label class="field">Branch</label>
         <input type="text" id="repo-branch" placeholder="main">
         <p class="muted" style="margin-top:9px">Public repositories on github, gitlab or bitbucket.</p>
+      </div>
+
+      <div id="pane-benchmark" class="hide">
+        <div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:8px">
+          Pre-Loaded Official Benchmark Suites
+        </div>
+        <p class="muted" style="margin-bottom:16px">
+          Select an official OWASP benchmark testbed located on the local disk to run immediate evaluation without manual uploads.
+        </p>
+
+        <div class="grid-2" style="gap:14px;margin-bottom:16px">
+          <label class="card" id="card-bench-100" style="padding:16px 18px;cursor:pointer;border:2px solid var(--signal)">
+            <div class="row" style="align-items:flex-start;gap:12px">
+              <input type="radio" name="bench-suite" value="benchmark100" checked style="width:18px;height:18px;margin-top:2px;accent-color:var(--signal)">
+              <div style="min-width:0;flex:1">
+                <div style="font-weight:700;font-size:15.5px;color:var(--text);margin-bottom:4px">
+                  OWASP Benchmark 100
+                </div>
+                <p class="muted" style="margin:0;font-size:13px">
+                  Balanced academic benchmark containing <b>100 Python testcases</b> (50 vulnerable + 50 clean files).
+                  Ideal for quick evaluations (~1-3 minutes).
+                </p>
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                  Path: <code>eval/datasets/benchmark100/samples</code>
+                </div>
+              </div>
+            </div>
+          </label>
+
+          <label class="card" id="card-bench-1000" style="padding:16px 18px;cursor:pointer;border:1px solid var(--edge)">
+            <div class="row" style="align-items:flex-start;gap:12px">
+              <input type="radio" name="bench-suite" value="benchmark1000" style="width:18px;height:18px;margin-top:2px;accent-color:var(--signal)">
+              <div style="min-width:0;flex:1">
+                <div style="font-weight:700;font-size:15.5px;color:var(--text);margin-bottom:4px">
+                  OWASP Benchmark 1000
+                </div>
+                <p class="muted" style="margin:0;font-size:13px">
+                  Full comprehensive suite containing <b>1,230 Python testcases</b> (452 vulnerable + 778 clean files).
+                  Full-scale thesis audit.
+                </p>
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                  Path: <code>eval/datasets/benchmark/samples</code>
+                </div>
+              </div>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div class="controls">
@@ -353,8 +397,20 @@ async function renderScan() {
     view.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
     pane = btn.dataset.pane;
-    ['folder', 'snippet', 'repo'].forEach(p =>
-      document.getElementById('pane-' + p).classList.toggle('hide', p !== pane));
+    ['folder', 'snippet', 'repo', 'benchmark'].forEach(p => {
+      const el = document.getElementById('pane-' + p);
+      if (el) el.classList.toggle('hide', p !== pane);
+    });
+  });
+
+  const card100 = document.getElementById('card-bench-100');
+  const card1000 = document.getElementById('card-bench-1000');
+  document.querySelectorAll('input[name="bench-suite"]').forEach(radio => {
+    radio.onchange = () => {
+      const is100 = radio.value === 'benchmark100';
+      if (card100) card100.style.border = is100 ? '2px solid var(--signal)' : '1px solid var(--edge)';
+      if (card1000) card1000.style.border = !is100 ? '2px solid var(--signal)' : '1px solid var(--edge)';
+    };
   });
 
   const modeSelect = document.getElementById('mode');
@@ -504,6 +560,18 @@ async function submit(pane) {
         body: JSON.stringify({
           code, filename: document.getElementById('snippet-name').value || 'snippet.py',
           mode, verify, concurrency, model: chosenModel
+        })
+      });
+    } else if (pane === 'benchmark') {
+      const suite = document.querySelector('input[name="bench-suite"]:checked')?.value || 'benchmark100';
+      job = await api('/api/jobs/benchmark', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataset: suite,
+          mode,
+          verify,
+          concurrency,
+          model: chosenModel
         })
       });
     } else {

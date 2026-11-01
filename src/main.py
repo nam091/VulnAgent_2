@@ -112,6 +112,14 @@ class RepositoryRequest(BaseModel):
     model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
+class BenchmarkPresetRequest(BaseModel):
+    dataset: str = Field("benchmark100", description="'benchmark100' or 'benchmark1000'")
+    mode: str = Field("deep-verify", description="'deep-verify', 'llm', or 'semgrep'")
+    verify: bool = Field(True, description="Run adversarial verification agent")
+    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
+    model: Optional[str] = Field(None, description="Optional model identifier override")
+
+
 class ModelProfileRequest(BaseModel):
     id: Optional[str] = Field(None, description="Profile ID")
     name: str = Field(..., min_length=1, max_length=120, description="Display name for model")
@@ -816,6 +824,54 @@ async def scan_repository(
     return job.as_summary()
 
 
+@app.post("/api/jobs/benchmark")
+async def scan_benchmark_preset(
+    request: BenchmarkPresetRequest,
+    background: BackgroundTasks
+) -> Dict[str, Any]:
+    """
+    Scan an official pre-loaded OWASP benchmark suite (benchmark100 or benchmark1000) directly from disk.
+    """
+    dataset_key = request.dataset.strip().lower()
+    if dataset_key in ("benchmark1000", "benchmark", "benchmark1230", "1230"):
+        suite_name = "benchmark1000"
+        target_dir = (ROOT / "eval" / "datasets" / "benchmark" / "samples").resolve()
+    else:
+        suite_name = "benchmark100"
+        target_dir = (ROOT / "eval" / "datasets" / "benchmark100" / "samples").resolve()
+
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Benchmark directory not found: {target_dir}")
+
+    use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
+    prof = resolve_model_profile(request.model)
+    chosen_model = prof["model"] if prof else (request.model or os.getenv("OPENAI_MODEL"))
+
+    job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify)
+    job = store.create(
+        kind="folder",
+        label=job_label,
+        options={
+            "mode": request.mode,
+            "verify": verify,
+            "concurrency": request.concurrency,
+            "target": str(target_dir),
+            "source_name": suite_name,
+            "model": chosen_model,
+        },
+        workspace=str(target_dir),
+    )
+    options = ScanOptions(
+        target=str(target_dir),
+        use_llm=use_llm,
+        use_semgrep=use_semgrep,
+        concurrency=max(1, min(request.concurrency, 50)),
+        verify=verify,
+        model=chosen_model,
+    )
+    return _start(job, options, background)
+
+
 @app.get("/api/jobs")
 async def list_jobs(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
     """
@@ -1500,13 +1556,13 @@ MODELS_FILE = Path(".vulnagent-models.json")
 def load_model_profiles() -> List[Dict[str, Any]]:
     if not MODELS_FILE.is_file():
         default_profiles = [
-            {"id": "glm53flash9r", "name": "GLM-5.3 Flash (Zhipu Free)", "model": "oc/glm-5.3-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": True},
-            {"id": "beam", "name": "Beam Free (Reflection Reasoning)", "model": "cmc/reflection/beam:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "deepseek", "name": "DeepSeek V4.1 Flash (Code Specialist)", "model": "oc/deepseek-v4.1-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "solar", "name": "Solar Mini (Upstage Free)", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "gemma4", "name": "Gemma4 (Local 9Router)", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "luna", "name": "Codex Luna (GPT-5.6 Luna)", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "glm53proxy", "name": "GLM-5.3 Proxy (8080)", "model": "glm-5.3", "base_url": "http://localhost:8080/v1", "api_key": "your-proxy-secret", "is_default": False},
+            {"id": "glm53flash9r", "name": "GLM-5.3 Flash", "model": "oc/glm-5.3-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": True},
+            {"id": "beam", "name": "Beam Free", "model": "cmc/reflection/beam:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "deepseek", "name": "DeepSeek V4.1 Flash", "model": "oc/deepseek-v4.1-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "solar", "name": "Solar Mini", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "gemma4", "name": "Gemma4", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "luna", "name": "Codex Luna", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "glm53proxy", "name": "GLM-5.3 Proxy", "model": "glm-5.3", "base_url": "http://localhost:8080/v1", "api_key": "your-proxy-secret", "is_default": False},
         ]
         save_model_profiles(default_profiles)
         return default_profiles
