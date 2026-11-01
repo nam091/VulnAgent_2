@@ -87,21 +87,22 @@ body::before {
   align-self: flex-start;
   z-index: 100;
   transition: width .2s cubic-bezier(.4, 0, .2, 1);
-  overflow-y: auto;
+  overflow: visible;
 }
 
 /* Sidebar collapse/expand toggle button:
-   Hidden by default (opacity: 0). Appears only on sidebar hover.
-   Padded from the top edge (top: 14px; right: 12px;). */
+   Centered directly on the boundary border between sidebar and main content.
+   Padded from top edge (top: 22px; right: -13px;).
+   Hidden by default (opacity: 0), smoothly fades in on sidebar hover. */
 .sidebar-toggle-btn {
   position: absolute;
-  top: 14px;
-  right: 12px;
+  top: 22px;
+  right: -13px;
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-sm);
-  background: var(--raised);
-  border: var(--border) solid var(--edge);
+  border-radius: 50%;
+  background: var(--deck);
+  border: var(--border) solid var(--edge-hot);
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -109,8 +110,9 @@ body::before {
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .18s ease, background .14s, color .14s, transform .2s ease;
-  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transition: opacity .18s ease, background .14s, color .14s, transform .14s ease, border-color .14s;
+  z-index: 1000;
   padding: 0;
 }
 .sidebar:hover .sidebar-toggle-btn {
@@ -118,9 +120,10 @@ body::before {
   pointer-events: auto;
 }
 .sidebar-toggle-btn:hover {
-  background: var(--edge-hot);
+  background: var(--raised);
   color: var(--text);
   border-color: var(--signal);
+  transform: scale(1.12);
 }
 
 /* Collapsed sidebar state */
@@ -128,8 +131,11 @@ body::before {
   width: 68px;
 }
 .sidebar.collapsed .sidebar-toggle-btn {
-  right: 50%;
-  transform: translateX(50%);
+  right: -13px;
+  transform: none;
+}
+.sidebar.collapsed .sidebar-toggle-btn:hover {
+  transform: scale(1.12);
 }
 .sidebar.collapsed .toggle-icon-collapse {
   display: none !important;
