@@ -835,10 +835,10 @@ async def scan_benchmark_preset(
     dataset_key = request.dataset.strip().lower()
     if dataset_key in ("benchmark1000", "benchmark", "benchmark1230", "1230"):
         suite_name = "benchmark1000"
-        target_dir = (ROOT / "eval" / "datasets" / "benchmark" / "samples").resolve()
+        target_dir = (PROJECT_ROOT / "eval" / "datasets" / "benchmark" / "samples").resolve()
     else:
         suite_name = "benchmark100"
-        target_dir = (ROOT / "eval" / "datasets" / "benchmark100" / "samples").resolve()
+        target_dir = (PROJECT_ROOT / "eval" / "datasets" / "benchmark100" / "samples").resolve()
 
     if not target_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Benchmark directory not found: {target_dir}")
