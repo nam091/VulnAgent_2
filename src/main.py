@@ -497,7 +497,9 @@ def _start(job: Job, options: ScanOptions, background: BackgroundTasks) -> Dict[
     async def execute() -> None:
         await run_job(store, job, lambda: Scanner(options).scan(), _package)
 
-    background.add_task(execute)
+    task = asyncio.create_task(execute())
+    store.register_task(job.id, task)
+    task.add_done_callback(lambda _: store.unregister_task(job.id))
     return job.as_summary()
 
 
@@ -812,7 +814,9 @@ async def scan_repository(
 
         await run_job(store, job, scan_after_clone, _package)
 
-    background.add_task(execute)
+    task = asyncio.create_task(execute())
+    store.register_task(job.id, task)
+    task.add_done_callback(lambda _: store.unregister_task(job.id))
     return job.as_summary()
 
 
@@ -1146,7 +1150,7 @@ async def list_benchmark_evaluations() -> Dict[str, Any]:
 @app.delete("/api/jobs/{job_id}")
 async def delete_job(job_id: str) -> Dict[str, Any]:
     """
-    Delete a job and its stored result.
+    Delete a job and its stored result, cancelling running tasks if active.
 
     Args:
         job_id: Job identifier
@@ -1159,12 +1163,7 @@ async def delete_job(job_id: str) -> Dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="No such job")
 
-    JobStore.cleanup_workspace(job)
-    store._jobs.pop(job_id, None)
-    try:
-        (store.directory / f"{job_id}.json").unlink(missing_ok=True)
-    except OSError:
-        pass
+    store.delete(job_id)
     return {"deleted": job_id}
 
 
@@ -1193,14 +1192,9 @@ async def clear_all_jobs() -> Dict[str, Any]:
     Delete all stored jobs and clean up their workspaces.
     """
     deleted_ids = []
-    for job in list(store._jobs.values()):
-        JobStore.cleanup_workspace(job)
-        try:
-            (store.directory / f"{job.id}.json").unlink(missing_ok=True)
-            deleted_ids.append(job.id)
-        except OSError:
-            pass
-    store._jobs.clear()
+    for job_id in list(store._jobs.keys()):
+        store.delete(job_id)
+        deleted_ids.append(job_id)
     return {"status": "ok", "deleted_count": len(deleted_ids), "deleted": deleted_ids}
 
 

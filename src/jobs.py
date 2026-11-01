@@ -90,6 +90,8 @@ class JobStore:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.retention = retention
         self._jobs: Dict[str, Job] = {}
+        self._tasks: Dict[str, asyncio.Task] = {}
+        self._deleted_ids: Set[str] = set()
         self._subscribers: Dict[str, List[asyncio.Queue]] = {}
         self._load()
 
@@ -185,10 +187,48 @@ class JobStore:
 
         return self._jobs.get(job_id)
 
+    def register_task(self, job_id: str, task: asyncio.Task) -> None:
+        """Track an active background task executing for this job."""
+        self._tasks[job_id] = task
+
+    def unregister_task(self, job_id: str) -> None:
+        """Remove a completed background task."""
+        self._tasks.pop(job_id, None)
+
+    def cancel_task(self, job_id: str) -> bool:
+        """Cancel an in-flight background task if currently running."""
+        task = self._tasks.pop(job_id, None)
+        if task and not task.done():
+            task.cancel()
+            return True
+        return False
+
+    def delete(self, job_id: str) -> bool:
+        """
+        Delete a job, stop any running background execution immediately,
+        clean up temporary workspaces and remove files from disk.
+        """
+        self._deleted_ids.add(job_id)
+        self.cancel_task(job_id)
+        job = self._jobs.pop(job_id, None)
+        if job:
+            JobStore.cleanup_workspace(job)
+        try:
+            (self.directory / f"{job_id}.json").unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
     def _sync_disk_jobs(self) -> None:
         """Discover new jobs saved to disk by other processes (e.g. CLI scans)."""
         for path in self.directory.glob("*.json"):
             job_id = path.stem
+            if job_id in self._deleted_ids:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                continue
             if job_id not in self._jobs:
                 try:
                     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -224,6 +264,9 @@ class JobStore:
             **changes: Fields to set
         """
 
+        if job.id in self._deleted_ids or job.id not in self._jobs:
+            return
+
         for key, value in changes.items():
             setattr(job, key, value)
         job.updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -238,6 +281,9 @@ class JobStore:
             job: The job
             event: A progress event from the scanner
         """
+
+        if job.id in self._deleted_ids or job.id not in self._jobs:
+            return
 
         stamped = {**event, "at": time.time()}
         job.events.append(stamped)

@@ -249,7 +249,7 @@ function jobRow(job) {
         <button class="btn-edit-label" title="Rename scan" onclick="openRenameModal('${esc(job.id)}', '${esc(job.label)}', event)">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         </button>
-        <button class="btn-del" title="Delete scan" onclick="deleteJob('${esc(job.id)}', event)">
+        <button class="btn-del" title="${job.status === 'running' ? 'Stop & delete running scan' : 'Delete scan'}" onclick="deleteJob('${esc(job.id)}', event)">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
       </div>
@@ -703,7 +703,7 @@ function paintJob(job) {
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Rename
         </button>
         <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Delete scan
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${running ? 'Stop & Delete' : 'Delete scan'}
         </button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
@@ -1379,7 +1379,13 @@ async function deleteJob(id, e) {
     e.preventDefault();
     e.stopPropagation();
   }
-  if (!confirm('Are you sure you want to delete this scan from the system?')) return;
+  const isRunning = currentLoadedJob && currentLoadedJob.id === id && (currentLoadedJob.status === 'running' || currentLoadedJob.status === 'queued');
+  const confirmMsg = isRunning
+    ? 'This scan is currently running. Stop background execution and delete it immediately?'
+    : 'Are you sure you want to delete this scan from the system?';
+  if (!confirm(confirmMsg)) return;
+
+  stopFollowing();
   try {
     await api(`/api/jobs/${id}`, { method: 'DELETE' });
     if (location.hash.startsWith('#/job/')) {
