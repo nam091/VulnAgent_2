@@ -305,6 +305,18 @@ function renderScan() {
           <option value="llm">LLM only — Semantic analysis</option>
           <option value="semgrep">Semgrep only — Rule engine only</option>
         </select>
+        <div id="model-select-group" style="display:inline-flex;align-items:center;gap:6px">
+          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Model:</span>
+          <select id="scan-model" style="width:auto">
+            <option value="oc/glm-5.3-flash-free" selected>GLM-5.3 Flash (Zhipu Free)</option>
+            <option value="cmc/reflection/beam:free">Beam Free (Reflection Reasoning)</option>
+            <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash (Code Specialist)</option>
+            <option value="nous/upstage/solar-mini4:free">Solar Mini (Upstage Free)</option>
+            <option value="ollama/gemma4">Gemma4 (Local 9Router)</option>
+            <option value="cx/gpt-5.6-luna">Codex Luna (GPT-5.6 Luna)</option>
+            <option value="custom">Settings Default</option>
+          </select>
+        </div>
         <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
         <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--text-dim);margin-left:4px">
           <span>Threads:</span>
@@ -330,19 +342,27 @@ function renderScan() {
 
   const modeSelect = document.getElementById('mode');
   const verifyCheck = document.getElementById('verify');
-  modeSelect.onchange = () => {
+  const modelGroup = document.getElementById('model-select-group');
+
+  function updateModelControls() {
     const m = modeSelect.value;
     if (m === 'deep-verify') {
       verifyCheck.checked = true;
       verifyCheck.disabled = false;
+      if (modelGroup) modelGroup.classList.remove('hide');
     } else if (m === 'llm') {
       verifyCheck.checked = false;
       verifyCheck.disabled = false;
+      if (modelGroup) modelGroup.classList.remove('hide');
     } else if (m === 'semgrep') {
       verifyCheck.checked = false;
       verifyCheck.disabled = true;
+      if (modelGroup) modelGroup.classList.add('hide');
     }
-  };
+  }
+
+  modeSelect.onchange = updateModelControls;
+  updateModelControls();
   verifyCheck.onchange = () => {
     if (verifyCheck.checked && modeSelect.value === 'llm') {
       modeSelect.value = 'deep-verify';
@@ -438,6 +458,10 @@ async function submit(pane) {
   const mode = document.getElementById('mode').value;
   const verify = (mode === 'deep-verify') || document.getElementById('verify').checked;
   const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 16;
+  const scanModelEl = document.getElementById('scan-model');
+  const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
+    ? scanModelEl.value
+    : null;
 
   button.disabled = true;
   msg.innerHTML = '<span class="spinner"></span>Submitting';
@@ -453,6 +477,7 @@ async function submit(pane) {
       form.append('mode', mode);
       form.append('verify', String(verify));
       form.append('concurrency', String(concurrency));
+      if (chosenModel) form.append('model', chosenModel);
       job = await api('/api/jobs/folder', { method: 'POST', body: form });
     } else if (pane === 'snippet') {
       const code = document.getElementById('code').value;
@@ -461,7 +486,7 @@ async function submit(pane) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code, filename: document.getElementById('snippet-name').value || 'snippet.py',
-          mode, verify, concurrency
+          mode, verify, concurrency, model: chosenModel
         })
       });
     } else {
@@ -472,7 +497,7 @@ async function submit(pane) {
         body: JSON.stringify({
           repository_url: url,
           branch: document.getElementById('repo-branch').value.trim() || 'main',
-          mode, verify, concurrency
+          mode, verify, concurrency, model: chosenModel
         })
       });
     }
@@ -1430,6 +1455,9 @@ async function renderSettings() {
           <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash9r')">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> 9Router (glm-5.3-flash-free)
           </button>
+          <button type="button" class="btn ghost sm" onclick="applyPreset('deepseek')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6"></path><path d="M8 6l-6 6 6 6"></path></svg> DeepSeek V4.1 Flash
+          </button>
           <button type="button" class="btn ghost sm" onclick="applyPreset('luna')">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> Codex Luna (gpt-5.6-luna)
           </button>
@@ -1503,6 +1531,12 @@ function applyPreset(preset) {
   } else if (preset === 'glm53flash9r') {
     urlEl.value = 'http://127.0.0.1:20128/v1';
     modelEl.value = 'oc/glm-5.3-flash-free';
+    if (!keyEl.value || keyEl.value.trim() === '') {
+      keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+    }
+  } else if (preset === 'deepseek') {
+    urlEl.value = 'http://127.0.0.1:20128/v1';
+    modelEl.value = 'oc/deepseek-v4.1-flash-free';
     if (!keyEl.value || keyEl.value.trim() === '') {
       keyEl.value = 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
     }
@@ -1763,94 +1797,244 @@ async function copyBenchmarkMarkdown(jobId) {
   }
 }
 
+let cachedBenchmarkAggregations = {};
+
+function renderBenchmarkSuiteAggregation(agg, datasetKey) {
+  if (!agg || !agg.runs || !agg.runs.length) {
+    return `<div class="card muted" style="margin-bottom:24px">No completed runs found for <code>${esc(datasetKey)}</code> yet. Run a scan targeting this benchmark to generate comparative metrics.</div>`;
+  }
+
+  const runs = agg.runs;
+  const cweMatrix = agg.cwe_matrix || [];
+  const bestRunId = agg.best_run_id;
+
+  const summaryRows = runs.map(r => {
+    const m = r.metrics || {};
+    const prec = (m.precision * 100).toFixed(1);
+    const rec = (m.recall * 100).toFixed(1);
+    const f1 = (m.f1 || 0).toFixed(4);
+    const isBest = r.id === bestRunId && runs.length > 1;
+
+    return `
+      <tr style="${isBest ? 'background:rgba(78,148,120,0.08)' : ''}">
+        <td>
+          <div style="font-weight:700">
+            <a href="#/job/${esc(r.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(r.label)}</a>
+            ${isBest ? `<span class="bench-status-badge perfect" style="margin-left:6px;font-size:10px">Best F1</span>` : ''}
+          </div>
+          <div class="muted" style="font-size:11px">${ago(r.finished_at || r.created_at)} · ID: <code>${esc(r.id)}</code></div>
+        </td>
+        <td style="font-weight:700">${r.findings_count}</td>
+        <td style="color:var(--low);font-weight:700">${m.tp}</td>
+        <td style="color:${m.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700">${m.fp}</td>
+        <td style="color:${m.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'}">${m.fn}</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700">${prec}%</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700">${rec}%</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--signal)">${f1}</td>
+        <td style="color:${m.fp_on_clean_files > 0 ? 'var(--high)' : 'var(--text-faint)'}">${m.fp_on_clean_files || 0}</td>
+        <td>
+          <a class="btn ghost sm" href="#/job/${esc(r.id)}/benchmark" style="padding:4px 9px">
+            View <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;margin-right:0"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </a>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const cweMatrixRows = cweMatrix.map(row => {
+    const scanCells = runs.map(r => {
+      const sc = (row.scans || {})[r.id] || {};
+      const tp = sc.tp || 0;
+      const rec = ((sc.recall || 0) * 100).toFixed(1);
+      const badgeCls = sc.recall >= 1.0 ? 'perfect' : (sc.recall > 0 ? 'partial' : 'zero');
+      return `
+        <td style="text-align:center">
+          <span class="bench-status-badge ${badgeCls}" title="${tp} of ${row.total} detected">
+            ${tp}/${row.total} (${rec}%)
+          </span>
+        </td>`;
+    }).join('');
+
+    return `
+      <tr>
+        <td style="font-weight:700"><code>${esc(row.cwe)}</code></td>
+        <td>${esc(row.category)}</td>
+        <td style="font-weight:700;text-align:center">${row.total}</td>
+        ${scanCells}
+      </tr>`;
+  }).join('');
+
+  return `
+    <div class="card" style="margin-bottom:30px">
+      <div class="row" style="margin-bottom:14px;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <h2 style="font-size:18px;font-weight:700;margin:0;color:var(--text)">
+            ${esc(agg.dataset_name)}
+          </h2>
+          <p class="muted" style="margin-top:4px;font-size:12px">
+            Suite: <code>${esc(datasetKey)}</code> · <b>${agg.total_ground_truth}</b> Ground-Truth Defects · <b>${runs.length}</b> Comparative Scan Run(s) Grouped
+          </p>
+        </div>
+        <div class="row" style="gap:8px">
+          <button type="button" class="btn ghost sm" onclick="copySuiteMarkdown('${esc(datasetKey)}')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Markdown Table
+          </button>
+          <button type="button" class="btn ghost sm" onclick="exportSuiteCSV('${esc(datasetKey)}')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th>Configuration / Model</th>
+              <th>Findings</th>
+              <th style="color:var(--low)">TP</th>
+              <th style="color:var(--crit)">FP</th>
+              <th>FN</th>
+              <th>Precision</th>
+              <th>Recall</th>
+              <th>F1-Score</th>
+              <th>Clean FP</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaryRows}
+          </tbody>
+        </table>
+      </div>
+
+      ${cweMatrix.length && runs.length > 0 ? `
+      <div style="margin-top:24px">
+        <div class="row" style="margin-bottom:8px">
+          <div class="card-title" style="margin:0">Head-to-Head Per-CWE Recall Comparison Matrix</div>
+          <div class="spacer"></div>
+          <span class="muted" style="font-size:11.5px">${cweMatrix.length} CWE categories mapped</span>
+        </div>
+        <div class="bench-table-wrap">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th style="width:100px">CWE ID</th>
+                <th>Category</th>
+                <th style="text-align:center;width:70px">Total</th>
+                ${runs.map(r => `<th style="text-align:center">${esc(r.label.split(' · ')[1] || r.label)}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${cweMatrixRows}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>`;
+}
+
+async function copySuiteMarkdown(datasetKey) {
+  const agg = cachedBenchmarkAggregations[datasetKey];
+  if (!agg || !agg.runs || !agg.runs.length) {
+    alert('No benchmark aggregation data available for ' + datasetKey);
+    return;
+  }
+
+  let md = `### Benchmark Comparative Summary: ${agg.dataset_name} (${agg.total_ground_truth} Ground-Truth Defects)\n\n`;
+  md += `| Configuration / Scan Run | Findings | TP | FP | FN | Precision | Recall | F1-Score | Clean-File FP |\n`;
+  md += `| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n`;
+  for (const r of agg.runs) {
+    const m = r.metrics || {};
+    md += `| **${r.label}** | ${r.findings_count} | ${m.tp} | ${m.fp} | ${m.fn} | ${(m.precision * 100).toFixed(2)}% | ${(m.recall * 100).toFixed(2)}% | **${(m.f1 || 0).toFixed(4)}** | ${m.fp_on_clean_files || 0} |\n`;
+  }
+
+  if (agg.cwe_matrix && agg.cwe_matrix.length) {
+    md += `\n#### Head-to-Head Per-CWE Recall Comparison Matrix\n\n`;
+    const runHeaders = agg.runs.map(r => r.label.split(' · ')[1] || r.label).join(' | ');
+    md += `| CWE ID | Vulnerability Category | Ground Truth | ${runHeaders} |\n`;
+    md += `| :--- | :--- | :---: | ${agg.runs.map(() => ':---:').join(' | ')} |\n`;
+    for (const row of agg.cwe_matrix) {
+      const runCols = agg.runs.map(r => {
+        const sc = (row.scans || {})[r.id] || {};
+        const tp = sc.tp || 0;
+        const rec = ((sc.recall || 0) * 100).toFixed(1);
+        return `${tp}/${row.total} (${rec}%)`;
+      }).join(' | ');
+      md += `| ${row.cwe} | ${row.category} | ${row.total} | ${runCols} |\n`;
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(md);
+    alert('Benchmark comparative Markdown tables copied to clipboard! You can paste them directly into Chapter 4 of your thesis.');
+  } catch (err) {
+    alert('Copy failed: ' + err.message);
+  }
+}
+
+function exportSuiteCSV(datasetKey) {
+  const agg = cachedBenchmarkAggregations[datasetKey];
+  if (!agg || !agg.runs || !agg.runs.length) {
+    alert('No benchmark data to export for ' + datasetKey);
+    return;
+  }
+  let csv = "Scan_Label,Dataset,Findings,True_Positives,False_Positives,False_Negatives,Precision,Recall,F1_Score,Clean_File_FP\n";
+  for (const r of agg.runs) {
+    const m = r.metrics || {};
+    csv += `"${r.label.replace(/"/g, '""')}","${agg.dataset_key}",${r.findings_count},${m.tp},${m.fp},${m.fn},${m.precision},${m.recall},${m.f1},${m.fp_on_clean_files || 0}\n`;
+  }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `benchmark_${datasetKey}_comparison.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function renderBenchmarkCenter() {
   view.innerHTML = `
     <div class="page-head">
       <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
-      <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
     </div>
     <div class="empty"><span class="spinner"></span>Loading benchmark evaluations...</div>`;
 
   let benchJobs = [];
+  let aggregations = {};
   try {
     const res = await api('/api/benchmarks');
-    if (res && res.benchmark_jobs) {
-      benchJobs = res.benchmark_jobs;
+    if (res) {
+      benchJobs = res.benchmark_jobs || [];
+      aggregations = res.aggregations || {};
+      cachedBenchmarkAggregations = aggregations;
     }
   } catch (err) {
     view.innerHTML = `<div class="banner err">Failed to load benchmark evaluations: ${esc(err.message)}</div>`;
     return;
   }
 
-  const b100Jobs = benchJobs.filter(j => j.dataset_key === 'benchmark100');
-  const b1000Jobs = benchJobs.filter(j => j.dataset_key === 'benchmark1000');
-
-  function renderBenchSummaryCard(j) {
-    const m = j.metrics || {};
-    const prec = (m.precision * 100).toFixed(1);
-    const rec = (m.recall * 100).toFixed(1);
-    const f1 = (m.f1 || 0).toFixed(4);
-    return `
-      <div class="card" style="margin-bottom:14px">
-        <div class="row" style="align-items:flex-start">
-          <div style="min-width:0;flex:1">
-            <div style="font-weight:700;font-size:15px;margin-bottom:4px">
-              <a href="#/job/${esc(j.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(j.label)}</a>
-            </div>
-            <p class="muted" style="margin:0">
-              Dataset: <code>${esc(j.dataset_key)}</code> · Finished ${ago(j.finished_at || j.created_at)} · Total Findings: ${j.findings_count}
-            </p>
-          </div>
-          <a class="btn sm" href="#/job/${esc(j.id)}/benchmark">
-            View Evaluation <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;margin-right:0"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-          </a>
-        </div>
-        <div class="bench-grid" style="margin-top:14px;margin-bottom:0">
-          <div class="bench-metric-card good" style="padding:10px 14px">
-            <div class="bench-metric-val" style="font-size:20px">${prec}%</div>
-            <div class="bench-metric-label">Precision</div>
-          </div>
-          <div class="bench-metric-card good" style="padding:10px 14px">
-            <div class="bench-metric-val" style="font-size:20px">${rec}%</div>
-            <div class="bench-metric-label">Recall</div>
-          </div>
-          <div class="bench-metric-card neutral" style="padding:10px 14px">
-            <div class="bench-metric-val" style="font-size:20px">${f1}</div>
-            <div class="bench-metric-label">F1-Score</div>
-          </div>
-          <div class="bench-metric-card warn" style="padding:10px 14px">
-            <div class="bench-metric-val" style="font-size:20px">TP: ${m.tp} / FP: ${m.fp}</div>
-            <div class="bench-metric-label">Confusion (FN: ${m.fn})</div>
-          </div>
-        </div>
-      </div>`;
-  }
+  const b100Agg = aggregations.benchmark100 || { dataset_key: 'benchmark100', dataset_name: 'OWASP Benchmark 100 Selected Suite', total_ground_truth: 50, runs: [] };
+  const b1000Agg = aggregations.benchmark1000 || { dataset_key: 'benchmark1000', dataset_name: 'OWASP Benchmark 1000 Full Suite', total_ground_truth: 452, runs: [] };
 
   view.innerHTML = `
     <div class="page-head">
       <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
-      <p>Automated ground-truth scoring against official OWASP suites. Supported for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
     </div>
 
     <div class="card" style="margin-bottom:22px;background:var(--raised)">
-      <div style="font-weight:700;margin-bottom:4px">Strict Benchmark Dataset Scope</div>
+      <div style="font-weight:700;margin-bottom:4px">Strict Benchmark Dataset Scope &amp; Run Aggregation</div>
       <p class="muted" style="margin:0">
-        In accordance with research methodology, automated ground-truth scoring is strictly restricted to <b>benchmark100</b> (50 vulnerable + 50 clean testcases) and <b>benchmark1000</b> (OWASP 1,230 files). All custom repositories and ad-hoc scans operate in standard security audit mode.
+        In accordance with research methodology, automated ground-truth scoring and comparative matrix aggregation are strictly applied to <b>benchmark100</b> (50 vulnerable + 50 clean testcases) and <b>benchmark1000</b> (OWASP 1,230 files). All runs targeting the same benchmark suite are aggregated together below.
       </p>
     </div>
 
-    <div style="margin-bottom:28px">
-      <h2 style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)">
-        OWASP Benchmark 100 Selected Suite (${b100Jobs.length} run${b100Jobs.length === 1 ? '' : 's'})
-      </h2>
-      ${b100Jobs.length ? b100Jobs.map(renderBenchSummaryCard).join('') : '<div class="muted">No completed benchmark100 runs found. Run a scan targeting <code>eval/datasets/benchmark100</code> to generate evaluation metrics.</div>'}
+    <div style="margin-bottom:32px">
+      ${renderBenchmarkSuiteAggregation(b100Agg, 'benchmark100')}
     </div>
 
     <div>
-      <h2 style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)">
-        OWASP Benchmark 1000 Full Suite (${b1000Jobs.length} run${b1000Jobs.length === 1 ? '' : 's'})
-      </h2>
-      ${b1000Jobs.length ? b1000Jobs.map(renderBenchSummaryCard).join('') : '<div class="muted">No completed benchmark1000 runs found. Run a scan targeting <code>eval/datasets/benchmark</code> to generate evaluation metrics.</div>'}
+      ${renderBenchmarkSuiteAggregation(b1000Agg, 'benchmark1000')}
     </div>`;
 }
 

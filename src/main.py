@@ -99,6 +99,7 @@ class SnippetRequest(BaseModel):
     mode: str = Field("deep-verify", description="'deep-verify', 'llm', or 'semgrep'")
     verify: bool = Field(True, description="Run the adversarial verification agent")
     concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
+    model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
 class RepositoryRequest(BaseModel):
@@ -108,6 +109,7 @@ class RepositoryRequest(BaseModel):
     verify: bool = True
     concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
     max_files: int = Field(40, ge=1, le=200)
+    model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
 class SettingsRequest(BaseModel):
@@ -626,8 +628,10 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "%d uploaded file(s) exceeded the per-file limit and were skipped", oversized
         )
 
+    model_param = form.get("model")
+    chosen_model = str(model_param).strip() if (model_param and str(model_param).strip() != "custom") else os.getenv("OPENAI_MODEL")
     src_name = Path(root_name or "upload").stem or (root_name or "upload")
-    job_label = build_job_standard_label(src_name, mode, os.getenv("OPENAI_MODEL"), verify)
+    job_label = build_job_standard_label(src_name, mode, chosen_model, verify)
     job = store.create(
         kind="folder",
         label=job_label,
@@ -636,6 +640,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "concurrency": concurrency,
             "skipped_oversized": oversized,
             "source_name": src_name,
+            "model": chosen_model,
         },
         workspace=str(workspace),
     )
@@ -645,6 +650,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         use_semgrep=use_semgrep,
         concurrency=max(1, min(concurrency, 50)),
         verify=verify,
+        model=chosen_model,
     )
     return _start(job, options, background)
 
@@ -680,14 +686,16 @@ async def scan_snippet(
     (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
+    chosen_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
     src_name = _safe_label(request.filename) or "snippet.py"
-    job_label = build_job_standard_label(src_name, request.mode, os.getenv("OPENAI_MODEL"), verify)
+    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
         kind="snippet",
         label=job_label,
         options={
             "mode": request.mode, "verify": verify, "concurrency": request.concurrency,
             "source_name": src_name,
+            "model": chosen_model,
         },
         workspace=str(workspace),
     )
@@ -697,6 +705,7 @@ async def scan_snippet(
         use_semgrep=use_semgrep,
         concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
         verify=verify,
+        model=chosen_model,
     )
     return _start(job, options, background)
 
@@ -752,13 +761,15 @@ async def scan_repository(
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     repo_name = url.rstrip("/").split("/")[-1]
     src_name = f"{repo_name}@{request.branch}"
-    job_label = build_job_standard_label(src_name, request.mode, os.getenv("OPENAI_MODEL"), verify)
+    chosen_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
         kind="repository",
         label=job_label,
         options={
             "mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency,
             "source_name": src_name,
+            "model": chosen_model,
         },
         workspace=str(workspace),
     )
@@ -770,6 +781,7 @@ async def scan_repository(
         concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
         max_llm_files=request.max_files,
         verify=verify,
+        model=chosen_model,
     )
     options.progress = lambda event: store.record_event(job, event)
     options.on_partial = lambda reports: store.update(job, result={
@@ -839,11 +851,21 @@ async def get_job(job_id: str) -> Dict[str, Any]:
     }
 
 
+_BENCHMARK_EVAL_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
 def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
     """
     Automatically evaluate a job against benchmark ground truth.
     Strictly supports ONLY benchmark100 and benchmark1000 datasets.
     """
+    job_id = getattr(job, "id", "")
+    job_result = getattr(job, "result", None) or {}
+    findings_count = len(job_result.get("findings", []))
+    cache_key = f"{job_id}_{findings_count}"
+    if cache_key in _BENCHMARK_EVAL_CACHE:
+        return _BENCHMARK_EVAL_CACHE[cache_key]
+
     try:
         import math
         from eval.evaluate_scan import (
@@ -875,13 +897,13 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
     has_benchmark_files = any("benchmarktest" in fn.lower() for fn in file_names)
 
     dataset_key = None
-    # Strictly identify benchmark100 and benchmark1000 ONLY
-    if "benchmark100" in target or "benchmark100" in label or "benchmark100" in workspace:
-        dataset_key = "benchmark100"
-    elif "benchmark1000" in target or "benchmark1000" in label or "benchmark1230" in label or "1230" in label or "1,230" in label:
+    # Strictly identify benchmark100 and benchmark1000 ONLY (check 1000 before 100 to avoid substring collision)
+    if "benchmark1000" in target or "benchmark1000" in label or "benchmark1230" in label or "1230" in label or "1,230" in label or "benchmark1000" in workspace:
         dataset_key = "benchmark1000"
+    elif "benchmark100" in target or "benchmark100" in label or "benchmark100" in workspace:
+        dataset_key = "benchmark100"
     elif has_benchmark_files:
-        dataset_key = "benchmark100" if len(files) <= 150 else "benchmark1000"
+        dataset_key = "benchmark1000" if len(files) > 150 else "benchmark100"
     elif "100 files" in label or "100 selected" in label:
         dataset_key = "benchmark100"
 
@@ -927,7 +949,7 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
         claimed_label_indices = {l_idx for _, l_idx in matched_pairs}
         per_cwe = compute_per_cwe_breakdown(labels, claimed_label_indices)
 
-        return {
+        res = {
             "supported": True,
             "dataset_key": dataset_key,
             "dataset_name": dataset_meta.get("name", "OWASP Benchmark"),
@@ -951,6 +973,8 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             "missed": (metrics.missed or [])[:50],
             "spurious": (metrics.spurious or [])[:50],
         }
+        _BENCHMARK_EVAL_CACHE[cache_key] = res
+        return res
     except Exception as e:
         return {"supported": False, "reason": f"Benchmark evaluation failed: {e}"}
 
@@ -968,10 +992,69 @@ async def get_job_benchmark(job_id: str) -> Dict[str, Any]:
     return evaluate_job_benchmark_data(job)
 
 
+def compute_benchmark_aggregations(bench_jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Aggregate all scan runs targeting the same benchmark suite together.
+    Computes comparative summary metrics, head-to-head CWE matrix, and thesis markdown tables.
+    """
+    aggregations: Dict[str, Any] = {}
+
+    for bj in bench_jobs:
+        dk = bj.get("dataset_key")
+        if not dk:
+            continue
+        if dk not in aggregations:
+            aggregations[dk] = {
+                "dataset_key": dk,
+                "dataset_name": bj.get("dataset_name", dk),
+                "total_ground_truth": bj.get("total_ground_truth", 0),
+                "runs": [],
+                "_cwes": {},
+            }
+        aggregations[dk]["runs"].append(bj)
+        for cwe, info in bj.get("per_cwe", {}).items():
+            if cwe not in aggregations[dk]["_cwes"]:
+                aggregations[dk]["_cwes"][cwe] = {
+                    "cwe": cwe,
+                    "category": (info.get("types") or [cwe])[0],
+                    "total": info.get("total", 0),
+                }
+
+    for dk, agg in aggregations.items():
+        runs = agg["runs"]
+        runs.sort(key=lambda r: (r.get("metrics", {}).get("f1") or 0.0), reverse=True)
+
+        cwe_matrix = []
+        for cwe, meta in sorted(agg["_cwes"].items()):
+            row = {
+                "cwe": cwe,
+                "category": meta["category"],
+                "total": meta["total"],
+                "scans": {},
+            }
+            for r in runs:
+                jid = r["id"]
+                cwe_info = r.get("per_cwe", {}).get(cwe, {})
+                row["scans"][jid] = {
+                    "tp": cwe_info.get("tp", 0),
+                    "fn": cwe_info.get("fn", meta["total"]),
+                    "recall": cwe_info.get("recall", 0.0),
+                }
+            cwe_matrix.append(row)
+
+        agg["cwe_matrix"] = cwe_matrix
+        agg.pop("_cwes", None)
+        agg["runs_count"] = len(runs)
+        agg["best_run_id"] = runs[0]["id"] if runs else None
+
+    return aggregations
+
+
 @app.get("/api/benchmarks")
 async def list_benchmark_evaluations() -> Dict[str, Any]:
     """
     List all completed benchmark jobs with their ground-truth evaluations (benchmark100 and benchmark1000).
+    Aggregates all scans belonging to the same benchmark suite together.
     """
     jobs = store.list(limit=200)
     bench_jobs = []
@@ -990,9 +1073,15 @@ async def list_benchmark_evaluations() -> Dict[str, Any]:
                     "finished_at": j.finished_at,
                     "metrics": ev["metrics"],
                     "findings_count": ev["findings_count"],
-                    "total_ground_truth": ev["total_ground_truth"]
+                    "total_ground_truth": ev["total_ground_truth"],
+                    "per_cwe": ev.get("per_cwe", {}),
                 })
-    return {"benchmark_jobs": bench_jobs}
+
+    aggregations = compute_benchmark_aggregations(bench_jobs)
+    return {
+        "benchmark_jobs": bench_jobs,
+        "aggregations": aggregations,
+    }
 
 
 @app.delete("/api/jobs/{job_id}")

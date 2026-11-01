@@ -60,6 +60,7 @@ class ScanOptions:
         suppress_unconfirmed_rules: Optional[bool] = None,
         min_confidence: Optional[float] = None,
         offline: bool = False,
+        model: Optional[str] = None,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -78,6 +79,7 @@ class ScanOptions:
         self.use_ast_slicer = use_ast_slicer
         self.min_confidence = min_confidence
         self.offline = offline
+        self.model = model
 
         if suppress_unconfirmed_rules is None:
             self.suppress_unconfirmed_rules = True if verify else False
@@ -262,6 +264,8 @@ class Scanner:
             use_ast_slicer=getattr(options, "use_ast_slicer", True),
             options=options,
         )  # rule tier is run here
+        if getattr(options, "model", None):
+            self.analyzer.ai_client.openai_default_model = options.model
         semgrep_kw = {}
         if options.semgrep_configs:
             semgrep_kw["configs"] = options.semgrep_configs
