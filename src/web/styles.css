@@ -84,8 +84,10 @@ body::before {
   border-right: var(--border) solid var(--edge);
   padding: 20px 0 16px; display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh;
+  align-self: flex-start;
+  z-index: 100;
   transition: width .2s cubic-bezier(.4, 0, .2, 1);
-  position: relative;
+  overflow-y: auto;
 }
 
 /* Sidebar collapse/expand toggle button:
