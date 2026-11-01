@@ -828,6 +828,23 @@ function paintJob(job) {
       <div class="card-title">Attack chains</div>
       ${result.chains.map(chainCard).join('')}</div>` : ''}
 
+    ${(job.events || []).length ? `
+    <div class="card">
+      <div class="row" style="cursor:pointer;user-select:none" onclick="document.getElementById('job-events-log-body').classList.toggle('hide')">
+        <div class="card-title" style="margin:0">
+          <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          Execution Timeline &amp; Event Logs (${job.events.length} events)
+        </div>
+        <div class="spacer"></div>
+        <span class="muted" style="font-size:12px">Click to expand/collapse logs ▾</span>
+      </div>
+      <div id="job-events-log-body" class="hide" style="margin-top:14px">
+        <div class="log" style="max-height:320px;margin-top:0">
+          ${job.events.map(e => `<div><span class="t">${Math.round(e.percent)}%</span>${esc(e.message)}</div>`).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+
     <div class="card">
       <div class="row" style="margin-bottom:12px;align-items:baseline">
         <div class="card-title" style="margin:0">Findings</div>
@@ -1066,9 +1083,10 @@ function findingCard(f, jobId = '') {
                 </div>`;
             }).join('')}
           </div>` : ''}
-        ${f.verification && f.verification.reason ? `
+        ${f.verification && (f.verification.reason || f.verification.error) ? `
           <h4>Verification</h4>
-          <div><b>${esc(f.verification.verdict)}</b> — ${esc(f.verification.reason)}</div>` : ''}
+          <div><b>${esc(f.verification.verdict)}</b> — ${esc(f.verification.reason || 'Verification completed')}</div>
+          ${f.verification.error ? `<div class="banner warn" style="margin-top:8px;font-size:12.5px;padding:8px 12px"><b>Verification error / API issue:</b> ${esc(f.verification.error)}</div>` : ''}` : ''}
         ${f.snippet ? `<h4>Code</h4><pre>${esc(f.snippet)}</pre>` : ''}
         ${fixBlock(f)}
       </div>
