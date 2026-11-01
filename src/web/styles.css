@@ -441,7 +441,11 @@ select { width: auto; cursor: pointer; }
 
 /* ---------- progress ---------- */
 
-.progress-bar { height: 4px; background: var(--raised); border-radius: 99px; overflow: hidden; }
+.progress-header {
+  font-size: 15.5px;
+  margin-bottom: 14px;
+}
+.progress-bar { height: 6px; background: var(--raised); border-radius: 99px; overflow: hidden; }
 .progress-fill {
   height: 100%; background: var(--signal); border-radius: 99px;
   transition: width .5s cubic-bezier(.4,0,.2,1); position: relative;
@@ -454,31 +458,37 @@ select { width: auto; cursor: pointer; }
 @keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
 
 .phases {
-  display: flex; margin-top: 18px; border: var(--border) solid var(--edge);
+  display: flex; margin-top: 20px; border: var(--border) solid var(--edge);
   border-radius: var(--radius-sm); overflow: hidden;
 }
 .phase {
-  flex: 1; padding: 9px 6px; text-align: center; color: var(--text-faint);
-  min-height: 40px; display: flex; flex-direction: column; justify-content: center;
-  font: var(--label-weight) 9px/1.4 var(--ui-font); letter-spacing: var(--label-spacing);
+  flex: 1; padding: 10px 8px; text-align: center; color: var(--text-faint);
+  min-height: 48px; display: flex; flex-direction: column; justify-content: center;
+  font: var(--label-weight) 12px/1.45 var(--ui-font); letter-spacing: var(--label-spacing);
   text-transform: uppercase; border-right: var(--border) solid var(--edge); transition: all .2s;
 }
+.phase span { font-size: 11.5px; font-weight: 500; }
 .phase:last-child { border-right: 0; }
 .phase.done { color: var(--low); }
 .phase.active { color: var(--signal); background: var(--signal-dim); }
 
 .log {
-  margin-top: 16px; max-height: 250px; overflow-y: auto; background: var(--raised);
+  margin-top: 18px; max-height: 280px; overflow-y: auto; background: var(--raised);
   border: var(--border) solid var(--edge); border-radius: var(--radius-sm);
-  padding: 13px 15px; font: 400 11px/1.85 var(--data-font); color: var(--text-dim);
+  padding: 14px 18px; font: 400 13.5px/1.85 var(--data-font); color: var(--text-dim);
 }
 .log div::before { content: '▸ '; color: var(--text-faint); }
-.log .t { color: var(--text-faint); margin-right: 10px; font-variant-numeric: tabular-nums; display: inline-block; min-width: 44px; }
+.log .t { color: var(--text-faint); margin-right: 12px; font-variant-numeric: tabular-nums; display: inline-block; min-width: 52px; font-size: 13px; }
 .cursor {
-  display: inline-block; width: 7px; height: 13px; background: var(--signal);
+  display: inline-block; width: 8px; height: 15px; background: var(--signal);
   vertical-align: -2px; animation: blink 1.05s step-end infinite;
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+.progress-note {
+  font: 400 13px/1.6 var(--data-font);
+  color: var(--text-faint);
+  margin-top: 14px;
+}
 
 /* ---------- findings ---------- */
 

@@ -98,7 +98,7 @@ class SnippetRequest(BaseModel):
     filename: str = Field("snippet.py", description="Name used for language detection")
     mode: str = Field("deep-verify", description="'deep-verify', 'llm', or 'semgrep'")
     verify: bool = Field(True, description="Run the adversarial verification agent")
-    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
+    concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
@@ -107,7 +107,7 @@ class RepositoryRequest(BaseModel):
     branch: str = "main"
     mode: str = "deep-verify"
     verify: bool = True
-    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
+    concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     max_files: int = Field(40, ge=1, le=200)
     model: Optional[str] = Field(None, description="Optional model identifier override")
 
@@ -116,7 +116,7 @@ class BenchmarkPresetRequest(BaseModel):
     dataset: str = Field("benchmark100", description="'benchmark100' or 'benchmark1000'")
     mode: str = Field("deep-verify", description="'deep-verify', 'llm', or 'semgrep'")
     verify: bool = Field(True, description="Run adversarial verification agent")
-    concurrency: int = Field(16, ge=1, le=50, description="Parallel analysis workers")
+    concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
@@ -559,9 +559,9 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
     raw_verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
     use_semgrep, use_llm, verify = _resolve_mode(mode, raw_verify)
     try:
-        concurrency = int(form.get("concurrency") or 16)
+        concurrency = int(form.get("concurrency") or 4)
     except (TypeError, ValueError):
-        concurrency = 16
+        concurrency = 4
 
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
@@ -702,7 +702,7 @@ async def scan_snippet(
         target=str(workspace),
         use_llm=use_llm,
         use_semgrep=use_semgrep,
-        concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
+        concurrency=max(1, min(getattr(request, "concurrency", 4), 50)),
         verify=verify,
         model=chosen_model,
     )

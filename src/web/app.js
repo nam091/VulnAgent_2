@@ -381,7 +381,7 @@ async function renderScan() {
         <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
         <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--text-dim);margin-left:4px">
           <span>Threads:</span>
-          <input type="number" id="concurrency" value="16" min="1" max="50" style="width:58px;padding:6px 8px;font:600 12px/1 var(--mono);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
+          <input type="number" id="concurrency" value="4" min="1" max="50" style="width:58px;padding:6px 8px;font:600 12px/1 var(--mono);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
         </label>
         <div class="spacer"></div>
         <span id="scan-msg" class="muted"></span>
@@ -530,7 +530,7 @@ async function submit(pane) {
   const msg = document.getElementById('scan-msg');
   const mode = document.getElementById('mode').value;
   const verify = (mode === 'deep-verify') || document.getElementById('verify').checked;
-  const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 16;
+  const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 4;
   const scanModelEl = document.getElementById('scan-model');
   const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
     ? scanModelEl.value

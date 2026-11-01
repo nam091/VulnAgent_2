@@ -67,8 +67,8 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-semgrep", action="store_true", help="LLM tier only")
     parser.add_argument("--no-cache", action="store_true", help="Ignore the content-hash cache")
     parser.add_argument(
-        "-j", "--concurrency", type=int, default=5,
-        help="Concurrent LLM calls (default: 5)"
+        "-j", "--concurrency", type=int, default=4,
+        help="Concurrent LLM calls (default: 4)"
     )
     parser.add_argument(
         "--min-risk", type=int, default=None,

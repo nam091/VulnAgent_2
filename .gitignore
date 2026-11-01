@@ -21,6 +21,8 @@ output/*
 **/.vulnagent-audit/
 .vulnagent.lock
 .vulnagent-models.json
+.local_history_backup/
+*.zip
 
 # Scan artifacts
 *.sarif
