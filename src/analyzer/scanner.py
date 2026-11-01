@@ -251,6 +251,30 @@ class ScanResult:
         }
 
 
+def normalize_model_identifier(model_str: Optional[str]) -> Optional[str]:
+    """
+    Map shorthand or proxy model names to exact 9Router provider model IDs.
+    Prevents 404 model_not_found errors when requesting models without provider prefixes.
+    """
+    if not model_str:
+        return None
+    m = model_str.strip()
+    m_lower = m.lower()
+    if m_lower in ("glm-5.3", "glm-5.3-flash", "glm53", "glm53flash", "oc/glm-5.3-flash", "glm-5.3 proxy", "glm-5.3 flash"):
+        return "oc/glm-5.3-flash-free"
+    if m_lower in ("deepseek", "deepseek-v4.1", "deepseek-v4.1-flash", "oc/deepseek-v4.1-flash", "deepseek v4.1 flash", "cbai/deepseek-v4.1-flash-sg"):
+        return "oc/deepseek-v4.1-flash-free"
+    if m_lower in ("beam", "beam free", "reflection/beam", "cmc/reflection/beam"):
+        return "cmc/reflection/beam:free"
+    if m_lower in ("solar", "solar-mini", "solar mini", "upstage/solar-mini4:free"):
+        return "nous/upstage/solar-mini4:free"
+    if m_lower in ("gemma4", "gemma", "gemma:latest"):
+        return "ollama/gemma4"
+    if m_lower in ("luna", "gpt-5.6-luna", "codex/gpt-5.6-luna", "codex luna"):
+        return "cx/gpt-5.6-luna"
+    return m
+
+
 class Scanner:
     """
     Runs the hybrid pipeline over a file or directory tree.
@@ -265,7 +289,9 @@ class Scanner:
             options=options,
         )  # rule tier is run here
         if getattr(options, "model", None):
-            self.analyzer.ai_client.openai_default_model = options.model
+            norm_model = normalize_model_identifier(options.model)
+            self.analyzer.ai_client.openai_default_model = norm_model
+            self.options.model = norm_model
         semgrep_kw = {}
         if options.semgrep_configs:
             semgrep_kw["configs"] = options.semgrep_configs

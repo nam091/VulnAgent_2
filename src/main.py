@@ -31,7 +31,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from pydantic import BaseModel, Field
 
 from analyzer.fixer import classify_patch, unified_diff
-from analyzer.scanner import ScanOptions, Scanner
+from analyzer.scanner import ScanOptions, Scanner, normalize_model_identifier
 from evidence.safe_reader import enrich_taint_path, read_code_snippet
 from jobs import Job, JobStore, run_job
 from models.vulnerability import (
@@ -634,7 +634,8 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         )
 
     model_param = form.get("model")
-    chosen_model = str(model_param).strip() if (model_param and str(model_param).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    raw_model = str(model_param).strip() if (model_param and str(model_param).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    chosen_model = normalize_model_identifier(raw_model)
     src_name = Path(root_name or "upload").stem or (root_name or "upload")
     job_label = build_job_standard_label(src_name, mode, chosen_model, verify)
     job = store.create(
@@ -693,7 +694,8 @@ async def scan_snippet(
     (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
-    chosen_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    raw_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    chosen_model = normalize_model_identifier(raw_model)
     src_name = _safe_label(request.filename) or "snippet.py"
     job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
@@ -770,7 +772,8 @@ async def scan_repository(
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     repo_name = url.rstrip("/").split("/")[-1]
     src_name = f"{repo_name}@{request.branch}"
-    chosen_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    raw_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+    chosen_model = normalize_model_identifier(raw_model)
     job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
         kind="repository",
@@ -841,7 +844,8 @@ async def scan_benchmark_preset(
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     prof = resolve_model_profile(request.model)
-    chosen_model = prof["model"] if prof else (request.model or os.getenv("OPENAI_MODEL"))
+    raw_model = prof["model"] if prof else (request.model or os.getenv("OPENAI_MODEL"))
+    chosen_model = normalize_model_identifier(raw_model)
 
     job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify)
     job = store.create(
