@@ -379,6 +379,7 @@ async function renderScan() {
           </select>
         </div>
         <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
+        <label class="check"><input type="checkbox" id="use-cache" checked> Use cache</label>
         <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--text-dim);margin-left:4px">
           <span>Threads:</span>
           <input type="number" id="concurrency" value="4" min="1" max="50" style="width:58px;padding:6px 8px;font:600 12px/1 var(--mono);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
@@ -531,6 +532,7 @@ async function submit(pane) {
   const mode = document.getElementById('mode').value;
   const verify = (mode === 'deep-verify') || document.getElementById('verify').checked;
   const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 4;
+  const useCache = document.getElementById('use-cache') ? document.getElementById('use-cache').checked : true;
   const scanModelEl = document.getElementById('scan-model');
   const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
     ? scanModelEl.value
@@ -550,6 +552,7 @@ async function submit(pane) {
       form.append('mode', mode);
       form.append('verify', String(verify));
       form.append('concurrency', String(concurrency));
+      form.append('use_cache', String(useCache));
       if (chosenModel) form.append('model', chosenModel);
       job = await api('/api/jobs/folder', { method: 'POST', body: form });
     } else if (pane === 'snippet') {
@@ -559,7 +562,7 @@ async function submit(pane) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code, filename: document.getElementById('snippet-name').value || 'snippet.py',
-          mode, verify, concurrency, model: chosenModel
+          mode, verify, concurrency, model: chosenModel, use_cache: useCache
         })
       });
     } else if (pane === 'benchmark') {
@@ -571,7 +574,8 @@ async function submit(pane) {
           mode,
           verify,
           concurrency,
-          model: chosenModel
+          model: chosenModel,
+          use_cache: useCache
         })
       });
     } else {
@@ -582,7 +586,7 @@ async function submit(pane) {
         body: JSON.stringify({
           repository_url: url,
           branch: document.getElementById('repo-branch').value.trim() || 'main',
-          mode, verify, concurrency, model: chosenModel
+          mode, verify, concurrency, model: chosenModel, use_cache: useCache
         })
       });
     }

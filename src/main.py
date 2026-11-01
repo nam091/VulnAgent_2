@@ -100,6 +100,7 @@ class SnippetRequest(BaseModel):
     verify: bool = Field(True, description="Run the adversarial verification agent")
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
 class RepositoryRequest(BaseModel):
@@ -110,6 +111,7 @@ class RepositoryRequest(BaseModel):
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     max_files: int = Field(40, ge=1, le=200)
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
 class BenchmarkPresetRequest(BaseModel):
@@ -118,6 +120,7 @@ class BenchmarkPresetRequest(BaseModel):
     verify: bool = Field(True, description="Run adversarial verification agent")
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
 class ModelProfileRequest(BaseModel):
@@ -557,6 +560,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
     files = [v for v in form.getlist("files") if isinstance(v, StarletteUploadFile)]
     mode = str(form.get("mode") or "deep-verify")
     raw_verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
+    use_cache = str(form.get("use_cache") or "true").lower() in ("1", "true", "yes", "on")
     use_semgrep, use_llm, verify = _resolve_mode(mode, raw_verify)
     try:
         concurrency = int(form.get("concurrency") or 4)
@@ -640,6 +644,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "skipped_oversized": oversized,
             "source_name": src_name,
             "model": chosen_model,
+            "use_cache": use_cache,
         },
         workspace=str(workspace),
     )
@@ -650,6 +655,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         concurrency=max(1, min(concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        use_cache=use_cache,
     )
     return _start(job, options, background)
 
@@ -695,6 +701,7 @@ async def scan_snippet(
             "mode": request.mode, "verify": verify, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "use_cache": request.use_cache,
         },
         workspace=str(workspace),
     )
@@ -705,6 +712,7 @@ async def scan_snippet(
         concurrency=max(1, min(getattr(request, "concurrency", 4), 50)),
         verify=verify,
         model=chosen_model,
+        use_cache=request.use_cache,
     )
     return _start(job, options, background)
 
@@ -769,6 +777,7 @@ async def scan_repository(
             "mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "use_cache": request.use_cache,
         },
         workspace=str(workspace),
     )
@@ -777,10 +786,11 @@ async def scan_repository(
         target=str(workspace),
         use_llm=use_llm,
         use_semgrep=use_semgrep,
-        concurrency=max(1, min(getattr(request, "concurrency", 16), 50)),
+        concurrency=max(1, min(getattr(request, "concurrency", 4), 50)),
         max_llm_files=request.max_files,
         verify=verify,
         model=chosen_model,
+        use_cache=request.use_cache,
     )
     options.progress = lambda event: store.record_event(job, event)
     options.on_partial = lambda reports: store.update(job, result={
@@ -840,6 +850,7 @@ async def scan_benchmark_preset(
             "target": str(target_dir),
             "source_name": suite_name,
             "model": chosen_model,
+            "use_cache": request.use_cache,
         },
         workspace=str(target_dir),
     )
@@ -850,6 +861,7 @@ async def scan_benchmark_preset(
         concurrency=max(1, min(request.concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        use_cache=request.use_cache,
     )
     return _start(job, options, background)
 
