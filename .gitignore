@@ -20,6 +20,7 @@ output/*
 .vulnagent-audit/
 **/.vulnagent-audit/
 .vulnagent.lock
+.vulnagent-models.json
 
 # Scan artifacts
 *.sarif

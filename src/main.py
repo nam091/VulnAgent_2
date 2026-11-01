@@ -112,6 +112,15 @@ class RepositoryRequest(BaseModel):
     model: Optional[str] = Field(None, description="Optional model identifier override")
 
 
+class ModelProfileRequest(BaseModel):
+    id: Optional[str] = Field(None, description="Profile ID")
+    name: str = Field(..., min_length=1, max_length=120, description="Display name for model")
+    model: str = Field(..., min_length=1, max_length=120, description="Model identifier string")
+    base_url: str = Field(..., min_length=1, description="OpenAI-compatible Base URL")
+    api_key: Optional[str] = Field("", description="API Key")
+    is_default: bool = Field(False, description="Whether this profile is default")
+
+
 class SettingsRequest(BaseModel):
     openai_base_url: Optional[str] = Field(None, description="OpenAI-compatible Base URL")
     openai_model: Optional[str] = Field(None, description="Model identifier")
@@ -1483,6 +1492,203 @@ async def test_settings_connection(req: SettingsRequest) -> Dict[str, Any]:
             "latency_sec": round(dur, 2),
             "message": f"Connection failed ({dur:.2f}s): {str(e)}"
         }
+
+
+MODELS_FILE = Path(".vulnagent-models.json")
+
+
+def load_model_profiles() -> List[Dict[str, Any]]:
+    if not MODELS_FILE.is_file():
+        default_profiles = [
+            {"id": "glm53flash9r", "name": "GLM-5.3 Flash (Zhipu Free)", "model": "oc/glm-5.3-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": True},
+            {"id": "beam", "name": "Beam Free (Reflection Reasoning)", "model": "cmc/reflection/beam:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "deepseek", "name": "DeepSeek V4.1 Flash (Code Specialist)", "model": "oc/deepseek-v4.1-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "solar", "name": "Solar Mini (Upstage Free)", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "gemma4", "name": "Gemma4 (Local 9Router)", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "luna", "name": "Codex Luna (GPT-5.6 Luna)", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "glm53proxy", "name": "GLM-5.3 Proxy (8080)", "model": "glm-5.3", "base_url": "http://localhost:8080/v1", "api_key": "your-proxy-secret", "is_default": False},
+        ]
+        save_model_profiles(default_profiles)
+        return default_profiles
+    try:
+        data = json.loads(MODELS_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, list) and data:
+            return data
+    except Exception:
+        pass
+    return []
+
+
+def save_model_profiles(profiles: List[Dict[str, Any]]) -> None:
+    try:
+        MODELS_FILE.write_text(json.dumps(profiles, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logging.warning(f"Could not persist model profiles: {e}")
+
+
+def resolve_model_profile(identifier: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not identifier:
+        return None
+    ident = str(identifier).strip().lower()
+    for p in load_model_profiles():
+        if p.get("id", "").lower() == ident or p.get("model", "").lower() == ident:
+            return p
+    return None
+
+
+@app.get("/api/models")
+async def list_models() -> Dict[str, Any]:
+    """
+    List all configured model profiles with securely masked API keys.
+    """
+    profiles = load_model_profiles()
+    masked_profiles = []
+    default_p = None
+    env_curr_model = os.getenv("OPENAI_MODEL", "")
+
+    for p in profiles:
+        key = p.get("api_key", "")
+        if len(key) <= 8:
+            masked_key = "****" if key else ""
+        else:
+            masked_key = key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+        is_def = p.get("is_default", False) or (env_curr_model and p.get("model") == env_curr_model)
+        prof_copy = {**p, "masked_api_key": masked_key, "is_default": is_def}
+        if is_def:
+            default_p = prof_copy
+        masked_profiles.append(prof_copy)
+
+    if not default_p and masked_profiles:
+        default_p = masked_profiles[0]
+        masked_profiles[0]["is_default"] = True
+
+    return {
+        "models": masked_profiles,
+        "default": default_p,
+        "active_env_model": env_curr_model
+    }
+
+
+@app.post("/api/models")
+async def create_model_profile(req: ModelProfileRequest) -> Dict[str, Any]:
+    """
+    Create a new model profile.
+    """
+    profiles = load_model_profiles()
+    clean_id = (req.id or re.sub(r'[^a-zA-Z0-9_-]', '', req.name.lower().replace(' ', '_')) or str(uuid.uuid4())[:8])
+    for p in profiles:
+        if p.get("id") == clean_id:
+            raise HTTPException(status_code=400, detail=f"Profile with ID '{clean_id}' already exists")
+
+    new_p = {
+        "id": clean_id,
+        "name": req.name.strip(),
+        "model": req.model.strip(),
+        "base_url": req.base_url.strip(),
+        "api_key": (req.api_key or "").strip(),
+        "is_default": req.is_default,
+    }
+    if req.is_default:
+        for p in profiles:
+            p["is_default"] = False
+        os.environ["OPENAI_MODEL"] = new_p["model"]
+        os.environ["OPENAI_BASE_URL"] = new_p["base_url"]
+        if new_p["api_key"]:
+            os.environ["OPENAI_API_KEY"] = new_p["api_key"]
+
+    profiles.append(new_p)
+    save_model_profiles(profiles)
+    return {"status": "ok", "profile": new_p}
+
+
+@app.put("/api/models/{profile_id}")
+async def update_model_profile(profile_id: str, req: ModelProfileRequest) -> Dict[str, Any]:
+    """
+    Update an existing model profile.
+    """
+    profiles = load_model_profiles()
+    found = None
+    for p in profiles:
+        if p.get("id") == profile_id:
+            found = p
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Model profile not found")
+
+    found["name"] = req.name.strip()
+    found["model"] = req.model.strip()
+    found["base_url"] = req.base_url.strip()
+    new_key = (req.api_key or "").strip()
+    if new_key and not new_key.startswith("****"):
+        found["api_key"] = new_key
+    if req.is_default:
+        for p in profiles:
+            p["is_default"] = (p.get("id") == profile_id)
+        os.environ["OPENAI_MODEL"] = found["model"]
+        os.environ["OPENAI_BASE_URL"] = found["base_url"]
+        if found.get("api_key"):
+            os.environ["OPENAI_API_KEY"] = found["api_key"]
+
+    save_model_profiles(profiles)
+    return {"status": "ok", "profile": found}
+
+
+@app.delete("/api/models/{profile_id}")
+async def delete_model_profile(profile_id: str) -> Dict[str, Any]:
+    """
+    Delete a model profile.
+    """
+    profiles = load_model_profiles()
+    if len(profiles) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the only remaining model profile")
+    filtered = [p for p in profiles if p.get("id") != profile_id]
+    if len(filtered) == len(profiles):
+        raise HTTPException(status_code=404, detail="Model profile not found")
+    save_model_profiles(filtered)
+    return {"status": "ok", "deleted": profile_id}
+
+
+@app.post("/api/models/{profile_id}/activate")
+async def activate_model_profile(profile_id: str) -> Dict[str, Any]:
+    """
+    Set a model profile as the active system default.
+    """
+    profiles = load_model_profiles()
+    target = None
+    for p in profiles:
+        if p.get("id") == profile_id:
+            p["is_default"] = True
+            target = p
+        else:
+            p["is_default"] = False
+    if not target:
+        raise HTTPException(status_code=404, detail="Model profile not found")
+
+    os.environ["OPENAI_MODEL"] = target["model"]
+    os.environ["OPENAI_BASE_URL"] = target["base_url"]
+    if target.get("api_key"):
+        os.environ["OPENAI_API_KEY"] = target["api_key"]
+
+    try:
+        env_p = Path(".env")
+        lines = env_p.read_text(encoding="utf-8").splitlines() if env_p.is_file() else []
+        env_map = {}
+        for l in lines:
+            if l.strip() and not l.strip().startswith("#") and "=" in l:
+                k, v = l.strip().split("=", 1)
+                env_map[k.strip()] = v.strip()
+        env_map["OPENAI_MODEL"] = target["model"]
+        env_map["OPENAI_BASE_URL"] = target["base_url"]
+        if target.get("api_key"):
+            env_map["OPENAI_API_KEY"] = target["api_key"]
+        out_lines = [f"{k}={v}" for k, v in env_map.items()]
+        env_p.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+    save_model_profiles(profiles)
+    return {"status": "ok", "active_profile": target}
 
 
 @app.get("/health")

@@ -260,8 +260,31 @@ function jobRow(job) {
 
 let pendingFiles = [];
 
-function renderScan() {
+async function renderScan() {
   pendingFiles = [];
+
+  let modelOptionsHtml = `
+    <option value="oc/glm-5.3-flash-free" selected>GLM-5.3 Flash (Zhipu Free)</option>
+    <option value="cmc/reflection/beam:free">Beam Free (Reflection Reasoning)</option>
+    <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash (Code Specialist)</option>
+    <option value="nous/upstage/solar-mini4:free">Solar Mini (Upstage Free)</option>
+    <option value="ollama/gemma4">Gemma4 (Local 9Router)</option>
+    <option value="cx/gpt-5.6-luna">Codex Luna (GPT-5.6 Luna)</option>
+  `;
+
+  try {
+    const res = await api('/api/models');
+    if (res && res.models && res.models.length) {
+      modelOptionsHtml = res.models.map(p => `
+        <option value="${esc(p.model)}" ${p.is_default ? 'selected' : ''}>
+          ${esc(p.name)} (${esc(p.model)})
+        </option>
+      `).join('');
+    }
+  } catch (e) {
+    // fallback to preset list
+  }
+
   view.innerHTML = `
     <div class="page-head">
       <h1>New scan</h1>
@@ -308,13 +331,7 @@ function renderScan() {
         <div id="model-select-group" style="display:inline-flex;align-items:center;gap:6px">
           <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Model:</span>
           <select id="scan-model" style="width:auto">
-            <option value="oc/glm-5.3-flash-free" selected>GLM-5.3 Flash (Zhipu Free)</option>
-            <option value="cmc/reflection/beam:free">Beam Free (Reflection Reasoning)</option>
-            <option value="oc/deepseek-v4.1-flash-free">DeepSeek V4.1 Flash (Code Specialist)</option>
-            <option value="nous/upstage/solar-mini4:free">Solar Mini (Upstage Free)</option>
-            <option value="ollama/gemma4">Gemma4 (Local 9Router)</option>
-            <option value="cx/gpt-5.6-luna">Codex Luna (GPT-5.6 Luna)</option>
-            <option value="custom">Settings Default</option>
+            ${modelOptionsHtml}
           </select>
         </div>
         <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
@@ -1376,53 +1393,120 @@ async function clearAllJobs() {
   }
 }
 
-/* ---------------- settings view ---------------- */
+/* ---------------- settings view & model profiles ---------------- */
+
+let cachedModelProfiles = [];
 
 async function renderSettings() {
   view.innerHTML = `
     <div class="page-head">
-      <h1>AI Model &amp; API Settings</h1>
-      <p>Configure model connection: Base URL, Model identifier, and API Key (securely masked).</p>
+      <div class="row" style="align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <h1>AI Model Profiles &amp; Settings</h1>
+          <p>Pre-configured models saved in the system. Edit any profile below or add new model endpoints.</p>
+        </div>
+        <button type="button" class="btn sm" onclick="openModelProfileModal()">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Model Profile
+        </button>
+      </div>
     </div>
     <div class="empty"><span class="spinner"></span>Loading configuration...</div>`;
 
   let currentSettings = {
     openai_base_url: 'http://127.0.0.1:20128/v1',
-    openai_model: 'cmc/reflection/beam:free',
+    openai_model: 'oc/glm-5.3-flash-free',
     openai_api_key: '',
     masked_api_key: '',
     is_configured: false
   };
 
+  let modelsList = [];
   try {
-    const res = await api('/api/settings');
-    if (res) currentSettings = res;
+    const [resSet, resMod] = await Promise.all([
+      api('/api/settings'),
+      api('/api/models')
+    ]);
+    if (resSet) currentSettings = resSet;
+    if (resMod && resMod.models) {
+      modelsList = resMod.models;
+      cachedModelProfiles = modelsList;
+    }
   } catch (e) {
     // fallback
   }
 
+  const modelRowsHtml = modelsList.map(p => {
+    return `
+      <div class="card" style="margin-bottom:10px;padding:12px 16px;background:var(--raised);box-shadow:none">
+        <div class="row" style="align-items:center">
+          <div style="min-width:0;flex:1">
+            <div class="row" style="align-items:center;gap:8px">
+              <span style="font-weight:700;font-size:14.5px;color:var(--text)">${esc(p.name)}</span>
+              ${p.is_default ? `<span class="bench-status-badge perfect" style="font-size:10.5px">Active Default</span>` : ''}
+            </div>
+            <div class="muted" style="margin-top:4px;font-size:12px">
+              Model: <code>${esc(p.model)}</code> · Endpoint: <code>${esc(p.base_url)}</code> · Key: <code>${esc(p.masked_api_key || 'none')}</code>
+            </div>
+          </div>
+          <div class="row" style="gap:6px;flex-shrink:0">
+            ${!p.is_default ? `<button type="button" class="btn ghost sm" onclick="setActiveDefaultProfile('${esc(p.id)}')">Set Default</button>` : ''}
+            <button type="button" class="btn ghost sm" id="test-prof-btn-${esc(p.id)}" onclick="testSingleProfile('${esc(p.id)}')">Test</button>
+            <button type="button" class="btn ghost sm" onclick="openModelProfileModal('${esc(p.id)}')" title="Edit profile">
+              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Edit
+            </button>
+            <button type="button" class="btn ghost sm danger" onclick="deleteSingleProfile('${esc(p.id)}')" title="Delete profile">
+              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div id="test-status-${esc(p.id)}" class="muted" style="margin-top:4px"></div>
+      </div>`;
+  }).join('');
+
   view.innerHTML = `
     <div class="page-head">
-      <h1>AI Model &amp; API Settings</h1>
-      <p>Configure model connection: Base URL, Model identifier, and API Key (securely masked).</p>
+      <div class="row" style="align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <h1>AI Model Profiles &amp; Settings</h1>
+          <p>Pre-configured models saved in the system. Edit any profile below or add new model endpoints.</p>
+        </div>
+        <button type="button" class="btn sm" onclick="openModelProfileModal()">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Model Profile
+        </button>
+      </div>
     </div>
 
+    <!-- Saved Profiles Section -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="row" style="margin-bottom:14px;align-items:center">
+        <div>
+          <div class="card-title" style="margin:0">Configured Model Profiles (${modelsList.length})</div>
+          <p class="muted" style="margin-top:3px">Saved models available in the New Scan dropdown. Edit or customize any profile.</p>
+        </div>
+      </div>
+      <div>
+        ${modelRowsHtml || '<div class="muted">No model profiles configured yet. Click Add Model Profile above.</div>'}
+      </div>
+    </div>
+
+    <!-- Direct Fallback Settings Card -->
     <div class="card" style="max-width:760px">
+      <div class="card-title">Default Inference Endpoint (.env)</div>
       <div id="settings-banner"></div>
 
       <div style="margin-bottom:20px">
         <label class="field" style="font-weight:700">OpenAI-Compatible Base URL</label>
         <input type="text" id="setting-url" value="${esc(currentSettings.openai_base_url || '')}" placeholder="http://127.0.0.1:20128/v1">
         <p class="muted" style="margin-top:6px">
-          Inference server endpoint (9Router, local Ollama, vLLM, or official OpenAI API).
+          Primary server endpoint (9Router, local Ollama, vLLM, or official OpenAI API).
         </p>
       </div>
 
       <div style="margin-bottom:20px">
         <label class="field" style="font-weight:700">Model Identifier</label>
-        <input type="text" id="setting-model" value="${esc(currentSettings.openai_model || '')}" placeholder="cmc/reflection/beam:free">
+        <input type="text" id="setting-model" value="${esc(currentSettings.openai_model || '')}" placeholder="oc/glm-5.3-flash-free">
         <p class="muted" style="margin-top:6px">
-          Model ID string (e.g. <code>cmc/reflection/beam:free</code>, <code>cx/gpt-5.6-luna</code>, <code>ollama/gemma4</code>).
+          Model ID string (e.g. <code>oc/glm-5.3-flash-free</code>, <code>cmc/reflection/beam:free</code>, <code>ollama/gemma4</code>).
         </p>
       </div>
 
@@ -1433,51 +1517,8 @@ async function renderSettings() {
           <button type="button" class="password-toggle-btn" id="toggle-key-btn" onclick="toggleKeyVisibility()">Show</button>
         </div>
         <p class="muted" style="margin-top:6px">
-          API key is masked by default as a password field for security during demos and presentations.
+          API key is masked by default as a password field for security during presentations.
         </p>
-      </div>
-
-      <div style="margin-bottom:24px;padding:14px;background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm)">
-        <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;color:var(--text)">Quick Presets:</div>
-        <div class="row" style="gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn ghost sm" onclick="applyPreset('9router')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> 9Router (beam:free)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('solar')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> Solar Mini (solar-mini4:free)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg> GLM-5.3 Proxy (Default)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> GLM-5.3 Flash Proxy (8080)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('glm53flash9r')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> 9Router (glm-5.3-flash-free)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('deepseek')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6"></path><path d="M8 6l-6 6 6 6"></path></svg> DeepSeek V4.1 Flash
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('luna')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> Codex Luna (gpt-5.6-luna)
-          </button>
-          <button type="button" class="btn ghost sm" onclick="applyPreset('ollama')">
-            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg> 9Router (ollama/gemma4)
-          </button>
-        </div>
-        <div style="margin-top:12px;padding-top:10px;border-top:var(--border) solid var(--edge);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:5px">
-          <div>
-            <b>Local Proxy Info:</b>
-            <span style="margin-left:6px">Endpoint: <code>http://localhost:8080/v1</code> (OpenAI) · <code>http://127.0.0.1:8080</code> (Anthropic)</span>
-          </div>
-          <div>
-            <b>Web Chat UI:</b>
-            <a href="http://localhost:8080/webui" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;margin-left:6px">
-              http://localhost:8080/webui ↗
-            </a>
-            <span style="opacity:0.75;margin-left:8px">(Interactive chat interface for GLM models)</span>
-          </div>
-        </div>
       </div>
 
       <div class="row" style="gap:12px;align-items:center">
@@ -1487,6 +1528,203 @@ async function renderSettings() {
         <span id="settings-status" class="muted"></span>
       </div>
     </div>`;
+}
+
+function openModelProfileModal(profileId) {
+  closeModelProfileModal();
+  let existing = null;
+  if (profileId) {
+    existing = cachedModelProfiles.find(p => p.id === profileId);
+  }
+
+  const isEdit = !!existing;
+  const nameVal = isEdit ? existing.name : '';
+  const modelVal = isEdit ? existing.model : '';
+  const urlVal = isEdit ? existing.base_url : 'http://127.0.0.1:20128/v1';
+  const keyVal = isEdit ? (existing.api_key || '') : 'sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a';
+  const isDef = isEdit ? existing.is_default : false;
+
+  const modalHtml = `
+    <div class="modal-backdrop" id="model-profile-modal" onclick="onModelModalBackdropClick(event)">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>${isEdit ? 'Edit Model Profile' : 'Add New Model Profile'}</h3>
+          <button type="button" class="modal-close" onclick="closeModelProfileModal()">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom:14px">
+            <label class="field" style="font-weight:700">Profile Display Name</label>
+            <input type="text" id="modal-prof-name" value="${esc(nameVal)}" placeholder="e.g. GLM-5.3 Flash (Zhipu Free)" autocomplete="off">
+          </div>
+          <div style="margin-bottom:14px">
+            <label class="field" style="font-weight:700">Model Identifier</label>
+            <input type="text" id="modal-prof-model" value="${esc(modelVal)}" placeholder="e.g. oc/glm-5.3-flash-free" autocomplete="off">
+          </div>
+          <div style="margin-bottom:14px">
+            <label class="field" style="font-weight:700">OpenAI-Compatible Base URL</label>
+            <input type="text" id="modal-prof-url" value="${esc(urlVal)}" placeholder="http://127.0.0.1:20128/v1" autocomplete="off">
+          </div>
+          <div style="margin-bottom:14px">
+            <label class="field" style="font-weight:700">API Key</label>
+            <div class="password-wrap">
+              <input type="password" id="modal-prof-key" value="${esc(keyVal)}" placeholder="sk-..." autocomplete="off">
+              <button type="button" class="password-toggle-btn" onclick="toggleModalKeyVisibility()">Show</button>
+            </div>
+          </div>
+          <div style="margin-bottom:16px">
+            <label class="check">
+              <input type="checkbox" id="modal-prof-default" ${isDef ? 'checked' : ''}>
+              Set as active default model
+            </label>
+          </div>
+          <div class="row" style="gap:8px;align-items:center">
+            <button type="button" class="btn ghost sm" id="modal-prof-test-btn" onclick="testModalProfileConnection()">
+              Test Connection
+            </button>
+            <span id="modal-prof-status" class="muted"></span>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost sm" onclick="closeModelProfileModal()">Cancel</button>
+          <button type="button" class="btn sm" id="modal-prof-save-btn" onclick="saveModelProfile('${esc(profileId || '')}')">Save Profile</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const nameInput = document.getElementById('modal-prof-name');
+  if (nameInput) nameInput.focus();
+}
+
+function closeModelProfileModal() {
+  const modal = document.getElementById('model-profile-modal');
+  if (modal) modal.remove();
+}
+
+function onModelModalBackdropClick(e) {
+  if (e.target && e.target.id === 'model-profile-modal') {
+    closeModelProfileModal();
+  }
+}
+
+function toggleModalKeyVisibility() {
+  const input = document.getElementById('modal-prof-key');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function testModalProfileConnection() {
+  const btn = document.getElementById('modal-prof-test-btn');
+  const statusEl = document.getElementById('modal-prof-status');
+  const url = document.getElementById('modal-prof-url')?.value.trim();
+  const model = document.getElementById('modal-prof-model')?.value.trim();
+  const key = document.getElementById('modal-prof-key')?.value.trim();
+
+  if (!url || !model) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--crit)">Please enter URL and Model ID</span>';
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.innerHTML = '<span class="spinner"></span>Testing...';
+
+  try {
+    const res = await api('/api/settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_base_url: url, openai_model: model, openai_api_key: key })
+    });
+    if (res.status === 'ok') {
+      statusEl.innerHTML = `<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Connected (${res.latency_sec}s)</span>`;
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--crit)">${esc(res.message)}</span>`;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:var(--crit)">Failed: ${esc(err.message)}</span>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function saveModelProfile(existingId) {
+  const name = document.getElementById('modal-prof-name')?.value.trim();
+  const model = document.getElementById('modal-prof-model')?.value.trim();
+  const url = document.getElementById('modal-prof-url')?.value.trim();
+  const key = document.getElementById('modal-prof-key')?.value.trim();
+  const isDefault = document.getElementById('modal-prof-default')?.checked;
+
+  if (!name || !model || !url) {
+    alert('Please enter Profile Name, Model Identifier, and Base URL.');
+    return;
+  }
+
+  try {
+    if (existingId) {
+      await api(`/api/models/${existingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, model, base_url: url, api_key: key, is_default: isDefault })
+      });
+    } else {
+      await api('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, model, base_url: url, api_key: key, is_default: isDefault })
+      });
+    }
+    closeModelProfileModal();
+    await renderSettings();
+  } catch (err) {
+    alert('Failed to save model profile: ' + err.message);
+  }
+}
+
+async function testSingleProfile(profileId) {
+  const btn = document.getElementById(`test-prof-btn-${profileId}`);
+  const statusEl = document.getElementById(`test-status-${profileId}`);
+  const p = cachedModelProfiles.find(x => x.id === profileId);
+  if (!p) return;
+
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.innerHTML = '<span class="spinner"></span>Testing connection...';
+
+  try {
+    const res = await api('/api/settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_base_url: p.base_url, openai_model: p.model, openai_api_key: p.api_key || '' })
+    });
+    if (res.status === 'ok') {
+      statusEl.innerHTML = `<span style="color:var(--low)"><svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Connected (${res.latency_sec}s): "${esc(res.reply)}"</span>`;
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--crit)">${esc(res.message)}</span>`;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:var(--crit)">Connection error: ${esc(err.message)}</span>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function setActiveDefaultProfile(profileId) {
+  try {
+    await api(`/api/models/${profileId}/activate`, { method: 'POST' });
+    await renderSettings();
+  } catch (err) {
+    alert('Failed to activate model: ' + err.message);
+  }
+}
+
+async function deleteSingleProfile(profileId) {
+  if (!confirm('Are you sure you want to delete this model profile?')) return;
+  try {
+    await api(`/api/models/${profileId}`, { method: 'DELETE' });
+    await renderSettings();
+  } catch (err) {
+    alert('Failed to delete model profile: ' + err.message);
+  }
 }
 
 function toggleKeyVisibility() {
@@ -1799,6 +2037,21 @@ async function copyBenchmarkMarkdown(jobId) {
 
 let cachedBenchmarkAggregations = {};
 
+function toggleSuiteMatrix(datasetKey) {
+  const container = document.getElementById(`matrix-container-${datasetKey}`);
+  const btn = document.getElementById(`btn-toggle-matrix-${datasetKey}`);
+  if (!container) return;
+  const isHidden = container.classList.contains('hide');
+  if (isHidden) {
+    container.classList.remove('hide');
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Comparative Matrix ▴`;
+  } else {
+    container.classList.add('hide');
+    const count = (cachedBenchmarkAggregations[datasetKey]?.runs || []).length;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> View Comparative Matrix (${count} runs) ▾`;
+  }
+}
+
 function renderBenchmarkSuiteAggregation(agg, datasetKey) {
   if (!agg || !agg.runs || !agg.runs.length) {
     return `<div class="card muted" style="margin-bottom:24px">No completed runs found for <code>${esc(datasetKey)}</code> yet. Run a scan targeting this benchmark to generate comparative metrics.</div>`;
@@ -1817,22 +2070,22 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
 
     return `
       <tr style="${isBest ? 'background:rgba(78,148,120,0.08)' : ''}">
-        <td>
+        <td class="wrap-cell">
           <div style="font-weight:700">
             <a href="#/job/${esc(r.id)}/benchmark" style="color:var(--text);text-decoration:none">${esc(r.label)}</a>
             ${isBest ? `<span class="bench-status-badge perfect" style="margin-left:6px;font-size:10px">Best F1</span>` : ''}
           </div>
           <div class="muted" style="font-size:11px">${ago(r.finished_at || r.created_at)} · ID: <code>${esc(r.id)}</code></div>
         </td>
-        <td style="font-weight:700">${r.findings_count}</td>
-        <td style="color:var(--low);font-weight:700">${m.tp}</td>
-        <td style="color:${m.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700">${m.fp}</td>
-        <td style="color:${m.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'}">${m.fn}</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700">${prec}%</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700">${rec}%</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--signal)">${f1}</td>
-        <td style="color:${m.fp_on_clean_files > 0 ? 'var(--high)' : 'var(--text-faint)'}">${m.fp_on_clean_files || 0}</td>
-        <td>
+        <td style="font-weight:700;text-align:center">${r.findings_count}</td>
+        <td style="color:var(--low);font-weight:700;text-align:center">${m.tp}</td>
+        <td style="color:${m.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700;text-align:center">${m.fp}</td>
+        <td style="color:${m.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'};text-align:center">${m.fn}</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${prec}%</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${rec}%</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--signal);text-align:center">${f1}</td>
+        <td style="color:${m.fp_on_clean_files > 0 ? 'var(--high)' : 'var(--text-faint)'};text-align:center">${m.fp_on_clean_files || 0}</td>
+        <td style="text-align:center">
           <a class="btn ghost sm" href="#/job/${esc(r.id)}/benchmark" style="padding:4px 9px">
             View <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;margin-right:0"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
           </a>
@@ -1857,7 +2110,7 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
     return `
       <tr>
         <td style="font-weight:700"><code>${esc(row.cwe)}</code></td>
-        <td>${esc(row.category)}</td>
+        <td class="wrap-cell">${esc(row.category)}</td>
         <td style="font-weight:700;text-align:center">${row.total}</td>
         ${scanCells}
       </tr>`;
@@ -1875,6 +2128,16 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
           </p>
         </div>
         <div class="row" style="gap:8px">
+          <button type="button" class="btn sm" id="btn-toggle-matrix-${esc(datasetKey)}" onclick="toggleSuiteMatrix('${esc(datasetKey)}')">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>View Comparative Matrix (${runs.length} runs) ▾</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Collapsible Comparative Matrix Container (Hidden by Default) -->
+      <div id="matrix-container-${esc(datasetKey)}" class="hide" style="margin-top:16px;border-top:var(--border) solid var(--edge);padding-top:16px">
+        <div class="row" style="margin-bottom:12px;gap:8px">
           <button type="button" class="btn ghost sm" onclick="copySuiteMarkdown('${esc(datasetKey)}')">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Markdown Table
           </button>
@@ -1882,53 +2145,53 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Export CSV
           </button>
         </div>
-      </div>
 
-      <div class="bench-table-wrap">
-        <table class="bench-table">
-          <thead>
-            <tr>
-              <th>Configuration / Model</th>
-              <th>Findings</th>
-              <th style="color:var(--low)">TP</th>
-              <th style="color:var(--crit)">FP</th>
-              <th>FN</th>
-              <th>Precision</th>
-              <th>Recall</th>
-              <th>F1-Score</th>
-              <th>Clean FP</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${summaryRows}
-          </tbody>
-        </table>
-      </div>
-
-      ${cweMatrix.length && runs.length > 0 ? `
-      <div style="margin-top:24px">
-        <div class="row" style="margin-bottom:8px">
-          <div class="card-title" style="margin:0">Head-to-Head Per-CWE Recall Comparison Matrix</div>
-          <div class="spacer"></div>
-          <span class="muted" style="font-size:11.5px">${cweMatrix.length} CWE categories mapped</span>
-        </div>
         <div class="bench-table-wrap">
           <table class="bench-table">
             <thead>
               <tr>
-                <th style="width:100px">CWE ID</th>
-                <th>Category</th>
-                <th style="text-align:center;width:70px">Total</th>
-                ${runs.map(r => `<th style="text-align:center">${esc(r.label.split(' · ')[1] || r.label)}</th>`).join('')}
+                <th class="wrap-cell">Configuration / Model</th>
+                <th style="text-align:center">Findings</th>
+                <th style="color:var(--low);text-align:center">TP</th>
+                <th style="color:var(--crit);text-align:center">FP</th>
+                <th style="text-align:center">FN</th>
+                <th style="text-align:center">Precision</th>
+                <th style="text-align:center">Recall</th>
+                <th style="text-align:center">F1-Score</th>
+                <th style="text-align:center">Clean FP</th>
+                <th style="text-align:center">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${cweMatrixRows}
+              ${summaryRows}
             </tbody>
           </table>
         </div>
-      </div>` : ''}
+
+        ${cweMatrix.length && runs.length > 0 ? `
+        <div style="margin-top:24px">
+          <div class="row" style="margin-bottom:8px">
+            <div class="card-title" style="margin:0">Head-to-Head Per-CWE Recall Comparison Matrix</div>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11.5px">${cweMatrix.length} CWE categories mapped</span>
+          </div>
+          <div class="bench-table-wrap">
+            <table class="bench-table">
+              <thead>
+                <tr>
+                  <th style="width:90px">CWE ID</th>
+                  <th class="wrap-cell">Category</th>
+                  <th style="text-align:center;width:65px">Total</th>
+                  ${runs.map(r => `<th style="text-align:center">${esc(r.label.split(' · ')[1] || r.label)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${cweMatrixRows}
+              </tbody>
+            </table>
+          </div>
+        </div>` : ''}
+      </div>
     </div>`;
 }
 

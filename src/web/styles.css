@@ -778,29 +778,41 @@ pre.diff .del { color: var(--crit); display: block; }
 .bench-bar-fn { background: var(--edge-hot); color: var(--text-dim); }
 .bench-table-wrap {
   overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border: var(--border) solid var(--edge);
   border-radius: var(--radius-sm);
   margin-top: 14px;
+  -webkit-overflow-scrolling: touch;
 }
 .bench-table {
   width: 100%;
   border-collapse: collapse;
-  font: 400 15px/1.5 var(--data-font);
+  font: 400 13px/1.45 var(--data-font);
   text-align: left;
 }
 .bench-table th {
   background: var(--raised);
-  padding: 11px 16px;
-  font: var(--label-weight) 13px/1 var(--ui-font);
+  padding: 8px 10px;
+  font: var(--label-weight) 11px/1.2 var(--ui-font);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: var(--label-spacing);
+  letter-spacing: 0.8px;
   border-bottom: var(--border) solid var(--edge);
+  white-space: nowrap;
 }
 .bench-table td {
-  padding: 12px 16px;
+  padding: 8px 10px;
   border-bottom: var(--border) solid var(--edge);
   color: var(--text);
+  white-space: nowrap;
+}
+.bench-table td.wrap-cell, .bench-table th.wrap-cell {
+  white-space: normal;
+  min-width: 160px;
+  max-width: 260px;
+  word-break: break-word;
 }
 .bench-table tr:last-child td { border-bottom: 0; }
 .bench-table tr:hover td { background: var(--raised); }
