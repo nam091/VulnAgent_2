@@ -43,5 +43,7 @@ source_test/
 # licence, so redistributing its samples here would be an unlicensed
 # redistribution of someone else's code.
 eval/datasets/*/samples/
-eval/datasets/*/labels.json
+!eval/datasets/apigateway_micro/samples/
+!eval/datasets/enterprise_multitier/samples/
+!eval/datasets/six_repos/samples/
 

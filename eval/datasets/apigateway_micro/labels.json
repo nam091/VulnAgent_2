@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "name": "Microservice API Gateway Benchmark",
+  "source": "Microservice and API Gateway inter-module architecture (Gateway Router -> Services / Handlers / Engines / Sinks)",
+  "licence": "MIT",
+  "match_mode": "file",
+  "match_mode_note": "Inter-procedural cross-file vulnerability benchmark. Gateway Router acts as entrypoint, microservices act as sinks.",
+  "partial_labels": false,
+  "clean_files": [
+    "auth_middleware.py",
+    "rate_limiter.py",
+    "crypto_utils.py",
+    "validators.py"
+  ],
+  "labels": [
+    {
+      "file": "proxy_handler.py",
+      "line": 22,
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "cwe": "918",
+      "note": "Sink: requests.get()"
+    },
+    {
+      "file": "template_renderer.py",
+      "line": 28,
+      "type": "CROSS_SITE_SCRIPTING",
+      "cwe": "79",
+      "note": "Sink: render_template_string()"
+    },
+    {
+      "file": "eval_engine.py",
+      "line": 19,
+      "type": "CODE_INJECTION",
+      "cwe": "94",
+      "note": "Sink: eval()"
+    },
+    {
+      "file": "deserializer.py",
+      "line": 21,
+      "type": "INSECURE_DESERIALIZATION",
+      "cwe": "502",
+      "note": "Sink: pickle.loads()"
+    },
+    {
+      "file": "gateway_router.py",
+      "line": 53,
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "cwe": "918",
+      "note": "Entrypoint: handle_proxy_request forwards untrusted upstream URL"
+    },
+    {
+      "file": "gateway_router.py",
+      "line": 73,
+      "type": "CROSS_SITE_SCRIPTING",
+      "cwe": "79",
+      "note": "Entrypoint: handle_notification_render forwards unescaped markup"
+    },
+    {
+      "file": "gateway_router.py",
+      "line": 95,
+      "type": "CODE_INJECTION",
+      "cwe": "94",
+      "note": "Entrypoint: handle_filter_query forwards dynamic expression"
+    },
+    {
+      "file": "gateway_router.py",
+      "line": 116,
+      "type": "INSECURE_DESERIALIZATION",
+      "cwe": "502",
+      "note": "Entrypoint: handle_session_restore forwards binary payload"
+    }
+  ]
+}

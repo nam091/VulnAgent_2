@@ -93,6 +93,10 @@ def test_load_model_comparison_compatibility(dataset_name: str):
 def test_sink_detection_and_classification_functions():
     """Verify individual detection and classification functions on sample files."""
     sample_vuln = BENCHMARK_DIR / "samples" / "BenchmarkTest00001.py"
+    sample_clean = BENCHMARK_DIR / "samples" / "BenchmarkTest00004.py"
+    if not sample_vuln.is_file() or not sample_clean.is_file():
+        pytest.skip("Benchmark sample files not present on disk")
+
     vuln_info = detect_vulnerable_sink_and_dataflow(sample_vuln, "pathtraver")
     assert vuln_info["line"] == 47
     assert vuln_info["cwe"] == "CWE-22"

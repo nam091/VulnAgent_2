@@ -1,0 +1,78 @@
+{
+  "name": "Apache Superset 2.0.1 Vulnerability Benchmark",
+  "source": "https://github.com/apache/superset/tree/2.0.1",
+  "licence": "Apache-2.0",
+  "schema_version": 1,
+  "match_mode": "file",
+  "match_mode_note": "CVE samples and clean control files from Apache Superset 2.0.1 release",
+  "partial_labels": false,
+  "clean_files": [
+    "clean_date_parser.py",
+    "clean_hashing.py",
+    "clean_schema.py",
+    "clean_logging_config.py",
+    "clean_encrypt.py"
+  ],
+  "labels": [
+    {
+      "file": "superset_config.py",
+      "cwe": "798",
+      "type": "HARDCODED_CREDENTIALS",
+      "note": "CVE-2023-27524 / CWE-798: Default SECRET_KEY vulnerability allowing session forgery and RCE"
+    },
+    {
+      "file": "sql_lab_models.py",
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "CVE-2023-39265 / CWE-89: SQL Injection in SQL Lab query execution"
+    },
+    {
+      "file": "slack_util.py",
+      "cwe": "78",
+      "type": "COMMAND_INJECTION",
+      "note": "CVE-2020-13948 / CWE-78: OS Command Injection in slack utility via unsanitized command string"
+    },
+    {
+      "file": "utils_core.py",
+      "cwe": "502",
+      "type": "DESERIALIZATION",
+      "note": "CVE-2023-37941 / CWE-502: Insecure Deserialization in pickle loading / unsafe deserialization routines"
+    },
+    {
+      "file": "views_core.py",
+      "cwe": "918",
+      "type": "SSRF",
+      "note": "CVE-2023-36388 / CWE-918: Server-Side Request Forgery (SSRF) in URL fetching and export endpoints"
+    },
+    {
+      "file": "views_base.py",
+      "cwe": "79",
+      "type": "XSS",
+      "note": "CVE-2023-49657 / CWE-79: Cross-Site Scripting (XSS) in view flash message and template rendering"
+    },
+    {
+      "file": "views_api.py",
+      "cwe": "352",
+      "type": "CSRF",
+      "note": "CVE-2022-43719 / CWE-352: Cross-Site Request Forgery (CSRF) in API view state mutations"
+    },
+    {
+      "file": "database_views.py",
+      "cwe": "209",
+      "type": "INFORMATION_DISCLOSURE",
+      "note": "CVE-2024-53948 / CWE-209: Information Disclosure / Metadata leak in DB test connection error reporting"
+    },
+    {
+      "file": "query_context_factory.py",
+      "cwe": "20",
+      "type": "INPUT_VALIDATION",
+      "note": "CVE-2023-25504 / CWE-20: Improper Input Validation in query payload processing"
+    },
+    {
+      "file": "db_engine_base.py",
+      "cwe": "1188",
+      "type": "INSECURE_CONFIGURATION",
+      "note": "CVE-2022-45438 / CWE-1188: Insecure Default Configuration in engine specs"
+    }
+  ]
+}

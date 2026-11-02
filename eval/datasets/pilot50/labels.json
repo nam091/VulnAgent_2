@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "name": "OWASP BenchmarkPython Stratified Pilot 50",
+  "source": "https://github.com/OWASP-Benchmark/BenchmarkPython",
+  "licence": "OWASP Benchmark License",
+  "match_mode": "file",
+  "match_mode_note": "Stratified sample of 25 vulnerable cases and 25 clean control cases.",
+  "partial_labels": false,
+  "clean_files": [
+    "BenchmarkTest00011.py",
+    "BenchmarkTest00063.py",
+    "BenchmarkTest00125.py",
+    "BenchmarkTest00139.py",
+    "BenchmarkTest00148.py",
+    "BenchmarkTest00154.py",
+    "BenchmarkTest00199.py",
+    "BenchmarkTest00253.py",
+    "BenchmarkTest00257.py",
+    "BenchmarkTest00358.py",
+    "BenchmarkTest00428.py",
+    "BenchmarkTest00458.py",
+    "BenchmarkTest00573.py",
+    "BenchmarkTest00577.py",
+    "BenchmarkTest00587.py",
+    "BenchmarkTest00614.py",
+    "BenchmarkTest00658.py",
+    "BenchmarkTest00660.py",
+    "BenchmarkTest00724.py",
+    "BenchmarkTest00792.py",
+    "BenchmarkTest00919.py",
+    "BenchmarkTest01017.py",
+    "BenchmarkTest01136.py",
+    "BenchmarkTest01174.py",
+    "BenchmarkTest01230.py"
+  ],
+  "labels": [
+    {
+      "file": "BenchmarkTest00008.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "PATHTRAVER",
+      "note": "OWASP Benchmark BenchmarkTest00008 (pathtraver)"
+    },
+    {
+      "file": "BenchmarkTest00074.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "CODEINJ",
+      "note": "OWASP Benchmark BenchmarkTest00074 (codeinj)"
+    },
+    {
+      "file": "BenchmarkTest00078.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "DESERIALIZATION",
+      "note": "OWASP Benchmark BenchmarkTest00078 (deserialization)"
+    },
+    {
+      "file": "BenchmarkTest00098.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "XSS",
+      "note": "OWASP Benchmark BenchmarkTest00098 (xss)"
+    },
+    {
+      "file": "BenchmarkTest00099.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "SQLI",
+      "note": "OWASP Benchmark BenchmarkTest00099 (sqli)"
+    },
+    {
+      "file": "BenchmarkTest00159.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "CODEINJ",
+      "note": "OWASP Benchmark BenchmarkTest00159 (codeinj)"
+    },
+    {
+      "file": "BenchmarkTest00167.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "CMDI",
+      "note": "OWASP Benchmark BenchmarkTest00167 (cmdi)"
+    },
+    {
+      "file": "BenchmarkTest00168.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "CMDI",
+      "note": "OWASP Benchmark BenchmarkTest00168 (cmdi)"
+    },
+    {
+      "file": "BenchmarkTest00180.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "PATHTRAVER",
+      "note": "OWASP Benchmark BenchmarkTest00180 (pathtraver)"
+    },
+    {
+      "file": "BenchmarkTest00189.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "XSS",
+      "note": "OWASP Benchmark BenchmarkTest00189 (xss)"
+    },
+    {
+      "file": "BenchmarkTest00272.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "XSS",
+      "note": "OWASP Benchmark BenchmarkTest00272 (xss)"
+    },
+    {
+      "file": "BenchmarkTest00284.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "SQLI",
+      "note": "OWASP Benchmark BenchmarkTest00284 (sqli)"
+    },
+    {
+      "file": "BenchmarkTest00309.py",
+      "line": 0,
+      "cwe": "330",
+      "type": "WEAKRAND",
+      "note": "OWASP Benchmark BenchmarkTest00309 (weakrand)"
+    },
+    {
+      "file": "BenchmarkTest00455.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "SQLI",
+      "note": "OWASP Benchmark BenchmarkTest00455 (sqli)"
+    },
+    {
+      "file": "BenchmarkTest00464.py",
+      "line": 0,
+      "cwe": "643",
+      "type": "XPATHI",
+      "note": "OWASP Benchmark BenchmarkTest00464 (xpathi)"
+    },
+    {
+      "file": "BenchmarkTest00484.py",
+      "line": 0,
+      "cwe": "328",
+      "type": "HASH",
+      "note": "OWASP Benchmark BenchmarkTest00484 (hash)"
+    },
+    {
+      "file": "BenchmarkTest00554.py",
+      "line": 0,
+      "cwe": "643",
+      "type": "XPATHI",
+      "note": "OWASP Benchmark BenchmarkTest00554 (xpathi)"
+    },
+    {
+      "file": "BenchmarkTest00618.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "PATHTRAVER",
+      "note": "OWASP Benchmark BenchmarkTest00618 (pathtraver)"
+    },
+    {
+      "file": "BenchmarkTest00819.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "CODEINJ",
+      "note": "OWASP Benchmark BenchmarkTest00819 (codeinj)"
+    },
+    {
+      "file": "BenchmarkTest00874.py",
+      "line": 0,
+      "cwe": "328",
+      "type": "HASH",
+      "note": "OWASP Benchmark BenchmarkTest00874 (hash)"
+    },
+    {
+      "file": "BenchmarkTest00945.py",
+      "line": 0,
+      "cwe": "330",
+      "type": "WEAKRAND",
+      "note": "OWASP Benchmark BenchmarkTest00945 (weakrand)"
+    },
+    {
+      "file": "BenchmarkTest00994.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "DESERIALIZATION",
+      "note": "OWASP Benchmark BenchmarkTest00994 (deserialization)"
+    },
+    {
+      "file": "BenchmarkTest01128.py",
+      "line": 0,
+      "cwe": "330",
+      "type": "WEAKRAND",
+      "note": "OWASP Benchmark BenchmarkTest01128 (weakrand)"
+    },
+    {
+      "file": "BenchmarkTest01191.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "CMDI",
+      "note": "OWASP Benchmark BenchmarkTest01191 (cmdi)"
+    },
+    {
+      "file": "BenchmarkTest01197.py",
+      "line": 0,
+      "cwe": "328",
+      "type": "HASH",
+      "note": "OWASP Benchmark BenchmarkTest01197 (hash)"
+    }
+  ]
+}

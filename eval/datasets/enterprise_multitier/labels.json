@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "name": "Multi-tier Enterprise Web App Benchmark",
+  "source": "Enterprise multi-tier Python application architecture (Controller -> Service -> Data Access / Storage Driver / Network Client / Task Executor)",
+  "licence": "MIT",
+  "match_mode": "file",
+  "match_mode_note": "Inter-procedural cross-file vulnerability benchmark. Controllers act as entrypoints, services act as propagation logic, and drivers/clients act as sinks.",
+  "partial_labels": false,
+  "clean_files": [
+    "config.py",
+    "sanitizers.py",
+    "auth_helper.py"
+  ],
+  "labels": [
+    {
+      "file": "data_access.py",
+      "line": 30,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "Sink: cursor.execute() f-string"
+    },
+    {
+      "file": "storage_driver.py",
+      "line": 22,
+      "cwe": "22",
+      "type": "PATH_TRAVERSAL",
+      "note": "Sink: open() unnormalized path"
+    },
+    {
+      "file": "network_client.py",
+      "line": 20,
+      "cwe": "918",
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "note": "Sink: requests.get() unvalidated url"
+    },
+    {
+      "file": "task_executor.py",
+      "line": 24,
+      "cwe": "78",
+      "type": "OS_COMMAND_INJECTION",
+      "note": "Sink: subprocess.call(shell=True)"
+    },
+    {
+      "file": "controllers.py",
+      "line": 36,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "Entrypoint: query_user_handler receives untrusted username"
+    },
+    {
+      "file": "controllers.py",
+      "line": 54,
+      "cwe": "22",
+      "type": "PATH_TRAVERSAL",
+      "note": "Entrypoint: download_file_handler receives untrusted filename"
+    },
+    {
+      "file": "controllers.py",
+      "line": 74,
+      "cwe": "918",
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "note": "Entrypoint: webhook_trigger_handler receives untrusted URL"
+    },
+    {
+      "file": "controllers.py",
+      "line": 95,
+      "cwe": "78",
+      "type": "OS_COMMAND_INJECTION",
+      "note": "Entrypoint: backup_handler receives untrusted backup_dir"
+    },
+    {
+      "file": "user_service.py",
+      "line": 14,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "Propagation: user_service passes tainted username to data_access"
+    },
+    {
+      "file": "user_service.py",
+      "line": 34,
+      "cwe": "78",
+      "type": "OS_COMMAND_INJECTION",
+      "note": "Propagation: user_service passes tainted backup_dir to task_executor"
+    },
+    {
+      "file": "file_service.py",
+      "line": 18,
+      "cwe": "22",
+      "type": "PATH_TRAVERSAL",
+      "note": "Propagation: file_service passes tainted filename to storage_driver"
+    }
+  ]
+}

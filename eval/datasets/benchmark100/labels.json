@@ -1,0 +1,863 @@
+{
+  "schema_version": 1,
+  "name": "OWASP BenchmarkPython 100 (50 Vuln + 50 Clean)",
+  "source": "https://github.com/OWASP-Benchmark/BenchmarkPython",
+  "licence": "OWASP Benchmark License",
+  "match_mode": "file",
+  "match_mode_note": "One test case is one file with one seeded defect. The ground truth provides the exact sink line, standard CWE identifier, canonical vulnerability type, and taint dataflow explanation. Files listed under clean_files represent deliberate control cases with documented defense mechanisms (safe_reason).",
+  "partial_labels": false,
+  "clean_files": [
+    {
+      "file": "BenchmarkTest00070.py",
+      "cwe": "CWE-501",
+      "type": "TRUST_BOUNDARY_VIOLATION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00084.py",
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "defense_type": "static_pattern_match_selection",
+      "safe_reason": "Deterministic pattern matching selects safe constant branch, ensuring untrusted input never feeds sink."
+    },
+    {
+      "file": "BenchmarkTest00110.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "static_pattern_match_selection",
+      "safe_reason": "Deterministic pattern matching selects safe constant branch, ensuring untrusted input never feeds sink."
+    },
+    {
+      "file": "BenchmarkTest00118.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00125.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00126.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00152.py",
+      "cwe": "CWE-501",
+      "type": "TRUST_BOUNDARY_VIOLATION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00262.py",
+      "cwe": "CWE-501",
+      "type": "TRUST_BOUNDARY_VIOLATION",
+      "defense_type": "static_pattern_match_selection",
+      "safe_reason": "Deterministic pattern matching selects safe constant branch, ensuring untrusted input never feeds sink."
+    },
+    {
+      "file": "BenchmarkTest00263.py",
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "defense_type": "static_pattern_match_selection",
+      "safe_reason": "Deterministic pattern matching selects safe constant branch, ensuring untrusted input never feeds sink."
+    },
+    {
+      "file": "BenchmarkTest00282.py",
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest00316.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00349.py",
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00363.py",
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "defense_type": "dead_branch_constant_bypass",
+      "safe_reason": "Statically evaluated ternary expression condition (7 * 18 + num > 200) assigns a safe constant literal, bypassing tainted input."
+    },
+    {
+      "file": "BenchmarkTest00379.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest00380.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "dead_branch_constant_bypass",
+      "safe_reason": "Statically evaluated ternary expression condition (7 * 42 - num > 200) assigns a safe constant literal, bypassing tainted input."
+    },
+    {
+      "file": "BenchmarkTest00389.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00401.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00436.py",
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('alsosafe') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00441.py",
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "defense_type": "dead_branch_constant_bypass",
+      "safe_reason": "Statically evaluated ternary expression condition (7 * 18 + num > 200) assigns a safe constant literal, bypassing tainted input."
+    },
+    {
+      "file": "BenchmarkTest00458.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "dead_branch_constant_bypass",
+      "safe_reason": "Statically evaluated ternary expression condition (7 * 18 + num > 200) assigns a safe constant literal, bypassing tainted input."
+    },
+    {
+      "file": "BenchmarkTest00480.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00488.py",
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "defense_type": "strong_cryptographic_algorithm",
+      "safe_reason": "Strong cryptographic hash algorithm ('sha512') specified instead of weak MD5 or SHA-1."
+    },
+    {
+      "file": "BenchmarkTest00550.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest00603.py",
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "defense_type": "input_validation_guard",
+      "safe_reason": "Input validation guard clause (if not bar.startswith(\"'\") or not bar.endswith(\"'\") or \"'\" in bar[1:-1]) rejects path traversal or malicious injection sequences."
+    },
+    {
+      "file": "BenchmarkTest00629.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00632.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00638.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00658.py",
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00659.py",
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest00660.py",
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('alsosafe') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest00786.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00795.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest00912.py",
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "defense_type": "input_validation_guard",
+      "safe_reason": "Input validation guard clause (if '../' in bar) rejects path traversal or malicious injection sequences."
+    },
+    {
+      "file": "BenchmarkTest00943.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "dead_branch_constant_bypass",
+      "safe_reason": "Statically evaluated ternary expression condition (7 * 18 + num > 200) assigns a safe constant literal, bypassing tainted input."
+    },
+    {
+      "file": "BenchmarkTest00956.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest00987.py",
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "defense_type": "input_validation_guard",
+      "safe_reason": "Input validation guard clause (if not bar.startswith(\"'\") or not bar.endswith(\"'\") or \"'\" in bar[1:-1]) rejects path traversal or malicious injection sequences."
+    },
+    {
+      "file": "BenchmarkTest01022.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "deterministic_control_flow",
+      "safe_reason": "Deterministic condition ('should' not in TestParam) routes control flow exclusively to safe constant assignment."
+    },
+    {
+      "file": "BenchmarkTest01032.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest01053.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest01060.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "cryptographically_secure_randomness",
+      "safe_reason": "Cryptographically secure pseudorandom number generator (secrets module / CSPRNG) used for token generation."
+    },
+    {
+      "file": "BenchmarkTest01065.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest01074.py",
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "defense_type": "strong_cryptographic_algorithm",
+      "safe_reason": "Strong cryptographic hash algorithm ('sha384') specified instead of weak MD5 or SHA-1."
+    },
+    {
+      "file": "BenchmarkTest01093.py",
+      "cwe": "CWE-501",
+      "type": "TRUST_BOUNDARY_VIOLATION",
+      "defense_type": "static_pattern_match_selection",
+      "safe_reason": "Deterministic pattern matching selects safe constant branch, ensuring untrusted input never feeds sink."
+    },
+    {
+      "file": "BenchmarkTest01102.py",
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest01115.py",
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    },
+    {
+      "file": "BenchmarkTest01117.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest01120.py",
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "defense_type": "constant_safe_assignment",
+      "safe_reason": "Tainted variable is overwritten with safe constant ('safe!') before reaching sink."
+    },
+    {
+      "file": "BenchmarkTest01140.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest01143.py",
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "defense_type": "secure_randomness",
+      "safe_reason": "Random value generation uses cryptographically robust source or non-security-critical context."
+    },
+    {
+      "file": "BenchmarkTest01173.py",
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "defense_type": "contextual_output_escaping",
+      "safe_reason": "Untrusted input is passed through HTML escaping function (escape_for_html) before insertion into response."
+    }
+  ],
+  "labels": [
+    {
+      "file": "BenchmarkTest00008.py",
+      "line": 52,
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "sink_call": "p.exists",
+      "source": "urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00008', 'noCookieValueSupplied'))",
+      "note": "OWASP Benchmark BenchmarkTest00008 (PATH_TRAVERSAL): sink at line 52",
+      "explanation": "Untrusted user input from urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00008', 'noCookieValueSupplied')) flows into param and reaches p.exists at line 52 without sanitization or boundary validation (CWE-22)."
+    },
+    {
+      "file": "BenchmarkTest00068.py",
+      "line": 49,
+      "cwe": "CWE-601",
+      "type": "UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS",
+      "sink_call": "flask.redirect",
+      "source": "urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00068', 'noCookieValueSupplied'))",
+      "note": "OWASP Benchmark BenchmarkTest00068 (UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS): sink at line 49",
+      "explanation": "Untrusted user input from urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00068', 'noCookieValueSupplied')) flows into param and reaches flask.redirect at line 49 without sanitization or boundary validation (CWE-601)."
+    },
+    {
+      "file": "BenchmarkTest00074.py",
+      "line": 51,
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "sink_call": "exec",
+      "source": "urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00074', 'noCookieValueSupplied'))",
+      "note": "OWASP Benchmark BenchmarkTest00074 (CODE_INJECTION): sink at line 51",
+      "explanation": "Untrusted user input from urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00074', 'noCookieValueSupplied')) flows into param and reaches exec at line 51 without sanitization or boundary validation (CWE-94)."
+    },
+    {
+      "file": "BenchmarkTest00078.py",
+      "line": 53,
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "sink_call": "pickle.loads",
+      "source": "urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00078', 'noCookieValueSupplied'))",
+      "note": "OWASP Benchmark BenchmarkTest00078 (INSECURE_DESERIALIZATION): sink at line 53",
+      "explanation": "Untrusted user input from urllib.parse.unquote_plus(request.cookies.get('BenchmarkTest00078', 'noCookieValueSupplied')) flows into param and reaches pickle.loads at line 53 without sanitization or boundary validation (CWE-502)."
+    },
+    {
+      "file": "BenchmarkTest00085.py",
+      "line": 45,
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "sink_call": "open",
+      "source": "request.form.get('BenchmarkTest00085')",
+      "note": "OWASP Benchmark BenchmarkTest00085 (PATH_TRAVERSAL): sink at line 45",
+      "explanation": "Untrusted user input from request.form.get('BenchmarkTest00085') flows into param and reaches open at line 45 without sanitization or boundary validation (CWE-22)."
+    },
+    {
+      "file": "BenchmarkTest00099.py",
+      "line": 49,
+      "cwe": "CWE-89",
+      "type": "SQL_INJECTION",
+      "sink_call": "cur.execute",
+      "source": "request.form.get('BenchmarkTest00099')",
+      "note": "OWASP Benchmark BenchmarkTest00099 (SQL_INJECTION): sink at line 49",
+      "explanation": "Untrusted user input from request.form.get('BenchmarkTest00099') flows into param and reaches cur.execute at line 49 without sanitization or boundary validation (CWE-89)."
+    },
+    {
+      "file": "BenchmarkTest00166.py",
+      "line": 53,
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "sink_call": "subprocess.run",
+      "source": "request.form.get('BenchmarkTest00166')",
+      "note": "OWASP Benchmark BenchmarkTest00166 (OS_COMMAND_INJECTION): sink at line 53",
+      "explanation": "Untrusted user input from request.form.get('BenchmarkTest00166') flows into param and reaches subprocess.run at line 53 without sanitization or boundary validation (CWE-78)."
+    },
+    {
+      "file": "BenchmarkTest00167.py",
+      "line": 53,
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "sink_call": "subprocess.run",
+      "source": "request.form.get('BenchmarkTest00167')",
+      "note": "OWASP Benchmark BenchmarkTest00167 (OS_COMMAND_INJECTION): sink at line 53",
+      "explanation": "Untrusted user input from request.form.get('BenchmarkTest00167') flows into param and reaches subprocess.run at line 53 without sanitization or boundary validation (CWE-78)."
+    },
+    {
+      "file": "BenchmarkTest00168.py",
+      "line": 60,
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "sink_call": "subprocess.run",
+      "source": "request.form.get('BenchmarkTest00168')",
+      "note": "OWASP Benchmark BenchmarkTest00168 (OS_COMMAND_INJECTION): sink at line 60",
+      "explanation": "Untrusted user input from request.form.get('BenchmarkTest00168') flows into param and reaches subprocess.run at line 60 without sanitization or boundary validation (CWE-78)."
+    },
+    {
+      "file": "BenchmarkTest00175.py",
+      "line": 49,
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "sink_call": "open",
+      "source": "request.form.getlist('BenchmarkTest00175')",
+      "note": "OWASP Benchmark BenchmarkTest00175 (PATH_TRAVERSAL): sink at line 49",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00175') flows into bar and reaches open at line 49 without sanitization or boundary validation (CWE-22)."
+    },
+    {
+      "file": "BenchmarkTest00198.py",
+      "line": 47,
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "sink_call": "elementpath.select",
+      "source": "request.form.getlist('BenchmarkTest00198')",
+      "note": "OWASP Benchmark BenchmarkTest00198 (XPATH_INJECTION): sink at line 47",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00198') flows into bar and reaches elementpath.select at line 47 without sanitization or boundary validation (CWE-643)."
+    },
+    {
+      "file": "BenchmarkTest00205.py",
+      "line": 39,
+      "cwe": "CWE-611",
+      "type": "XML_EXTERNAL_ENTITY",
+      "sink_call": "configparser.ConfigParser",
+      "source": "request.form.getlist('BenchmarkTest00205')",
+      "note": "OWASP Benchmark BenchmarkTest00205 (XML_EXTERNAL_ENTITY): sink at line 39",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00205') flows into bar and reaches configparser.ConfigParser at line 39 without sanitization or boundary validation (CWE-611)."
+    },
+    {
+      "file": "BenchmarkTest00219.py",
+      "line": 47,
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "sink_call": "random.normalvariate",
+      "source": "request.form.getlist('BenchmarkTest00219')",
+      "note": "OWASP Benchmark BenchmarkTest00219 (SECURE_RANDOMNESS): sink at line 47",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00219') flows into bar and reaches random.normalvariate at line 47 without sanitization or boundary validation (CWE-330)."
+    },
+    {
+      "file": "BenchmarkTest00249.py",
+      "line": 57,
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "sink_call": "hashlib.md5",
+      "source": "request.form.getlist('BenchmarkTest00249')",
+      "note": "OWASP Benchmark BenchmarkTest00249 (USE_OF_WEAK_HASHING_ALGORITHM): sink at line 57",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00249') flows into bar and reaches hashlib.md5 at line 57 without sanitization or boundary validation (CWE-328)."
+    },
+    {
+      "file": "BenchmarkTest00251.py",
+      "line": 59,
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "sink_call": "hashlib.sha1",
+      "source": "request.form.getlist('BenchmarkTest00251')",
+      "note": "OWASP Benchmark BenchmarkTest00251 (USE_OF_WEAK_HASHING_ALGORITHM): sink at line 59",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00251') flows into bar and reaches hashlib.sha1 at line 59 without sanitization or boundary validation (CWE-328)."
+    },
+    {
+      "file": "BenchmarkTest00270.py",
+      "line": 41,
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "sink_call": "yaml.load",
+      "source": "request.form.getlist('BenchmarkTest00270')",
+      "note": "OWASP Benchmark BenchmarkTest00270 (INSECURE_DESERIALIZATION): sink at line 41",
+      "explanation": "Untrusted user input from request.form.getlist('BenchmarkTest00270') flows into bar and reaches yaml.load at line 41 without sanitization or boundary validation (CWE-502)."
+    },
+    {
+      "file": "BenchmarkTest00272.py",
+      "line": 45,
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "sink_call": "RESPONSE +=",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00272 (CROSS_SITE_SCRIPTING): sink at line 45",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches RESPONSE += at line 45 without sanitization or boundary validation (CWE-79)."
+    },
+    {
+      "file": "BenchmarkTest00283.py",
+      "line": 49,
+      "cwe": "CWE-89",
+      "type": "SQL_INJECTION",
+      "sink_call": "cur.execute",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00283 (SQL_INJECTION): sink at line 49",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches cur.execute at line 49 without sanitization or boundary validation (CWE-89)."
+    },
+    {
+      "file": "BenchmarkTest00284.py",
+      "line": 47,
+      "cwe": "CWE-89",
+      "type": "SQL_INJECTION",
+      "sink_call": "cur.execute",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00284 (SQL_INJECTION): sink at line 47",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches cur.execute at line 47 without sanitization or boundary validation (CWE-89)."
+    },
+    {
+      "file": "BenchmarkTest00296.py",
+      "line": 58,
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "sink_call": "lxml.etree.XPath",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00296 (XPATH_INJECTION): sink at line 58",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches lxml.etree.XPath at line 58 without sanitization or boundary validation (CWE-643)."
+    },
+    {
+      "file": "BenchmarkTest00343.py",
+      "line": 45,
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "sink_call": "eval",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00343 (CODE_INJECTION): sink at line 45",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches eval at line 45 without sanitization or boundary validation (CWE-94)."
+    },
+    {
+      "file": "BenchmarkTest00368.py",
+      "line": 53,
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "sink_call": "elementpath.select",
+      "source": "",
+      "note": "OWASP Benchmark BenchmarkTest00368 (XPATH_INJECTION): sink at line 53",
+      "explanation": "Untrusted user input from HTTP request flows into bar and reaches elementpath.select at line 53 without sanitization or boundary validation (CWE-643)."
+    },
+    {
+      "file": "BenchmarkTest00450.py",
+      "line": 41,
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "sink_call": "RESPONSE +=",
+      "source": "request.headers.get('Referer')",
+      "note": "OWASP Benchmark BenchmarkTest00450 (CROSS_SITE_SCRIPTING): sink at line 41",
+      "explanation": "Untrusted user input from request.headers.get('Referer') flows into param and reaches RESPONSE += at line 41 without sanitization or boundary validation (CWE-79)."
+    },
+    {
+      "file": "BenchmarkTest00454.py",
+      "line": 44,
+      "cwe": "CWE-89",
+      "type": "SQL_INJECTION",
+      "sink_call": "cur.execute",
+      "source": "request.headers.get('BenchmarkTest00454')",
+      "note": "OWASP Benchmark BenchmarkTest00454 (SQL_INJECTION): sink at line 44",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00454') flows into param and reaches cur.execute at line 44 without sanitization or boundary validation (CWE-89)."
+    },
+    {
+      "file": "BenchmarkTest00455.py",
+      "line": 46,
+      "cwe": "CWE-89",
+      "type": "SQL_INJECTION",
+      "sink_call": "cur.execute",
+      "source": "request.headers.get('BenchmarkTest00455')",
+      "note": "OWASP Benchmark BenchmarkTest00455 (SQL_INJECTION): sink at line 46",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00455') flows into param and reaches cur.execute at line 46 without sanitization or boundary validation (CWE-89)."
+    },
+    {
+      "file": "BenchmarkTest00462.py",
+      "line": 44,
+      "cwe": "CWE-611",
+      "type": "XML_EXTERNAL_ENTITY",
+      "sink_call": "xml.sax.make_parser",
+      "source": "request.headers.get('BenchmarkTest00462')",
+      "note": "OWASP Benchmark BenchmarkTest00462 (XML_EXTERNAL_ENTITY): sink at line 44",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00462') flows into param and reaches xml.sax.make_parser at line 44 without sanitization or boundary validation (CWE-611)."
+    },
+    {
+      "file": "BenchmarkTest00463.py",
+      "line": 46,
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "sink_call": "root.xpath",
+      "source": "request.headers.get('BenchmarkTest00463')",
+      "note": "OWASP Benchmark BenchmarkTest00463 (XPATH_INJECTION): sink at line 46",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00463') flows into param and reaches root.xpath at line 46 without sanitization or boundary validation (CWE-643)."
+    },
+    {
+      "file": "BenchmarkTest00475.py",
+      "line": 45,
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "sink_call": "random.normalvariate",
+      "source": "request.headers.get('BenchmarkTest00475')",
+      "note": "OWASP Benchmark BenchmarkTest00475 (SECURE_RANDOMNESS): sink at line 45",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00475') flows into param and reaches random.normalvariate at line 45 without sanitization or boundary validation (CWE-330)."
+    },
+    {
+      "file": "BenchmarkTest00483.py",
+      "line": 54,
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "sink_call": "hashlib.new",
+      "source": "request.headers.get('BenchmarkTest00483')",
+      "note": "OWASP Benchmark BenchmarkTest00483 (USE_OF_WEAK_HASHING_ALGORITHM): sink at line 54",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00483') flows into param and reaches hashlib.new at line 54 without sanitization or boundary validation (CWE-328)."
+    },
+    {
+      "file": "BenchmarkTest00503.py",
+      "line": 41,
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "sink_call": "eval",
+      "source": "request.headers.get('BenchmarkTest00503')",
+      "note": "OWASP Benchmark BenchmarkTest00503 (CODE_INJECTION): sink at line 41",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00503') flows into param and reaches eval at line 41 without sanitization or boundary validation (CWE-94)."
+    },
+    {
+      "file": "BenchmarkTest00511.py",
+      "line": 57,
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "sink_call": "subprocess.run",
+      "source": "request.headers.get('BenchmarkTest00511')",
+      "note": "OWASP Benchmark BenchmarkTest00511 (OS_COMMAND_INJECTION): sink at line 57",
+      "explanation": "Untrusted user input from request.headers.get('BenchmarkTest00511') flows into param and reaches subprocess.run at line 57 without sanitization or boundary validation (CWE-78)."
+    },
+    {
+      "file": "BenchmarkTest00517.py",
+      "line": 57,
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "sink_call": "codecs.open",
+      "source": "request.headers.getlist('BenchmarkTest00517')",
+      "note": "OWASP Benchmark BenchmarkTest00517 (PATH_TRAVERSAL): sink at line 57",
+      "explanation": "Untrusted user input from request.headers.getlist('BenchmarkTest00517') flows into bar and reaches codecs.open at line 57 without sanitization or boundary validation (CWE-22)."
+    },
+    {
+      "file": "BenchmarkTest00531.py",
+      "line": 48,
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "sink_call": "RESPONSE +=",
+      "source": "request.headers.getlist('Referer')",
+      "note": "OWASP Benchmark BenchmarkTest00531 (CROSS_SITE_SCRIPTING): sink at line 48",
+      "explanation": "Untrusted user input from request.headers.getlist('Referer') flows into bar and reaches RESPONSE += at line 48 without sanitization or boundary validation (CWE-79)."
+    },
+    {
+      "file": "BenchmarkTest00605.py",
+      "line": 47,
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "sink_call": "pickle.loads",
+      "source": "request.headers.getlist('BenchmarkTest00605')",
+      "note": "OWASP Benchmark BenchmarkTest00605 (INSECURE_DESERIALIZATION): sink at line 47",
+      "explanation": "Untrusted user input from request.headers.getlist('BenchmarkTest00605') flows into bar and reaches pickle.loads at line 47 without sanitization or boundary validation (CWE-502)."
+    },
+    {
+      "file": "BenchmarkTest00607.py",
+      "line": 54,
+      "cwe": "CWE-78",
+      "type": "OS_COMMAND_INJECTION",
+      "sink_call": "subprocess.run",
+      "source": "request.headers.getlist('BenchmarkTest00607')",
+      "note": "OWASP Benchmark BenchmarkTest00607 (OS_COMMAND_INJECTION): sink at line 54",
+      "explanation": "Untrusted user input from request.headers.getlist('BenchmarkTest00607') flows into bar and reaches subprocess.run at line 54 without sanitization or boundary validation (CWE-78)."
+    },
+    {
+      "file": "BenchmarkTest00621.py",
+      "line": 52,
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "sink_call": "random.getrandbits",
+      "source": "",
+      "note": "OWASP Benchmark BenchmarkTest00621 (SECURE_RANDOMNESS): sink at line 52",
+      "explanation": "Untrusted user input from HTTP request flows into bar and reaches random.getrandbits at line 52 without sanitization or boundary validation (CWE-330)."
+    },
+    {
+      "file": "BenchmarkTest00622.py",
+      "line": 52,
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "sink_call": "random.getrandbits",
+      "source": "",
+      "note": "OWASP Benchmark BenchmarkTest00622 (SECURE_RANDOMNESS): sink at line 52",
+      "explanation": "Untrusted user input from HTTP request flows into bar and reaches random.getrandbits at line 52 without sanitization or boundary validation (CWE-330)."
+    },
+    {
+      "file": "BenchmarkTest00655.py",
+      "line": 49,
+      "cwe": "CWE-601",
+      "type": "UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS",
+      "sink_call": "flask.redirect",
+      "source": "",
+      "note": "OWASP Benchmark BenchmarkTest00655 (UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS): sink at line 49",
+      "explanation": "Untrusted user input from HTTP request flows into bar and reaches flask.redirect at line 49 without sanitization or boundary validation (CWE-601)."
+    },
+    {
+      "file": "BenchmarkTest00657.py",
+      "line": 53,
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "sink_call": "pickle.loads",
+      "source": "",
+      "note": "OWASP Benchmark BenchmarkTest00657 (INSECURE_DESERIALIZATION): sink at line 53",
+      "explanation": "Untrusted user input from HTTP request flows into bar and reaches pickle.loads at line 53 without sanitization or boundary validation (CWE-502)."
+    },
+    {
+      "file": "BenchmarkTest00669.py",
+      "line": 42,
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "sink_call": "RESPONSE +=",
+      "source": "request.args.get('BenchmarkTest00669')",
+      "note": "OWASP Benchmark BenchmarkTest00669 (CROSS_SITE_SCRIPTING): sink at line 42",
+      "explanation": "Untrusted user input from request.args.get('BenchmarkTest00669') flows into param and reaches RESPONSE += at line 42 without sanitization or boundary validation (CWE-79)."
+    },
+    {
+      "file": "BenchmarkTest00708.py",
+      "line": 63,
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "sink_call": "hashlib.new",
+      "source": "request.args.get('BenchmarkTest00708')",
+      "note": "OWASP Benchmark BenchmarkTest00708 (USE_OF_WEAK_HASHING_ALGORITHM): sink at line 63",
+      "explanation": "Untrusted user input from request.args.get('BenchmarkTest00708') flows into param and reaches hashlib.new at line 63 without sanitization or boundary validation (CWE-328)."
+    },
+    {
+      "file": "BenchmarkTest00716.py",
+      "line": 58,
+      "cwe": "CWE-328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "sink_call": "hashlib.sha1",
+      "source": "request.args.get('BenchmarkTest00716')",
+      "note": "OWASP Benchmark BenchmarkTest00716 (USE_OF_WEAK_HASHING_ALGORITHM): sink at line 58",
+      "explanation": "Untrusted user input from request.args.get('BenchmarkTest00716') flows into param and reaches hashlib.sha1 at line 58 without sanitization or boundary validation (CWE-328)."
+    },
+    {
+      "file": "BenchmarkTest00753.py",
+      "line": 47,
+      "cwe": "CWE-79",
+      "type": "CROSS_SITE_SCRIPTING",
+      "sink_call": "RESPONSE +=",
+      "source": "request.args.getlist('BenchmarkTest00753')",
+      "note": "OWASP Benchmark BenchmarkTest00753 (CROSS_SITE_SCRIPTING): sink at line 47",
+      "explanation": "Untrusted user input from request.args.getlist('BenchmarkTest00753') flows into bar and reaches RESPONSE += at line 47 without sanitization or boundary validation (CWE-79)."
+    },
+    {
+      "file": "BenchmarkTest00820.py",
+      "line": 41,
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "sink_call": "exec",
+      "source": "request.args.getlist('BenchmarkTest00820')",
+      "note": "OWASP Benchmark BenchmarkTest00820 (CODE_INJECTION): sink at line 41",
+      "explanation": "Untrusted user input from request.args.getlist('BenchmarkTest00820') flows into bar and reaches exec at line 41 without sanitization or boundary validation (CWE-94)."
+    },
+    {
+      "file": "BenchmarkTest00844.py",
+      "line": 50,
+      "cwe": "CWE-643",
+      "type": "XPATH_INJECTION",
+      "sink_call": "elementpath.select",
+      "source": "helpers.separate_request.request_wrapper(request)",
+      "note": "OWASP Benchmark BenchmarkTest00844 (XPATH_INJECTION): sink at line 50",
+      "explanation": "Untrusted user input from helpers.separate_request.request_wrapper(request) flows into bar and reaches elementpath.select at line 50 without sanitization or boundary validation (CWE-643)."
+    },
+    {
+      "file": "BenchmarkTest00914.py",
+      "line": 57,
+      "cwe": "CWE-22",
+      "type": "PATH_TRAVERSAL",
+      "sink_call": "open",
+      "source": "request.query_string.decode('utf-8')",
+      "note": "OWASP Benchmark BenchmarkTest00914 (PATH_TRAVERSAL): sink at line 57",
+      "explanation": "Untrusted user input from request.query_string.decode('utf-8') flows into bar and reaches open at line 57 without sanitization or boundary validation (CWE-22)."
+    },
+    {
+      "file": "BenchmarkTest00930.py",
+      "line": 42,
+      "cwe": "CWE-611",
+      "type": "XML_EXTERNAL_ENTITY",
+      "sink_call": "urllib.parse.unquote_plus",
+      "source": "request.query_string.decode('utf-8')",
+      "note": "OWASP Benchmark BenchmarkTest00930 (XML_EXTERNAL_ENTITY): sink at line 42",
+      "explanation": "Untrusted user input from request.query_string.decode('utf-8') flows into bar and reaches urllib.parse.unquote_plus at line 42 without sanitization or boundary validation (CWE-611)."
+    },
+    {
+      "file": "BenchmarkTest00951.py",
+      "line": 54,
+      "cwe": "CWE-330",
+      "type": "SECURE_RANDOMNESS",
+      "sink_call": "random.random",
+      "source": "request.query_string.decode('utf-8')",
+      "note": "OWASP Benchmark BenchmarkTest00951 (SECURE_RANDOMNESS): sink at line 54",
+      "explanation": "Untrusted user input from request.query_string.decode('utf-8') flows into bar and reaches random.random at line 54 without sanitization or boundary validation (CWE-330)."
+    },
+    {
+      "file": "BenchmarkTest00986.py",
+      "line": 55,
+      "cwe": "CWE-94",
+      "type": "CODE_INJECTION",
+      "sink_call": "eval",
+      "source": "request.query_string.decode('utf-8')",
+      "note": "OWASP Benchmark BenchmarkTest00986 (CODE_INJECTION): sink at line 55",
+      "explanation": "Untrusted user input from request.query_string.decode('utf-8') flows into bar and reaches eval at line 55 without sanitization or boundary validation (CWE-94)."
+    },
+    {
+      "file": "BenchmarkTest00994.py",
+      "line": 53,
+      "cwe": "CWE-502",
+      "type": "INSECURE_DESERIALIZATION",
+      "sink_call": "yaml.load",
+      "source": "request.query_string.decode('utf-8')",
+      "note": "OWASP Benchmark BenchmarkTest00994 (INSECURE_DESERIALIZATION): sink at line 53",
+      "explanation": "Untrusted user input from request.query_string.decode('utf-8') flows into bar and reaches yaml.load at line 53 without sanitization or boundary validation (CWE-502)."
+    }
+  ]
+}

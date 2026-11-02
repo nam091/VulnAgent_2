@@ -1,0 +1,817 @@
+{
+  "schema_version": 1,
+  "name": "SecurityEval",
+  "source": "https://github.com/s2e-lab/SecurityEval",
+  "citation": "Siddiq & Santos, SecurityEval Dataset: Mining Vulnerability Examples to Evaluate Machine Learning-Based Code Generation Techniques, MSR 2022.",
+  "match_mode": "file",
+  "match_mode_note": "Samples carry a CWE label but no annotated sink line, so a detection counts when it reports an equivalent CWE anywhere in the file. Every sample is known-vulnerable and there are no clean counterparts, so this corpus measures recall. Precision requires the hand-labelled dataset, which includes clean files.",
+  "clean_files": [],
+  "partial_labels": true,
+  "labels": [
+    {
+      "file": "CWE-020_author_1.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_author_1.py"
+    },
+    {
+      "file": "CWE-020_author_2.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_author_2.py"
+    },
+    {
+      "file": "CWE-020_codeql_1.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_codeql_1.py"
+    },
+    {
+      "file": "CWE-020_codeql_2.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_codeql_2.py"
+    },
+    {
+      "file": "CWE-020_codeql_3.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_codeql_3.py"
+    },
+    {
+      "file": "CWE-020_codeql_4.py",
+      "line": 0,
+      "cwe": "20",
+      "type": "",
+      "note": "SecurityEval CWE-020_codeql_4.py"
+    },
+    {
+      "file": "CWE-022_author_1.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "",
+      "note": "SecurityEval CWE-022_author_1.py"
+    },
+    {
+      "file": "CWE-022_author_2.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "",
+      "note": "SecurityEval CWE-022_author_2.py"
+    },
+    {
+      "file": "CWE-022_codeql_1.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "",
+      "note": "SecurityEval CWE-022_codeql_1.py"
+    },
+    {
+      "file": "CWE-022_codeql_2.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "",
+      "note": "SecurityEval CWE-022_codeql_2.py"
+    },
+    {
+      "file": "CWE-078_author_1.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "",
+      "note": "SecurityEval CWE-078_author_1.py"
+    },
+    {
+      "file": "CWE-078_codeql_1.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "",
+      "note": "SecurityEval CWE-078_codeql_1.py"
+    },
+    {
+      "file": "CWE-079_codeql_1.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "",
+      "note": "SecurityEval CWE-079_codeql_1.py"
+    },
+    {
+      "file": "CWE-079_codeql_2.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "",
+      "note": "SecurityEval CWE-079_codeql_2.py"
+    },
+    {
+      "file": "CWE-079_sonar_1.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "",
+      "note": "SecurityEval CWE-079_sonar_1.py"
+    },
+    {
+      "file": "CWE-080_author_1.py",
+      "line": 0,
+      "cwe": "80",
+      "type": "",
+      "note": "SecurityEval CWE-080_author_1.py"
+    },
+    {
+      "file": "CWE-089_author_1.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "",
+      "note": "SecurityEval CWE-089_author_1.py"
+    },
+    {
+      "file": "CWE-089_codeql_1.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "",
+      "note": "SecurityEval CWE-089_codeql_1.py"
+    },
+    {
+      "file": "CWE-090_codeql_1.py",
+      "line": 0,
+      "cwe": "90",
+      "type": "",
+      "note": "SecurityEval CWE-090_codeql_1.py"
+    },
+    {
+      "file": "CWE-090_codeql_2.py",
+      "line": 0,
+      "cwe": "90",
+      "type": "",
+      "note": "SecurityEval CWE-090_codeql_2.py"
+    },
+    {
+      "file": "CWE-094_author_1.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "",
+      "note": "SecurityEval CWE-094_author_1.py"
+    },
+    {
+      "file": "CWE-094_codeql_1.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "",
+      "note": "SecurityEval CWE-094_codeql_1.py"
+    },
+    {
+      "file": "CWE-094_sonar_1.py",
+      "line": 0,
+      "cwe": "94",
+      "type": "",
+      "note": "SecurityEval CWE-094_sonar_1.py"
+    },
+    {
+      "file": "CWE-095_author_1.py",
+      "line": 0,
+      "cwe": "95",
+      "type": "",
+      "note": "SecurityEval CWE-095_author_1.py"
+    },
+    {
+      "file": "CWE-113_sonar_1.py",
+      "line": 0,
+      "cwe": "113",
+      "type": "",
+      "note": "SecurityEval CWE-113_sonar_1.py"
+    },
+    {
+      "file": "CWE-113_sonar_2.py",
+      "line": 0,
+      "cwe": "113",
+      "type": "",
+      "note": "SecurityEval CWE-113_sonar_2.py"
+    },
+    {
+      "file": "CWE-116_author_1.py",
+      "line": 0,
+      "cwe": "116",
+      "type": "",
+      "note": "SecurityEval CWE-116_author_1.py"
+    },
+    {
+      "file": "CWE-116_codeql_1.py",
+      "line": 0,
+      "cwe": "116",
+      "type": "",
+      "note": "SecurityEval CWE-116_codeql_1.py"
+    },
+    {
+      "file": "CWE-117_author_1.py",
+      "line": 0,
+      "cwe": "117",
+      "type": "",
+      "note": "SecurityEval CWE-117_author_1.py"
+    },
+    {
+      "file": "CWE-117_codeql_1.py",
+      "line": 0,
+      "cwe": "117",
+      "type": "",
+      "note": "SecurityEval CWE-117_codeql_1.py"
+    },
+    {
+      "file": "CWE-117_sonar_1.py",
+      "line": 0,
+      "cwe": "117",
+      "type": "",
+      "note": "SecurityEval CWE-117_sonar_1.py"
+    },
+    {
+      "file": "CWE-1204_sonar_1.py",
+      "line": 0,
+      "cwe": "1204",
+      "type": "",
+      "note": "SecurityEval CWE-1204_sonar_1.py"
+    },
+    {
+      "file": "CWE-193_author_1.py",
+      "line": 0,
+      "cwe": "193",
+      "type": "",
+      "note": "SecurityEval CWE-193_author_1.py"
+    },
+    {
+      "file": "CWE-200_author_1.py",
+      "line": 0,
+      "cwe": "200",
+      "type": "",
+      "note": "SecurityEval CWE-200_author_1.py"
+    },
+    {
+      "file": "CWE-215_codeql_1.py",
+      "line": 0,
+      "cwe": "215",
+      "type": "",
+      "note": "SecurityEval CWE-215_codeql_1.py"
+    },
+    {
+      "file": "CWE-252_author_1.py",
+      "line": 0,
+      "cwe": "252",
+      "type": "",
+      "note": "SecurityEval CWE-252_author_1.py"
+    },
+    {
+      "file": "CWE-259_author_1.py",
+      "line": 0,
+      "cwe": "259",
+      "type": "",
+      "note": "SecurityEval CWE-259_author_1.py"
+    },
+    {
+      "file": "CWE-259_author_2.py",
+      "line": 0,
+      "cwe": "259",
+      "type": "",
+      "note": "SecurityEval CWE-259_author_2.py"
+    },
+    {
+      "file": "CWE-269_mitre_1.py",
+      "line": 0,
+      "cwe": "269",
+      "type": "",
+      "note": "SecurityEval CWE-269_mitre_1.py"
+    },
+    {
+      "file": "CWE-283_mitre_1.py",
+      "line": 0,
+      "cwe": "283",
+      "type": "",
+      "note": "SecurityEval CWE-283_mitre_1.py"
+    },
+    {
+      "file": "CWE-285_codeql_1.py",
+      "line": 0,
+      "cwe": "285",
+      "type": "",
+      "note": "SecurityEval CWE-285_codeql_1.py"
+    },
+    {
+      "file": "CWE-295_author_1.py",
+      "line": 0,
+      "cwe": "295",
+      "type": "",
+      "note": "SecurityEval CWE-295_author_1.py"
+    },
+    {
+      "file": "CWE-295_author_2.py",
+      "line": 0,
+      "cwe": "295",
+      "type": "",
+      "note": "SecurityEval CWE-295_author_2.py"
+    },
+    {
+      "file": "CWE-295_codeql_1.py",
+      "line": 0,
+      "cwe": "295",
+      "type": "",
+      "note": "SecurityEval CWE-295_codeql_1.py"
+    },
+    {
+      "file": "CWE-306_pearce_1.py",
+      "line": 0,
+      "cwe": "306",
+      "type": "",
+      "note": "SecurityEval CWE-306_pearce_1.py"
+    },
+    {
+      "file": "CWE-319_author_1.py",
+      "line": 0,
+      "cwe": "319",
+      "type": "",
+      "note": "SecurityEval CWE-319_author_1.py"
+    },
+    {
+      "file": "CWE-319_author_2.py",
+      "line": 0,
+      "cwe": "319",
+      "type": "",
+      "note": "SecurityEval CWE-319_author_2.py"
+    },
+    {
+      "file": "CWE-321_author_1.py",
+      "line": 0,
+      "cwe": "321",
+      "type": "",
+      "note": "SecurityEval CWE-321_author_1.py"
+    },
+    {
+      "file": "CWE-321_author_2.py",
+      "line": 0,
+      "cwe": "321",
+      "type": "",
+      "note": "SecurityEval CWE-321_author_2.py"
+    },
+    {
+      "file": "CWE-326_author_1.py",
+      "line": 0,
+      "cwe": "326",
+      "type": "",
+      "note": "SecurityEval CWE-326_author_1.py"
+    },
+    {
+      "file": "CWE-326_author_2.py",
+      "line": 0,
+      "cwe": "326",
+      "type": "",
+      "note": "SecurityEval CWE-326_author_2.py"
+    },
+    {
+      "file": "CWE-327_codeql_1.py",
+      "line": 0,
+      "cwe": "327",
+      "type": "",
+      "note": "SecurityEval CWE-327_codeql_1.py"
+    },
+    {
+      "file": "CWE-327_codeql_2.py",
+      "line": 0,
+      "cwe": "327",
+      "type": "",
+      "note": "SecurityEval CWE-327_codeql_2.py"
+    },
+    {
+      "file": "CWE-327_codeql_3.py",
+      "line": 0,
+      "cwe": "327",
+      "type": "",
+      "note": "SecurityEval CWE-327_codeql_3.py"
+    },
+    {
+      "file": "CWE-327_codeql_4.py",
+      "line": 0,
+      "cwe": "327",
+      "type": "",
+      "note": "SecurityEval CWE-327_codeql_4.py"
+    },
+    {
+      "file": "CWE-329_sonar_1.py",
+      "line": 0,
+      "cwe": "329",
+      "type": "",
+      "note": "SecurityEval CWE-329_sonar_1.py"
+    },
+    {
+      "file": "CWE-330_author_1.py",
+      "line": 0,
+      "cwe": "330",
+      "type": "",
+      "note": "SecurityEval CWE-330_author_1.py"
+    },
+    {
+      "file": "CWE-331_author_1.py",
+      "line": 0,
+      "cwe": "331",
+      "type": "",
+      "note": "SecurityEval CWE-331_author_1.py"
+    },
+    {
+      "file": "CWE-339_mitre_1.py",
+      "line": 0,
+      "cwe": "339",
+      "type": "",
+      "note": "SecurityEval CWE-339_mitre_1.py"
+    },
+    {
+      "file": "CWE-347_sonar_1.py",
+      "line": 0,
+      "cwe": "347",
+      "type": "",
+      "note": "SecurityEval CWE-347_sonar_1.py"
+    },
+    {
+      "file": "CWE-347_sonar_2.py",
+      "line": 0,
+      "cwe": "347",
+      "type": "",
+      "note": "SecurityEval CWE-347_sonar_2.py"
+    },
+    {
+      "file": "CWE-347_sonar_3.py",
+      "line": 0,
+      "cwe": "347",
+      "type": "",
+      "note": "SecurityEval CWE-347_sonar_3.py"
+    },
+    {
+      "file": "CWE-367_author_1.py",
+      "line": 0,
+      "cwe": "367",
+      "type": "",
+      "note": "SecurityEval CWE-367_author_1.py"
+    },
+    {
+      "file": "CWE-377_codeql_1.py",
+      "line": 0,
+      "cwe": "377",
+      "type": "",
+      "note": "SecurityEval CWE-377_codeql_1.py"
+    },
+    {
+      "file": "CWE-379_sonar_1.py",
+      "line": 0,
+      "cwe": "379",
+      "type": "",
+      "note": "SecurityEval CWE-379_sonar_1.py"
+    },
+    {
+      "file": "CWE-385_mitre_1.py",
+      "line": 0,
+      "cwe": "385",
+      "type": "",
+      "note": "SecurityEval CWE-385_mitre_1.py"
+    },
+    {
+      "file": "CWE-400_sonar_1.py",
+      "line": 0,
+      "cwe": "400",
+      "type": "",
+      "note": "SecurityEval CWE-400_sonar_1.py"
+    },
+    {
+      "file": "CWE-414_author_1.py",
+      "line": 0,
+      "cwe": "414",
+      "type": "",
+      "note": "SecurityEval CWE-414_author_1.py"
+    },
+    {
+      "file": "CWE-425_author_1.py",
+      "line": 0,
+      "cwe": "425",
+      "type": "",
+      "note": "SecurityEval CWE-425_author_1.py"
+    },
+    {
+      "file": "CWE-434_pearce_1.py",
+      "line": 0,
+      "cwe": "434",
+      "type": "",
+      "note": "SecurityEval CWE-434_pearce_1.py"
+    },
+    {
+      "file": "CWE-434_pearce_2.py",
+      "line": 0,
+      "cwe": "434",
+      "type": "",
+      "note": "SecurityEval CWE-434_pearce_2.py"
+    },
+    {
+      "file": "CWE-462_mitre_1.py",
+      "line": 0,
+      "cwe": "462",
+      "type": "",
+      "note": "SecurityEval CWE-462_mitre_1.py"
+    },
+    {
+      "file": "CWE-477_author_1.py",
+      "line": 0,
+      "cwe": "477",
+      "type": "",
+      "note": "SecurityEval CWE-477_author_1.py"
+    },
+    {
+      "file": "CWE-502_author_1.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "",
+      "note": "SecurityEval CWE-502_author_1.py"
+    },
+    {
+      "file": "CWE-502_codeql_1.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "",
+      "note": "SecurityEval CWE-502_codeql_1.py"
+    },
+    {
+      "file": "CWE-502_mitre_1.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "",
+      "note": "SecurityEval CWE-502_mitre_1.py"
+    },
+    {
+      "file": "CWE-502_sonar_1.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "",
+      "note": "SecurityEval CWE-502_sonar_1.py"
+    },
+    {
+      "file": "CWE-521_sonar_1.py",
+      "line": 0,
+      "cwe": "521",
+      "type": "",
+      "note": "SecurityEval CWE-521_sonar_1.py"
+    },
+    {
+      "file": "CWE-521_sonar_2.py",
+      "line": 0,
+      "cwe": "521",
+      "type": "",
+      "note": "SecurityEval CWE-521_sonar_2.py"
+    },
+    {
+      "file": "CWE-522_author_1.py",
+      "line": 0,
+      "cwe": "522",
+      "type": "",
+      "note": "SecurityEval CWE-522_author_1.py"
+    },
+    {
+      "file": "CWE-522_pearce_1.py",
+      "line": 0,
+      "cwe": "522",
+      "type": "",
+      "note": "SecurityEval CWE-522_pearce_1.py"
+    },
+    {
+      "file": "CWE-595_author_1.py",
+      "line": 0,
+      "cwe": "595",
+      "type": "",
+      "note": "SecurityEval CWE-595_author_1.py"
+    },
+    {
+      "file": "CWE-601_codeql_1.py",
+      "line": 0,
+      "cwe": "601",
+      "type": "",
+      "note": "SecurityEval CWE-601_codeql_1.py"
+    },
+    {
+      "file": "CWE-601_sonar_1.py",
+      "line": 0,
+      "cwe": "601",
+      "type": "",
+      "note": "SecurityEval CWE-601_sonar_1.py"
+    },
+    {
+      "file": "CWE-601_sonar_2.py",
+      "line": 0,
+      "cwe": "601",
+      "type": "",
+      "note": "SecurityEval CWE-601_sonar_2.py"
+    },
+    {
+      "file": "CWE-601_sonar_3.py",
+      "line": 0,
+      "cwe": "601",
+      "type": "",
+      "note": "SecurityEval CWE-601_sonar_3.py"
+    },
+    {
+      "file": "CWE-601_sonar_4.py",
+      "line": 0,
+      "cwe": "601",
+      "type": "",
+      "note": "SecurityEval CWE-601_sonar_4.py"
+    },
+    {
+      "file": "CWE-605_author_1.py",
+      "line": 0,
+      "cwe": "605",
+      "type": "",
+      "note": "SecurityEval CWE-605_author_1.py"
+    },
+    {
+      "file": "CWE-611_author_1.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_author_1.py"
+    },
+    {
+      "file": "CWE-611_codeql_1.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_codeql_1.py"
+    },
+    {
+      "file": "CWE-611_sonar_1.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_sonar_1.py"
+    },
+    {
+      "file": "CWE-611_sonar_2.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_sonar_2.py"
+    },
+    {
+      "file": "CWE-611_sonar_3.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_sonar_3.py"
+    },
+    {
+      "file": "CWE-611_sonar_4.py",
+      "line": 0,
+      "cwe": "611",
+      "type": "",
+      "note": "SecurityEval CWE-611_sonar_4.py"
+    },
+    {
+      "file": "CWE-641_sonar_1.py",
+      "line": 0,
+      "cwe": "641",
+      "type": "",
+      "note": "SecurityEval CWE-641_sonar_1.py"
+    },
+    {
+      "file": "CWE-643_codeql_1.py",
+      "line": 0,
+      "cwe": "643",
+      "type": "",
+      "note": "SecurityEval CWE-643_codeql_1.py"
+    },
+    {
+      "file": "CWE-643_sonar_1.py",
+      "line": 0,
+      "cwe": "643",
+      "type": "",
+      "note": "SecurityEval CWE-643_sonar_1.py"
+    },
+    {
+      "file": "CWE-703_author_1.py",
+      "line": 0,
+      "cwe": "703",
+      "type": "",
+      "note": "SecurityEval CWE-703_author_1.py"
+    },
+    {
+      "file": "CWE-703_author_2.py",
+      "line": 0,
+      "cwe": "703",
+      "type": "",
+      "note": "SecurityEval CWE-703_author_2.py"
+    },
+    {
+      "file": "CWE-703_author_3.py",
+      "line": 0,
+      "cwe": "703",
+      "type": "",
+      "note": "SecurityEval CWE-703_author_3.py"
+    },
+    {
+      "file": "CWE-730_author_1.py",
+      "line": 0,
+      "cwe": "730",
+      "type": "",
+      "note": "SecurityEval CWE-730_author_1.py"
+    },
+    {
+      "file": "CWE-730_codeql_1.py",
+      "line": 0,
+      "cwe": "730",
+      "type": "",
+      "note": "SecurityEval CWE-730_codeql_1.py"
+    },
+    {
+      "file": "CWE-730_codeql_2.py",
+      "line": 0,
+      "cwe": "730",
+      "type": "",
+      "note": "SecurityEval CWE-730_codeql_2.py"
+    },
+    {
+      "file": "CWE-759_mitre_1.py",
+      "line": 0,
+      "cwe": "759",
+      "type": "",
+      "note": "SecurityEval CWE-759_mitre_1.py"
+    },
+    {
+      "file": "CWE-760_sonar_1.py",
+      "line": 0,
+      "cwe": "760",
+      "type": "",
+      "note": "SecurityEval CWE-760_sonar_1.py"
+    },
+    {
+      "file": "CWE-776_codeql_1.py",
+      "line": 0,
+      "cwe": "776",
+      "type": "",
+      "note": "SecurityEval CWE-776_codeql_1.py"
+    },
+    {
+      "file": "CWE-798_author_1.py",
+      "line": 0,
+      "cwe": "798",
+      "type": "",
+      "note": "SecurityEval CWE-798_author_1.py"
+    },
+    {
+      "file": "CWE-798_codeql_1.py",
+      "line": 0,
+      "cwe": "798",
+      "type": "",
+      "note": "SecurityEval CWE-798_codeql_1.py"
+    },
+    {
+      "file": "CWE-827_sonar_1.py",
+      "line": 0,
+      "cwe": "827",
+      "type": "",
+      "note": "SecurityEval CWE-827_sonar_1.py"
+    },
+    {
+      "file": "CWE-835_author_1.py",
+      "line": 0,
+      "cwe": "835",
+      "type": "",
+      "note": "SecurityEval CWE-835_author_1.py"
+    },
+    {
+      "file": "CWE-841_mitre_1.py",
+      "line": 0,
+      "cwe": "841",
+      "type": "",
+      "note": "SecurityEval CWE-841_mitre_1.py"
+    },
+    {
+      "file": "CWE-918_codeql_1.py",
+      "line": 0,
+      "cwe": "918",
+      "type": "",
+      "note": "SecurityEval CWE-918_codeql_1.py"
+    },
+    {
+      "file": "CWE-918_codeql_2.py",
+      "line": 0,
+      "cwe": "918",
+      "type": "",
+      "note": "SecurityEval CWE-918_codeql_2.py"
+    },
+    {
+      "file": "CWE-941_mitre_1.py",
+      "line": 0,
+      "cwe": "941",
+      "type": "",
+      "note": "SecurityEval CWE-941_mitre_1.py"
+    },
+    {
+      "file": "CWE-943_sonar_1.py",
+      "line": 0,
+      "cwe": "943",
+      "type": "",
+      "note": "SecurityEval CWE-943_sonar_1.py"
+    }
+  ]
+}

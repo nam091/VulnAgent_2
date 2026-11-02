@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "name": "Six Repositories (10 CWE) Vulnerability Benchmark",
+  "source": "Airflow, SaltStack, Gradio, Django, Ansible, WeasyPrint official release tags",
+  "licence": "Various open-source licenses (Apache-2.0, BSD-3-Clause, GPL-3.0)",
+  "match_mode": "file",
+  "match_mode_note": "Standardized benchmark of 10 real-world CVE defect files across 10 CWE categories and 6 clean control files from 6 major Python open-source repositories.",
+  "partial_labels": false,
+  "clean_files": [
+    "clean_airflow_dates.py",
+    "clean_ansible_display.py",
+    "clean_django_crypto.py",
+    "clean_gradio_media.py",
+    "clean_salt_units.py",
+    "clean_weasyprint_units.py"
+  ],
+  "labels": [
+    {
+      "file": "airflow_idor.py",
+      "line": 0,
+      "cwe": "639",
+      "type": "IDOR",
+      "note": "Apache Airflow DAG/Task unvalidated access (CWE-639): Insecure Direct Object Reference (IDOR) via unvalidated task instance access"
+    },
+    {
+      "file": "airflow_pathtraversal.py",
+      "line": 0,
+      "cwe": "22",
+      "type": "PATH_TRAVERSAL",
+      "note": "Apache Airflow CVE-2023-22887 (CWE-22): Path Traversal via unvalidated DagRun run_id parameter in directory path construction"
+    },
+    {
+      "file": "ansible_hardcoded_secret.py",
+      "line": 0,
+      "cwe": "798",
+      "type": "HARDCODED_CREDENTIALS",
+      "note": "Ansible CVE-2020-14365 (CWE-798): Hardcoded secret and sensitive credential handling in vault encryption routines"
+    },
+    {
+      "file": "django_sqli.py",
+      "line": 0,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "Django CVE-2022-34265 (CWE-89): SQL Injection in Trunc() and Extract() database functions via unsanitized kind / lookup_name parameters"
+    },
+    {
+      "file": "gradio_info_disclosure.py",
+      "line": 0,
+      "cwe": "209",
+      "type": "INFORMATION_DISCLOSURE",
+      "note": "Gradio CVE-2024-1729 (CWE-209): Information Disclosure via detailed exception tracebacks in route responses"
+    },
+    {
+      "file": "gradio_xss.py",
+      "line": 0,
+      "cwe": "79",
+      "type": "XSS",
+      "note": "Gradio CVE-2024-1561 / CVE-2024-1729 (CWE-79): Cross-Site Scripting via unsanitized raw HTML component rendering and component injection"
+    },
+    {
+      "file": "salt_auth_bypass.py",
+      "line": 0,
+      "cwe": "287",
+      "type": "AUTH_BYPASS",
+      "note": "SaltStack ClearFuncs CVE-2020-11651 (CWE-287): Authentication Bypass in ClearFuncs exposing privileged master methods to unauthenticated callers"
+    },
+    {
+      "file": "salt_cmdi.py",
+      "line": 0,
+      "cwe": "78",
+      "type": "COMMAND_INJECTION",
+      "note": "SaltStack CVE-2020-16846 (CWE-78): OS Command Injection via shell=True in ssh-keygen command formatting"
+    },
+    {
+      "file": "salt_deserialization.py",
+      "line": 0,
+      "cwe": "502",
+      "type": "DESERIALIZATION",
+      "note": "SaltStack CVE-2020-11651 (CWE-502 / CWE-287): Insecure Deserialization of unauthenticated ZeroMQ message loads"
+    },
+    {
+      "file": "weasyprint_ssrf.py",
+      "line": 0,
+      "cwe": "918",
+      "type": "SSRF",
+      "note": "WeasyPrint CVE-2023-24816 (CWE-918): Server-Side Request Forgery (SSRF) via arbitrary URL fetching and redirection"
+    }
+  ]
+}

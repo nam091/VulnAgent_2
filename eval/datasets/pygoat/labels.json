@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "name": "OWASP PyGoat",
+  "source": "https://github.com/adeyosemanputra/pygoat",
+  "licence": "MIT",
+  "match_mode": "line",
+  "match_mode_note": "Sinks were located by hand, so detections are matched against the line that performs the unsafe operation. This is a real application rather than a set of isolated snippets, so a miss here says more about coverage than a miss on a synthetic sample.",
+  "clean_files": [],
+  "labels": [
+    {
+      "file": "pygoat_views.py",
+      "line": 162,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "raw() on a query string concatenated from POST name/password at line 158"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 214,
+      "cwe": "502",
+      "type": "INSECURE_DESERIALIZATION",
+      "note": "pickle.loads on a base64 cookie the client controls"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 430,
+      "cwe": "78",
+      "type": "OS_COMMAND_INJECTION",
+      "note": "shell=True on 'dig {}'.format(domain) built from user input"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 460,
+      "cwe": "95",
+      "type": "CODE_INJECTION",
+      "note": "eval on request.POST['val']"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 560,
+      "cwe": "502",
+      "type": "INSECURE_DESERIALIZATION",
+      "note": "yaml.load with the unsafe Loader on an uploaded file"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 588,
+      "cwe": "95",
+      "type": "CODE_INJECTION",
+      "note": "ImageMath.eval on a format string from request.POST"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 878,
+      "cwe": "89",
+      "type": "SQL_INJECTION",
+      "note": "raw() on a concatenated query in the 2021 injection lab"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 963,
+      "cwe": "918",
+      "type": "SERVER_SIDE_REQUEST_FORGERY_(SSRF)",
+      "note": "outbound fetch of a URL taken straight from request.POST"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 1026,
+      "cwe": "328",
+      "type": "USE_OF_WEAK_HASHING_ALGORITHM",
+      "note": "md5 used to hash a password, unsalted"
+    },
+    {
+      "file": "pygoat_views.py",
+      "line": 260,
+      "cwe": "611",
+      "type": "XML_EXTERNAL_ENTITY",
+      "note": "external general entities enabled at line 259, then request.body parsed"
+    }
+  ]
+}
