@@ -291,11 +291,16 @@ class JobStore:
             # Keep the first few so the start of the run stays visible.
             job.events = job.events[:20] + job.events[-(MAX_EVENTS - 20):]
 
+        try:
+            pct_val = float(event.get("percent", job.percent))
+        except (ValueError, TypeError):
+            pct_val = job.percent
+
         self.update(
             job,
             phase=event.get("phase", job.phase),
             message=event.get("message", job.message),
-            percent=float(event.get("percent", job.percent)),
+            percent=pct_val,
         )
 
     # ---- live subscriptions -------------------------------------------------

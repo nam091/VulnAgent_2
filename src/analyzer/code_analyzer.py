@@ -574,12 +574,15 @@ class CodeAnalyzer:
 
         for vuln_data in analysis_result.get('vulnerabilities', []):
             try:
-                # Convert CVSS string to float score
-                if isinstance(vuln_data.get('cvss_score'), str):
-                    if vuln_data['cvss_score'].startswith('CVSS:'):
-                        cvss_metrics = vuln_data['cvss_score'].split('/')
+                # Convert CVSS string or severity label to float score
+                raw_cvss = vuln_data.get('cvss_score')
+                if isinstance(raw_cvss, (int, float)):
+                    vuln_data['cvss_score'] = min(10.0, max(0.0, float(raw_cvss)))
+                elif isinstance(raw_cvss, str):
+                    s = raw_cvss.strip()
+                    if s.startswith('CVSS:'):
+                        cvss_metrics = s.split('/')
                         severity_metrics = [m for m in cvss_metrics if ':' in m and m[0] in 'CIA']
-
                         score = 0.0
                         for metric in severity_metrics:
                             if metric.endswith(':H'):
@@ -588,10 +591,22 @@ class CodeAnalyzer:
                                 score += 2.0
                             elif metric.endswith(':L'):
                                 score += 1.0
-
                         vuln_data['cvss_score'] = min(10.0, score)
+                    elif s.lower() in ('critical', 'crit'):
+                        vuln_data['cvss_score'] = 9.5
+                    elif s.lower() in ('high', 'h'):
+                        vuln_data['cvss_score'] = 8.0
+                    elif s.lower() in ('medium', 'med', 'm'):
+                        vuln_data['cvss_score'] = 5.5
+                    elif s.lower() in ('low', 'l'):
+                        vuln_data['cvss_score'] = 3.0
                     else:
-                        vuln_data['cvss_score'] = 5.0
+                        try:
+                            vuln_data['cvss_score'] = min(10.0, max(0.0, float(s)))
+                        except (ValueError, TypeError):
+                            vuln_data['cvss_score'] = 5.0
+                else:
+                    vuln_data['cvss_score'] = 5.0
 
                 # Map severity strings to VulnerabilitySeverity enum
                 severity_mapping = {

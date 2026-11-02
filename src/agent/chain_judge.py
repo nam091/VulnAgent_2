@@ -84,6 +84,30 @@ class ChainVerdict:
         }
 
 
+def _parse_confidence(val: Any) -> float:
+    """Safely parse model confidence rating, handling numeric floats and text ratings like 'high', 'medium', 'low'."""
+    if val is None:
+        return 0.5
+    if isinstance(val, (int, float)):
+        try:
+            return round(min(1.0, max(0.0, float(val))), 2)
+        except (ValueError, TypeError):
+            return 0.5
+    if isinstance(val, str):
+        v = val.strip().lower()
+        if v in ("high", "h", "critical", "very high"):
+            return 0.9
+        if v in ("medium", "med", "m", "moderate"):
+            return 0.6
+        if v in ("low", "l"):
+            return 0.3
+        try:
+            return round(min(1.0, max(0.0, float(v))), 2)
+        except (ValueError, TypeError):
+            return 0.5
+    return 0.5
+
+
 class ChainJudge:
     """
     Asks a model whether proposed chains describe a reachable attack path.
@@ -138,13 +162,12 @@ class ChainJudge:
 
         try:
             run = await agent.run(SYSTEM_PROMPT, self._prompt(chain.vulnerabilities))
+            verdict = self._parse(run.text)
+            verdict.tool_calls = run.tool_calls
+            return verdict
         except Exception as e:
             logging.error(f"Chain judging failed: {e}")
             return ChainVerdict(error=str(e))
-
-        verdict = self._parse(run.text)
-        verdict.tool_calls = run.tool_calls
-        return verdict
 
     @staticmethod
     def _prompt(vulns: Sequence[Vulnerability]) -> str:
@@ -221,5 +244,5 @@ class ChainJudge:
             reason=str(payload.get("reason", ""))[:500],
             narrative=str(payload.get("attack_narrative", ""))[:1200],
             ordered_steps=[s for s in steps if isinstance(s, int)],
-            confidence=float(payload.get("confidence") or 0.0),
+            confidence=_parse_confidence(payload.get("confidence")),
         )

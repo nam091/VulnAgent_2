@@ -942,11 +942,15 @@ class Scanner:
 
         async def check(index: int, chain: Any) -> None:
             async with semaphore:
-                verdict = await judge.judge(chain)
-                chain.judgement = verdict.as_dict()
-                if verdict.is_real and verdict.narrative:
-                    chain.attack_path = verdict.narrative
-                upheld[index] = verdict.is_real
+                try:
+                    verdict = await judge.judge(chain)
+                    chain.judgement = verdict.as_dict()
+                    if verdict.is_real and verdict.narrative:
+                        chain.attack_path = verdict.narrative
+                    upheld[index] = verdict.is_real
+                except Exception as e:
+                    logging.warning(f"Chain judging error for candidate {index}: {e}")
+                    upheld[index] = False
 
         await asyncio.gather(*(
             check(i, chain) for i, (_, chain) in enumerate(candidates)
