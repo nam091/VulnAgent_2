@@ -122,7 +122,12 @@ class ToolCallingAgent:
 
             tool_calls = getattr(message, "tool_calls", None)
             if not tool_calls:
-                run.text = message.content or ""
+                run.text = (
+                    message.content
+                    or getattr(message, "reasoning_content", None)
+                    or getattr(message, "reasoning", None)
+                    or ""
+                )
                 return run
 
             messages.append(self._assistant_message(message, tool_calls))
@@ -191,7 +196,12 @@ class ToolCallingAgent:
         })
         try:
             message = await self._complete(messages, with_tools=False)
-            run.text = message.content or ""
+            run.text = (
+                message.content
+                or getattr(message, "reasoning_content", None)
+                or getattr(message, "reasoning", None)
+                or ""
+            )
         except Exception as e:
             logging.error(f"Agent failed on final turn: {e}")
             run.text = ""
@@ -455,7 +465,7 @@ class ToolCallingAgent:
             Dict[str, Any]: A plain dictionary the API will accept back
         """
 
-        return {
+        msg_dict: Dict[str, Any] = {
             "role": "assistant",
             "content": message.content or "",
             "tool_calls": [
@@ -470,6 +480,21 @@ class ToolCallingAgent:
                 for index, call in enumerate(tool_calls)
             ],
         }
+
+        # Preserve reasoning_content / reasoning if provided by reasoning models
+        # (required by reasoning providers like Beam / DeepSeek R1 across multi-turn tool calling)
+        reasoning = (
+            getattr(message, "reasoning_content", None)
+            or getattr(message, "reasoning", None)
+            or (getattr(message, "model_extra", None) or {}).get("reasoning_content")
+            or (getattr(message, "model_extra", None) or {}).get("reasoning")
+            or (message.get("reasoning_content") if isinstance(message, dict) else None)
+            or (message.get("reasoning") if isinstance(message, dict) else None)
+        )
+        if reasoning is not None:
+            msg_dict["reasoning_content"] = reasoning
+
+        return msg_dict
 
     @staticmethod
     def _parse_call(call: Any) -> Tuple[str, Dict[str, Any]]:

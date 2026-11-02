@@ -13,6 +13,7 @@ throw out the ones that make no sense - which works for any pair of types,
 including combinations nobody wrote a rule for.
 """
 
+import ast
 import json
 import logging
 import re
@@ -224,19 +225,38 @@ class ChainJudge:
             return ChainVerdict(error="empty response")
 
         body = text.strip()
-        fence = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", body)
-        if fence:
-            body = fence.group(1).strip()
+        # Strip thinking/reasoning tags from models like DeepSeek-R1 / Qwen-Thinking
+        body = re.sub(r"<think>[\s\S]*?</think>", "", body, flags=re.DOTALL).strip()
+
+        # Handle fenced markdown json blocks (prefer last block if multiple)
+        fences = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", body)
+        if fences:
+            body = fences[-1].strip()
+        else:
+            fence = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", body)
+            if fence:
+                body = fence.group(1).strip()
 
         start, end = body.find("{"), body.rfind("}")
         if start != -1 and end > start:
             body = body[start:end + 1]
 
+        payload = None
         try:
             payload = json.loads(body)
         except json.JSONDecodeError as e:
-            logging.debug(f"Unparseable chain verdict: {text[:200]}")
-            return ChainVerdict(error=f"unparseable verdict: {e}")
+            try:
+                evaluated = ast.literal_eval(body)
+                if isinstance(evaluated, dict):
+                    payload = evaluated
+            except Exception:
+                pass
+            if payload is None:
+                logging.debug(f"Unparseable chain verdict: {text[:200]}")
+                return ChainVerdict(error=f"unparseable verdict: {e}")
+
+        if not isinstance(payload, dict):
+            return ChainVerdict(error="chain verdict payload must be a JSON object")
 
         steps = payload.get("ordered_steps") or []
         return ChainVerdict(
