@@ -14,11 +14,11 @@
 /* ============ DARK — the default treatment ============ */
 
 [data-theme="dark"] {
-  --void: #0c0e11;  --deck: #101317;  --panel: #14171c;
-  --raised: #1a1e24; --edge: #24292f; --edge-hot: #333941;
-  --text: #e4e6e9;  --text-dim: #9aa1ab; --text-faint: #6b727c;
-  --signal: #b8c2cf; --signal-dim: rgba(184,194,207,.09); --on-signal: #14171c;
-  --crit: #c84a52; --high: #c1803e; --med: #b09a45; --low: #4e9478; --info: #626973;
+  --void: #0c0e12;  --deck: #101318;  --panel: #14181f;
+  --raised: #1a2028; --edge: #252d38; --edge-hot: #384252;
+  --text: #f1f4f8;  --text-dim: #a2adb9; --text-faint: #6e7a8a;
+  --signal: #38bdf8; --signal-dim: rgba(56,189,248,.12); --on-signal: #081528;
+  --crit: #ff4d5a; --high: #ff8c2a; --med: #facc15; --low: #10b981; --info: #818cf8;
   --on-crit: #fff; --on-high: #1a0c00; --on-med: #1a1400; --on-low: #002a1c;
   --texture-ink: 255, 255, 255; --texture: .014;
   --sweep: 255, 255, 255;
@@ -35,11 +35,11 @@
    one thing here that has to stay readable on a projector in a lit room. */
 
 [data-theme="light"] {
-  --void: #e8eaee;  --deck: #f1f3f6;  --panel: #fbfcfd;
-  --raised: #eef0f4; --edge: #ccd2da; --edge-hot: #a3acb9;
-  --text: #14171c;  --text-dim: #4a525e; --text-faint: #767e8b;
-  --signal: #39414c; --signal-dim: rgba(57,65,76,.08); --on-signal: #fbfcfd;
-  --crit: #a82730; --high: #8c5715; --med: #766014; --low: #1f6349; --info: #5c646f;
+  --void: #f0f2f5;  --deck: #f8fafc;  --panel: #ffffff;
+  --raised: #f1f5f9; --edge: #cbd5e1; --edge-hot: #94a3b8;
+  --text: #0f172a;  --text-dim: #334155; --text-faint: #64748b;
+  --signal: #0284c7; --signal-dim: rgba(2,132,199,.1); --on-signal: #ffffff;
+  --crit: #e11d48; --high: #ea580c; --med: #d97706; --low: #059669; --info: #4f46e5;
   --on-crit: #fff; --on-high: #fff; --on-med: #fff; --on-low: #fff;
   --texture-ink: 0, 0, 0; --texture: .022;
   --sweep: 0, 0, 0;
@@ -944,9 +944,9 @@ pre.diff .del { color: var(--crit); display: block; }
   border-radius: 4px;
   font: 700 12.5px/1 var(--ui-font);
 }
-.bench-status-badge.perfect { background: var(--signal-dim); color: var(--low); border: 1px solid var(--low); }
-.bench-status-badge.partial { background: var(--signal-dim); color: var(--high); border: 1px solid var(--high); }
-.bench-status-badge.zero { background: var(--signal-dim); color: var(--crit); border: 1px solid var(--crit); }
+.bench-status-badge.perfect { background: rgba(16, 185, 129, 0.16); color: var(--low); border: 1px solid var(--low); }
+.bench-status-badge.partial { background: rgba(255, 140, 42, 0.16); color: var(--high); border: 1px solid var(--high); }
+.bench-status-badge.zero { background: rgba(255, 77, 90, 0.16); color: var(--crit); border: 1px solid var(--crit); }
 
 
 /* Enhanced benchmark table responsiveness and selection bar */
