@@ -133,7 +133,7 @@ def build(source: Path, out: Path, limit: int = 0) -> Dict:
 
     payload = {
         "schema_version": 1,
-        "name": "OWASP Benchmark for Python v0.1",
+        "name": "OWASP BenchmarkPython 1000",
         "source": "https://github.com/OWASP-Benchmark/BenchmarkPython",
         "licence": "See the upstream repository",
         "match_mode": MATCH_MODE,

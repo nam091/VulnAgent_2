@@ -365,6 +365,11 @@ async function renderScan() {
         </div>
       </div>
 
+      <div style="margin-top:16px;margin-bottom:18px">
+        <label class="field" style="font-weight:700">Scan Title (optional)</label>
+        <input type="text" id="scan-custom-title" placeholder="Leave empty for standard title (e.g. source · mode by model)" autocomplete="off">
+      </div>
+
       <div class="controls">
         <button class="btn" id="go">Start scan</button>
         <select id="mode" style="width:auto">
@@ -537,6 +542,7 @@ async function submit(pane) {
   const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
     ? scanModelEl.value
     : null;
+  const customTitle = document.getElementById('scan-custom-title')?.value.trim() || '';
 
   button.disabled = true;
   msg.innerHTML = '<span class="spinner"></span>Submitting';
@@ -589,6 +595,16 @@ async function submit(pane) {
           mode, verify, concurrency, model: chosenModel, use_cache: useCache
         })
       });
+    }
+    if (customTitle && job && job.id) {
+      try {
+        await api(`/api/jobs/${job.id}/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: customTitle })
+        });
+        job.label = customTitle;
+      } catch (e) {}
     }
     location.hash = `#/job/${job.id}`;
   } catch (e) {
@@ -1383,26 +1399,52 @@ async function saveRenameFromModal(jobId) {
     return;
   }
 
-  if (saveBtn) saveBtn.disabled = true;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner"></span>Saving...';
+  }
 
+  let saveSuccess = false;
   try {
-    await api(`/api/jobs/${jobId}`, {
-      method: 'PATCH',
+    await api(`/api/jobs/${jobId}/rename`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: newLabel })
     });
+    saveSuccess = true;
+  } catch (err1) {
+    try {
+      await api(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel })
+      });
+      saveSuccess = true;
+    } catch (err2) {
+      alert('Failed to save title: ' + (err2.message || err1.message));
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Title';
+      }
+      return;
+    }
+  }
+
+  if (saveSuccess) {
     closeRenameModal();
+
+    if (currentLoadedJob && currentLoadedJob.id === jobId) {
+      currentLoadedJob.label = newLabel;
+    }
 
     const headerTitle = document.getElementById('job-title-header');
     if (headerTitle) {
       headerTitle.textContent = newLabel;
     }
-    if (location.hash === '#/jobs' || location.hash === '#/' || location.hash === '') {
-      route();
-    }
-  } catch (err) {
-    alert('Failed to save title: ' + err.message);
-    if (saveBtn) saveBtn.disabled = false;
+
+    // Refresh memory cache so all tables and lists update immediately
+    cachedBenchmarkAggregations = {};
+    await route();
   }
 }
 
@@ -2442,6 +2484,20 @@ function exportSuiteCSV(datasetKey) {
   URL.revokeObjectURL(url);
 }
 
+function toggleOwaspSpecTable() {
+  const container = document.getElementById('owasp-spec-table-body');
+  const btn = document.getElementById('btn-toggle-owasp-spec');
+  if (!container) return;
+  const isHidden = container.classList.contains('hide');
+  if (isHidden) {
+    container.classList.remove('hide');
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Specifications Table`;
+  } else {
+    container.classList.add('hide');
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> View Specifications Table (14 CWEs)`;
+  }
+}
+
 function renderOwaspOfficialSpecsCard() {
   const specs = [
     { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, sink: 'sqlite3.execute, cursor.execute (string formatting)' },
@@ -2478,19 +2534,25 @@ function renderOwaspOfficialSpecsCard() {
             Official OWASP Benchmark Ground-Truth Specifications
           </div>
           <p class="muted" style="margin:0;font-size:12.5px">
-            Authoritative testcase distribution officially published for the OWASP Benchmark for Python v0.1 corpus.
+            Authoritative testcase distribution officially published for the OWASP BenchmarkPython 1000 corpus.
           </p>
         </div>
-        <button type="button" class="btn ghost sm" onclick="copyOwaspSpecMarkdown()">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Specification Table
-        </button>
+        <div class="row" style="gap:8px">
+          <button type="button" class="btn sm" id="btn-toggle-owasp-spec" onclick="toggleOwaspSpecTable()">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>View Specifications Table (14 CWEs)</span>
+          </button>
+          <button type="button" class="btn ghost sm" onclick="copyOwaspSpecMarkdown()">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Specification Table
+          </button>
+        </div>
       </div>
 
       <div class="bench-grid" style="margin-bottom:18px">
         <div class="bench-metric-card neutral" style="padding:12px 16px">
           <div class="bench-metric-val" style="font-size:22px">100 / 1,230</div>
           <div class="bench-metric-label">Total Testcases</div>
-          <div class="bench-metric-sub">Benchmark100 / Benchmark1000</div>
+          <div class="bench-metric-sub">Benchmark 100 / Benchmark 1000</div>
         </div>
         <div class="bench-metric-card good" style="padding:12px 16px">
           <div class="bench-metric-val" style="font-size:22px">50 / 452</div>
@@ -2509,28 +2571,31 @@ function renderOwaspOfficialSpecsCard() {
         </div>
       </div>
 
-      <div class="bench-table-wrap">
-        <table class="bench-table">
-          <thead>
-            <tr>
-              <th style="width:100px">CWE ID</th>
-              <th class="wrap-cell">OWASP Vulnerability Category</th>
-              <th style="text-align:center;width:130px">Benchmark 100 (TP)</th>
-              <th style="text-align:center;width:140px">Benchmark 1000 (TP)</th>
-              <th class="wrap-cell">Primary Sink &amp; Detection Anchor</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-            <tr style="background:var(--raised);font-weight:700">
-              <td>TOTAL</td>
-              <td class="wrap-cell">ALL TESTCASES (VULNERABLE + CLEAN)</td>
-              <td style="text-align:center;color:var(--signal)">100 Files</td>
-              <td style="text-align:center;color:var(--signal)">1,230 Files</td>
-              <td class="wrap-cell muted" style="font-size:12px">Official OWASP Benchmark Ground Truth</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Collapsible Specifications Table Body (Hidden by default) -->
+      <div id="owasp-spec-table-body" class="hide" style="margin-top:14px;border-top:var(--border) solid var(--edge);padding-top:14px">
+        <div class="bench-table-wrap">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th style="width:100px">CWE ID</th>
+                <th class="wrap-cell">OWASP Vulnerability Category</th>
+                <th style="text-align:center;width:130px">Benchmark 100 (TP)</th>
+                <th style="text-align:center;width:140px">Benchmark 1000 (TP)</th>
+                <th class="wrap-cell">Primary Sink &amp; Detection Anchor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              <tr style="background:var(--raised);font-weight:700">
+                <td>TOTAL</td>
+                <td class="wrap-cell">ALL TESTCASES (VULNERABLE + CLEAN)</td>
+                <td style="text-align:center;color:var(--signal)">100 Files</td>
+                <td style="text-align:center;color:var(--signal)">1,230 Files</td>
+                <td class="wrap-cell muted" style="font-size:12px">Official OWASP Benchmark Ground Truth</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>`;
 }
@@ -2554,7 +2619,7 @@ async function copyOwaspSpecMarkdown() {
   md += `| **CWE-614** | Insecure Cookie | 0 | 24 | \`Set-Cookie\` missing \`Secure\` or \`HttpOnly\` flag |\n`;
   md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | Untrusted input placed into trusted session context |\n`;
   md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | *Sanitized/defensive implementations (FP evaluation)* |\n`;
-  md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **Official OWASP Benchmark Python v0.1 Corpus** |\n`;
+  md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **Official OWASP BenchmarkPython 1000 Corpus** |\n`;
 
   try {
     await navigator.clipboard.writeText(md);
@@ -2585,8 +2650,8 @@ async function renderBenchmarkCenter() {
     return;
   }
 
-  const b100Agg = aggregations.benchmark100 || { dataset_key: 'benchmark100', dataset_name: 'OWASP Benchmark 100 Selected Suite', total_ground_truth: 50, runs: [] };
-  const b1000Agg = aggregations.benchmark1000 || { dataset_key: 'benchmark1000', dataset_name: 'OWASP Benchmark 1000 Full Suite', total_ground_truth: 452, runs: [] };
+  const b100Agg = aggregations.benchmark100 || { dataset_key: 'benchmark100', dataset_name: 'OWASP BenchmarkPython 100', total_ground_truth: 50, runs: [] };
+  const b1000Agg = aggregations.benchmark1000 || { dataset_key: 'benchmark1000', dataset_name: 'OWASP BenchmarkPython 1000', total_ground_truth: 452, runs: [] };
 
   view.innerHTML = `
     <div class="page-head">
