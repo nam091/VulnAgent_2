@@ -477,7 +477,7 @@ select { width: auto; cursor: pointer; }
   border: var(--border) solid var(--edge); border-radius: var(--radius-sm);
   padding: 14px 18px; font: 400 13.5px/1.85 var(--data-font); color: var(--text-dim);
 }
-.log div::before { content: '▸ '; color: var(--text-faint); }
+.log div::before { content: '> '; color: var(--text-faint); }
 .log .t { color: var(--text-faint); margin-right: 12px; font-variant-numeric: tabular-nums; display: inline-block; min-width: 52px; font-size: 13px; }
 .cursor {
   display: inline-block; width: 8px; height: 15px; background: var(--signal);

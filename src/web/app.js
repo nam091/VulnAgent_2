@@ -296,7 +296,7 @@ async function renderScan() {
 
       <div id="pane-folder">
         <div class="dropzone" id="drop">
-          <div class="dropzone-icon">⬚</div>
+          <div class="dropzone-icon"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><polyline points="12 11 12 17"></polyline><polyline points="9 14 12 11 15 14"></polyline></svg></div>
           <div class="dropzone-main">Drop a folder here, or click to choose</div>
           <div class="dropzone-sub">Up to 400 files / 20 MB. Vendored directories are skipped automatically.</div>
         </div>
@@ -845,7 +845,7 @@ function paintJob(job) {
           Execution Timeline &amp; Event Logs (${job.events.length} events)
         </div>
         <div class="spacer"></div>
-        <span class="muted" style="font-size:12px">Click to expand/collapse logs ▾</span>
+        <span class="muted" style="font-size:12.5px">Toggle logs <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;margin-right:0"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
       </div>
       <div id="job-events-log-body" class="hide" style="margin-top:14px">
         <div class="log" style="max-height:320px;margin-top:0">
@@ -989,7 +989,7 @@ function progressCard(job) {
           const active = key === job.phase;
           const note = phaseNote(job, key);
           return `<span class="phase ${active ? 'active' : (done ? 'done' : '')}">
-            ${done ? `<svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><polyline points="20 6 9 17 4 12"></polyline></svg>` : (active ? '●' : '○')} ${label}
+            ${done ? `<svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><polyline points="20 6 9 17 4 12"></polyline></svg>` : (active ? `<svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="var(--signal)" stroke="none" style="margin-right:4px;vertical-align:-1px"><circle cx="12" cy="12" r="10"></circle></svg>` : `<svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-1px"><circle cx="12" cy="12" r="9"></circle></svg>`)} ${label}
             ${note ? `<br><span style="opacity:.75">${esc(note)}</span>` : ''}
           </span>`;
         }).join('')}
@@ -1089,7 +1089,7 @@ function findingCard(f, jobId = '') {
                     <span class="taint-desc">${esc(stepDesc)}</span>
                     <span class="taint-loc">
                       ${esc(stepFile)}:${stepLine}
-                      <span class="taint-code-badge">Code ▾</span>
+                      <span class="taint-code-badge"><svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>Code</span>
                     </span>
                   </div>
                   <div class="taint-step-code-box hide">
@@ -1218,7 +1218,7 @@ async function toggleTaintStepCode(stepEl) {
   const isHidden = box.classList.contains('hide');
   if (isHidden) {
     box.classList.remove('hide');
-    if (badge) badge.textContent = 'Code ▴';
+    if (badge) badge.classList.add('active');
     const pre = box.querySelector('pre');
     if (!pre) {
       const file = stepEl.dataset.file || '';
@@ -1237,7 +1237,7 @@ async function toggleTaintStepCode(stepEl) {
     }
   } else {
     box.classList.add('hide');
-    if (badge) badge.textContent = 'Code ▾';
+    if (badge) badge.classList.remove('active');
   }
 }
 
@@ -1977,7 +1977,7 @@ function renderConfigurationHistoryTabContent(job) {
   return `
     <div class="bench-header-box">
       <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:4px">
-        📊 Repeat Scan History &amp; Stochastic Model Variance Analysis
+        <svg class="svg-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Repeat Scan History &amp; Stochastic Model Variance Analysis
       </div>
       <p class="muted" style="margin:0;font-size:13px">
         Target: <b>${esc(h.target_source)}</b> · Mode: <b>${esc(h.mode_display)}</b> · Model: <b>${esc(h.model_display)}</b> (<code>${esc(h.model_id)}</code>) ·
@@ -2146,9 +2146,9 @@ function renderBenchmarkTabContent(job) {
         </div>
       </div>
       <div class="row muted" style="justify-content:space-between;font-size:11.5px">
-        <span style="color:var(--low)">■ True Positives: <b>${tp}</b> (${tpPct}%)</span>
-        <span style="color:var(--crit)">■ False Positives: <b>${fp}</b> (${fpPct}%)</span>
-        <span style="color:var(--text-faint)">■ False Negatives (Missed): <b>${fn}</b> (${fnPct}%)</span>
+        <span style="color:var(--low)"><svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-1px;margin-right:4px"><rect width="20" height="20" rx="3"></rect></svg>True Positives: <b>${tp}</b> (${tpPct}%)</span>
+        <span style="color:var(--crit)"><svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-1px;margin-right:4px"><rect width="20" height="20" rx="3"></rect></svg>False Positives: <b>${fp}</b> (${fpPct}%)</span>
+        <span style="color:var(--text-faint)"><svg class="svg-icon" width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-1px;margin-right:4px"><rect width="20" height="20" rx="3"></rect></svg>False Negatives (Missed): <b>${fn}</b> (${fnPct}%)</span>
       </div>
     </div>
 
@@ -2234,12 +2234,12 @@ function toggleSuiteMatrix(datasetKey) {
   const isHidden = container.classList.contains('hide');
   if (isHidden) {
     container.classList.remove('hide');
-    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Comparison Table ▴`;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Comparison Table`;
   } else {
     container.classList.add('hide');
     const selectedCount = (selectedBenchmarkRuns[datasetKey] || new Set()).size;
     const totalCount = (cachedBenchmarkAggregations[datasetKey]?.runs || []).length;
-    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${totalCount} selected) ▾`;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${totalCount} selected)`;
   }
 }
 
@@ -2307,7 +2307,7 @@ function updateSuiteComparisonView(datasetKey) {
   const btn = document.getElementById(`btn-toggle-matrix-${datasetKey}`);
   if (btn && container.classList.contains('hide')) {
     const selectedCount = (selectedBenchmarkRuns[datasetKey] || new Set()).size;
-    btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${agg.runs.length} selected) ▾`;
+    btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Compare Scans (${selectedCount}/${agg.runs.length} selected)`;
   }
 }
 
@@ -2512,7 +2512,7 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
         <div class="row" style="gap:8px">
           <button type="button" class="btn sm" id="btn-toggle-matrix-${esc(datasetKey)}" onclick="toggleSuiteMatrix('${esc(datasetKey)}')">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            <span>Compare Scans (${selectedCount}/${runs.length} selected) ▾</span>
+            <span>Compare Scans (${selectedCount}/${runs.length} selected)</span>
           </button>
         </div>
       </div>
