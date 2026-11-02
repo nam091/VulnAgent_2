@@ -637,7 +637,9 @@ async function renderJob(id, subtab) {
   }
 
   currentLoadedJob = job;
-  currentJobDetailTab = (subtab === 'benchmark' || location.hash.includes('/benchmark')) ? 'benchmark' : 'findings';
+  currentJobDetailTab = (subtab === 'benchmark' || location.hash.includes('/benchmark'))
+    ? 'benchmark'
+    : ((subtab === 'history' || location.hash.includes('/history')) ? 'history' : 'findings');
   paintJob(job);
   if (job.status === 'running' || job.status === 'queued') follow(id);
 }
@@ -646,20 +648,20 @@ function switchJobDetailTab(tab) {
   currentJobDetailTab = tab;
   const fTab = document.getElementById('job-tab-findings-content');
   const bTab = document.getElementById('job-tab-benchmark-content');
+  const hTab = document.getElementById('job-tab-history-content');
   const tabBtns = document.querySelectorAll('#job-detail-tabs .tab');
-  if (fTab && bTab) {
-    if (tab === 'benchmark') {
-      fTab.classList.add('hide');
-      bTab.classList.remove('hide');
-      if (tabBtns[0]) tabBtns[0].classList.remove('on');
-      if (tabBtns[1]) tabBtns[1].classList.add('on');
-    } else {
-      fTab.classList.remove('hide');
-      bTab.classList.add('hide');
-      if (tabBtns[0]) tabBtns[0].classList.add('on');
-      if (tabBtns[1]) tabBtns[1].classList.remove('on');
-    }
-  }
+
+  if (fTab) fTab.classList.toggle('hide', tab !== 'findings');
+  if (bTab) bTab.classList.toggle('hide', tab !== 'benchmark');
+  if (hTab) hTab.classList.toggle('hide', tab !== 'history');
+
+  tabBtns.forEach(btn => {
+    btn.classList.toggle('on',
+      (tab === 'findings' && btn.textContent.includes('Findings')) ||
+      (tab === 'benchmark' && btn.textContent.includes('Benchmark')) ||
+      (tab === 'history' && btn.textContent.includes('Run History'))
+    );
+  });
 }
 
 function paintJob(job) {
@@ -668,6 +670,8 @@ function paintJob(job) {
 
   const bench = job.benchmark_evaluation;
   const isBenchSupported = bench && bench.supported;
+  const history = job.configuration_history;
+  const hasHistory = history && history.has_multiple_runs;
 
   function getTrustRank(f) {
     const isConfirmed = f.source === 'confirmed' || f.corroborated;
@@ -707,14 +711,19 @@ function paintJob(job) {
         </button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
-      ${isBenchSupported ? `
+      ${(isBenchSupported || hasHistory) ? `
       <div class="tabs" id="job-detail-tabs" style="margin-top:16px;margin-bottom:0">
         <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" onclick="switchJobDetailTab('findings')">
           Findings &amp; Code Analysis (${totalFindings})
         </button>
+        ${isBenchSupported ? `
         <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
-        </button>
+        </button>` : ''}
+        ${hasHistory ? `
+        <button type="button" class="tab ${currentJobDetailTab === 'history' ? 'on' : ''}" onclick="switchJobDetailTab('history')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Run History &amp; Model Variance (${history.total_runs} runs)
+        </button>` : ''}
       </div>` : ''}
     </div>
     <div id="job-body"></div>`;
@@ -905,13 +914,19 @@ function paintJob(job) {
 
   const benchmarkTabHtml = isBenchSupported ? renderBenchmarkTabContent(job) : '';
 
+  const historyTabHtml = hasHistory ? renderConfigurationHistoryTabContent(job) : '';
+
   body.innerHTML = `
     <div id="job-tab-findings-content" class="${currentJobDetailTab === 'findings' ? '' : 'hide'}">
       ${findingsTabHtml}
     </div>
     <div id="job-tab-benchmark-content" class="${currentJobDetailTab === 'benchmark' ? '' : 'hide'}">
       ${benchmarkTabHtml}
-    </div>`;
+    </div>
+    ${hasHistory ? `
+    <div id="job-tab-history-content" class="${currentJobDetailTab === 'history' ? '' : 'hide'}">
+      ${historyTabHtml}
+    </div>` : ''}`;
 
   const searchInput = body.querySelector('#finding-search-input');
   if (searchInput) {
@@ -1892,6 +1907,147 @@ async function testConnection() {
 }
 
 /* ---------------- benchmark evaluation view & center ---------------- */
+
+
+function renderConfigurationHistoryTabContent(job) {
+  const h = job.configuration_history;
+  if (!h || !h.runs || !h.runs.length) {
+    return `<div class="card muted">No history recorded for this configuration.</div>`;
+  }
+
+  const va = h.variance_analysis || {};
+  const spread = va.findings_spread || {};
+  const consistencyRate = va.consistency_rate_pct || 100.0;
+  const hallucinationRate = va.hallucination_rate_pct || 0.0;
+
+  const runsRows = (h.runs || []).map(r => {
+    const isCurrent = r.is_current;
+    const bm = r.benchmark || {};
+    const hasBm = !!r.benchmark;
+    return `
+      <tr style="${isCurrent ? 'background:rgba(59,130,246,0.08);border-left:3px solid var(--signal);' : ''}">
+        <td style="font-weight:700;text-align:center">Run #${r.run_index}</td>
+        <td class="wrap-cell">
+          <div style="font-weight:700">
+            <a href="#/job/${esc(r.id)}" style="color:var(--text);text-decoration:none">${esc(r.label)}</a>
+            ${isCurrent ? `<span class="bench-status-badge perfect" style="margin-left:6px;font-size:10px">Active View</span>` : ''}
+          </div>
+          <div class="muted" style="font-size:11px">${ago(r.finished_at || r.created_at)} · ID: <code>${esc(r.id)}</code></div>
+        </td>
+        <td style="text-align:center">
+          <span class="pill ${r.status === 'done' ? 'LOW' : 'CRITICAL'}" style="font-size:9.5px">${esc(r.status)}</span>
+        </td>
+        <td style="font-weight:700;text-align:center">${r.findings_count}</td>
+        ${hasBm ? `
+          <td style="color:var(--low);font-weight:700;text-align:center">${bm.tp}</td>
+          <td style="color:${bm.fp > 0 ? 'var(--crit)' : 'var(--text-faint)'};font-weight:700;text-align:center">${bm.fp}</td>
+          <td style="color:${bm.fn > 0 ? 'var(--text-dim)' : 'var(--text-faint)'};text-align:center">${bm.fn}</td>
+          <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${(bm.precision * 100).toFixed(1)}%</td>
+          <td style="font-variant-numeric:tabular-nums;font-weight:700;text-align:center">${(bm.recall * 100).toFixed(1)}%</td>
+          <td style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--signal);text-align:center">${(bm.f1 || 0).toFixed(4)}</td>
+        ` : `
+          <td colspan="6" class="muted" style="text-align:center;font-size:11px">Ad-hoc Scan (Non-benchmark)</td>
+        `}
+        <td style="text-align:center">
+          <div class="row" style="gap:4px;justify-content:center">
+            <a class="btn ghost sm" href="#/job/${esc(r.id)}" style="padding:4px 8px">View</a>
+            <button class="btn-edit-label" title="Rename run" onclick="openRenameModal('${esc(r.id)}', '${esc(r.label)}', event)">
+              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+            <button class="btn-del" title="Delete this run" onclick="deleteJob('${esc(r.id)}', event)">
+              <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const stableItems = (va.stable_findings || []).map(f => `
+    <li style="margin-bottom:6px">
+      <code>${esc(f.file)}:${f.line}</code> — <b>${esc(f.type)}</b> (<code>${esc(f.cwe)}</code>)
+      <span class="bench-status-badge perfect" style="font-size:10px;margin-left:6px">100% Stable</span>
+    </li>`).join('');
+
+  const intermittentItems = (va.intermittent_findings || []).map(f => `
+    <li style="margin-bottom:6px">
+      <code>${esc(f.file)}:${f.line}</code> — <b>${esc(f.type)}</b> (<code>${esc(f.cwe)}</code>)
+      <span class="bench-status-badge partial" style="font-size:10px;margin-left:6px">Appeared in ${f.runs_count}/${h.total_runs} runs (${f.presence_rate_pct}%)</span>
+    </li>`).join('');
+
+  return `
+    <div class="bench-header-box">
+      <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:4px">
+        📊 Repeat Scan History &amp; Stochastic Model Variance Analysis
+      </div>
+      <p class="muted" style="margin:0;font-size:13px">
+        Target: <b>${esc(h.target_source)}</b> · Mode: <b>${esc(h.mode_display)}</b> · Model: <b>${esc(h.model_display)}</b> (<code>${esc(h.model_id)}</code>) ·
+        <b>${h.total_runs}</b> repeat scans executed with identical configuration.
+      </p>
+    </div>
+
+    <div class="bench-grid">
+      <div class="bench-metric-card good">
+        <div class="bench-metric-val">${consistencyRate}%</div>
+        <div class="bench-metric-label">Model Consistency Rate</div>
+        <div class="bench-metric-sub">${va.stable_findings_count || 0} findings reproducible across 100% of runs</div>
+      </div>
+      <div class="bench-metric-card ${hallucinationRate > 20 ? 'warn' : 'neutral'}">
+        <div class="bench-metric-val">${hallucinationRate}%</div>
+        <div class="bench-metric-label">Hallucination Variance</div>
+        <div class="bench-metric-sub">${va.intermittent_findings_count || 0} fluctuating findings across runs</div>
+      </div>
+      <div class="bench-metric-card neutral">
+        <div class="bench-metric-val">${spread.min || 0} – ${spread.max || 0}</div>
+        <div class="bench-metric-label">Findings Spread</div>
+        <div class="bench-metric-sub">Average: ${spread.avg || 0} (Delta: &plusmn;${spread.delta || 0})</div>
+      </div>
+      <div class="bench-metric-card neutral">
+        <div class="bench-metric-val">${h.total_runs}</div>
+        <div class="bench-metric-label">Total Repeat Runs</div>
+        <div class="bench-metric-sub">Recorded in local registry</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">Comparative Performance Across Repeat Runs</div>
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th style="width:70px;text-align:center">Run</th>
+              <th class="wrap-cell">Scan Title &amp; ID</th>
+              <th style="text-align:center;width:80px">Status</th>
+              <th style="text-align:center;width:80px">Findings</th>
+              <th style="color:var(--low);text-align:center">TP</th>
+              <th style="color:var(--crit);text-align:center">FP</th>
+              <th style="text-align:center">FN</th>
+              <th style="text-align:center">Precision</th>
+              <th style="text-align:center">Recall</th>
+              <th style="text-align:center">F1-Score</th>
+              <th style="text-align:center;width:120px">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${runsRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Stable Findings (${va.stable_findings_count || 0})</div>
+        <p class="muted" style="margin-bottom:12px">Reproducible findings detected in 100% of all repeated runs (highest reliability):</p>
+        ${stableItems ? `<ul style="max-height:260px;overflow-y:auto;padding-left:18px;font-size:12.5px">${stableItems}</ul>` : `<div class="muted">No findings appeared in 100% of runs.</div>`}
+      </div>
+      <div class="card">
+        <div class="card-title">Fluctuating / Hallucinated Findings (${va.intermittent_findings_count || 0})</div>
+        <p class="muted" style="margin-bottom:12px">Findings that only appeared in a subset of runs (model stochastic variance / độ ảo):</p>
+        ${intermittentItems ? `<ul style="max-height:260px;overflow-y:auto;padding-left:18px;font-size:12.5px">${intermittentItems}</ul>` : `<div class="muted" style="color:var(--low)">Zero variance recorded! All findings are 100% reproducible.</div>`}
+      </div>
+    </div>`;
+}
+
 
 function renderBenchmarkTabContent(job) {
   const bench = job.benchmark_evaluation;

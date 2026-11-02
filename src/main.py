@@ -413,26 +413,59 @@ def _resolve_mode(mode: str, verify: bool = False) -> tuple[bool, bool, bool]:
         return True, True, True
 
 
+MODELS_FILE = Path(".vulnagent-models.json")
+
+
+def load_model_profiles() -> List[Dict[str, Any]]:
+    if not MODELS_FILE.is_file():
+        default_profiles = [
+            {"id": "glm53flash9r", "name": "GLM-5.3 Flash", "model": "cbai/glm-5.3-flash", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "beam", "name": "Beam Free", "model": "cmc/reflection/beam:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": True},
+            {"id": "deepseek", "name": "DeepSeek V4.1 Flash", "model": "cbai/deepseek-v4.1-flash-sg", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "solar", "name": "Solar Mini", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "gemma4", "name": "Gemma4", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "luna", "name": "gpt-5.6-luna", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
+            {"id": "glm53proxy", "name": "GLM-5.3 Proxy", "model": "cbai/glm-5.3", "base_url": "http://localhost:20128/v1", "api_key": "your-proxy-secret", "is_default": False},
+        ]
+        save_model_profiles(default_profiles)
+        return default_profiles
+    try:
+        data = json.loads(MODELS_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, list) and data:
+            return data
+    except Exception:
+        pass
+    return []
+
+
+def save_model_profiles(profiles: List[Dict[str, Any]]) -> None:
+    try:
+        MODELS_FILE.write_text(json.dumps(profiles, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logging.warning(f"Could not persist model profiles: {e}")
+
+
+def resolve_model_profile(identifier: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not identifier:
+        return None
+    ident = str(identifier).strip().lower()
+    for p in load_model_profiles():
+        if p.get("id", "").lower() == ident or p.get("model", "").lower() == ident or p.get("name", "").lower() == ident:
+            return p
+    return None
+
+
 def format_model_short_name(raw_model: Optional[str]) -> str:
     if not raw_model:
         return "beam"
-    m = raw_model.strip().lower()
-    if "deepseek" in m:
-        return "deepseek"
-    if "glm-5.3-flash" in m or "glm53flash" in m:
-        return "glm-5.3-flash"
-    if "glm-5.3" in m or "glm53" in m:
-        return "glm-5.3"
-    if "beam" in m:
-        return "beam"
-    if "solar" in m:
-        return "solar-mini"
-    if "gemma4" in m or "gemma" in m:
-        return "gemma4"
-    if "luna" in m:
-        return "gpt-5.6-luna"
-    leaf = raw_model.split("/")[-1].split(":")[0]
-    return leaf.replace("-free", "") or "ai"
+    prof = resolve_model_profile(raw_model)
+    if prof and prof.get("name"):
+        return prof["name"]
+    m = raw_model.strip()
+    if "/" in m:
+        leaf = m.split("/")[-1].split(":")[0]
+        return leaf.replace("-free", "") or m
+    return m
 
 
 def format_mode_display(mode: Optional[str], verify: Optional[bool] = None) -> str:
@@ -634,8 +667,17 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         )
 
     model_param = form.get("model")
-    raw_model = str(model_param).strip() if (model_param and str(model_param).strip() != "custom") else os.getenv("OPENAI_MODEL")
-    chosen_model = normalize_model_identifier(raw_model)
+    prof = resolve_model_profile(model_param)
+    if prof:
+        chosen_model = prof["model"]
+        chosen_base_url = prof.get("base_url")
+        chosen_api_key = prof.get("api_key")
+    else:
+        raw_m = str(model_param).strip() if (model_param and str(model_param).strip() != "custom") else os.getenv("OPENAI_MODEL")
+        chosen_model = normalize_model_identifier(raw_m)
+        chosen_base_url = os.getenv("OPENAI_BASE_URL")
+        chosen_api_key = os.getenv("OPENAI_API_KEY")
+
     src_name = Path(root_name or "upload").stem or (root_name or "upload")
     job_label = build_job_standard_label(src_name, mode, chosen_model, verify)
     job = store.create(
@@ -647,6 +689,8 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "skipped_oversized": oversized,
             "source_name": src_name,
             "model": chosen_model,
+            "base_url": chosen_base_url,
+            "api_key": chosen_api_key,
             "use_cache": use_cache,
         },
         workspace=str(workspace),
@@ -658,6 +702,8 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         concurrency=max(1, min(concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        base_url=chosen_base_url,
+        api_key=chosen_api_key,
         use_cache=use_cache,
     )
     return _start(job, options, background)
@@ -694,8 +740,17 @@ async def scan_snippet(
     (workspace / f"snippet{suffix}").write_text(request.code, encoding="utf-8")
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
-    raw_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
-    chosen_model = normalize_model_identifier(raw_model)
+    prof = resolve_model_profile(request.model)
+    if prof:
+        chosen_model = prof["model"]
+        chosen_base_url = prof.get("base_url")
+        chosen_api_key = prof.get("api_key")
+    else:
+        raw_m = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+        chosen_model = normalize_model_identifier(raw_m)
+        chosen_base_url = os.getenv("OPENAI_BASE_URL")
+        chosen_api_key = os.getenv("OPENAI_API_KEY")
+
     src_name = _safe_label(request.filename) or "snippet.py"
     job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
@@ -705,6 +760,8 @@ async def scan_snippet(
             "mode": request.mode, "verify": verify, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "base_url": chosen_base_url,
+            "api_key": chosen_api_key,
             "use_cache": request.use_cache,
         },
         workspace=str(workspace),
@@ -716,6 +773,8 @@ async def scan_snippet(
         concurrency=max(1, min(getattr(request, "concurrency", 4), 50)),
         verify=verify,
         model=chosen_model,
+        base_url=chosen_base_url,
+        api_key=chosen_api_key,
         use_cache=request.use_cache,
     )
     return _start(job, options, background)
@@ -772,8 +831,17 @@ async def scan_repository(
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     repo_name = url.rstrip("/").split("/")[-1]
     src_name = f"{repo_name}@{request.branch}"
-    raw_model = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
-    chosen_model = normalize_model_identifier(raw_model)
+    prof = resolve_model_profile(request.model)
+    if prof:
+        chosen_model = prof["model"]
+        chosen_base_url = prof.get("base_url")
+        chosen_api_key = prof.get("api_key")
+    else:
+        raw_m = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+        chosen_model = normalize_model_identifier(raw_m)
+        chosen_base_url = os.getenv("OPENAI_BASE_URL")
+        chosen_api_key = os.getenv("OPENAI_API_KEY")
+
     job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
     job = store.create(
         kind="repository",
@@ -782,6 +850,8 @@ async def scan_repository(
             "mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "base_url": chosen_base_url,
+            "api_key": chosen_api_key,
             "use_cache": request.use_cache,
         },
         workspace=str(workspace),
@@ -795,6 +865,8 @@ async def scan_repository(
         max_llm_files=request.max_files,
         verify=verify,
         model=chosen_model,
+        base_url=chosen_base_url,
+        api_key=chosen_api_key,
         use_cache=request.use_cache,
     )
     options.progress = lambda event: store.record_event(job, event)
@@ -844,8 +916,15 @@ async def scan_benchmark_preset(
 
     use_semgrep, use_llm, verify = _resolve_mode(request.mode, request.verify)
     prof = resolve_model_profile(request.model)
-    raw_model = prof["model"] if prof else (request.model or os.getenv("OPENAI_MODEL"))
-    chosen_model = normalize_model_identifier(raw_model)
+    if prof:
+        chosen_model = prof["model"]
+        chosen_base_url = prof.get("base_url")
+        chosen_api_key = prof.get("api_key")
+    else:
+        raw_m = str(request.model).strip() if (request.model and str(request.model).strip() != "custom") else os.getenv("OPENAI_MODEL")
+        chosen_model = normalize_model_identifier(raw_m)
+        chosen_base_url = os.getenv("OPENAI_BASE_URL")
+        chosen_api_key = os.getenv("OPENAI_API_KEY")
 
     job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify)
     job = store.create(
@@ -858,6 +937,8 @@ async def scan_benchmark_preset(
             "target": str(target_dir),
             "source_name": suite_name,
             "model": chosen_model,
+            "base_url": chosen_base_url,
+            "api_key": chosen_api_key,
             "use_cache": request.use_cache,
         },
         workspace=str(target_dir),
@@ -869,6 +950,8 @@ async def scan_benchmark_preset(
         concurrency=max(1, min(request.concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        base_url=chosen_base_url,
+        api_key=chosen_api_key,
         use_cache=request.use_cache,
     )
     return _start(job, options, background)
@@ -887,6 +970,137 @@ async def list_jobs(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
     """
 
     return {"jobs": [job.as_summary() for job in store.list(limit=limit)]}
+
+
+
+def compute_scan_configuration_history(job: Any) -> Dict[str, Any]:
+    """
+    Find all jobs run with the same dataset/target, same mode, and same model.
+    Computes comparative metrics, finding overlap, and stochastic variance / hallucination rate.
+    """
+    job_id = getattr(job, "id", "")
+    job_options = getattr(job, "options", {}) or {}
+    job_label = getattr(job, "label", "") or ""
+
+    target_src = (
+        job_options.get("source_name")
+        or (job_label.split(" · ")[0] if " · " in job_label else "")
+        or Path(str(job_options.get("target", ""))).stem
+        or job_label
+    )
+    mode = str(job_options.get("mode", "deep-verify")).lower()
+    raw_model = str(job_options.get("model") or os.getenv("OPENAI_MODEL") or "default")
+    model_id = normalize_model_identifier(raw_model) or raw_model
+
+    all_jobs = store.list(limit=500)
+    matching_runs = []
+
+    for other in all_jobs:
+        if other.status not in ("done", "failed"):
+            continue
+        o_opts = other.options or {}
+        o_label = other.label or ""
+        o_src = (
+            o_opts.get("source_name")
+            or (o_label.split(" · ")[0] if " · " in o_label else "")
+            or Path(str(o_opts.get("target", ""))).stem
+            or o_label
+        )
+        o_mode = str(o_opts.get("mode", "deep-verify")).lower()
+        o_raw_model = str(o_opts.get("model") or os.getenv("OPENAI_MODEL") or "default")
+        o_model = normalize_model_identifier(o_raw_model) or o_raw_model
+
+        if o_src == target_src and o_mode == mode and o_model == model_id:
+            matching_runs.append(other)
+
+    matching_runs.sort(key=lambda j: j.created_at or "")
+
+    runs_summary = []
+    finding_sets = []
+    all_findings_map = {}
+
+    for idx, r in enumerate(matching_runs, start=1):
+        r_result = r.result or {}
+        r_findings = r_result.get("findings", [])
+        bench_eval = evaluate_job_benchmark_data(r) if r.status == "done" and r.result else {}
+
+        run_sig_set = set()
+        for f in r_findings:
+            f_file = Path(f.get("file", "")).name
+            f_cwe = str(f.get("cwe") or f.get("cwe_id") or "CWE-Unknown").upper()
+            f_line = f.get("start_line") or f.get("line") or (f.get("location", {}).get("line_number") if isinstance(f.get("location"), dict) else 0)
+            sig = f"{f_file}::{f_cwe}::{f_line}"
+            run_sig_set.add(sig)
+            if sig not in all_findings_map:
+                all_findings_map[sig] = {
+                    "file": f_file,
+                    "cwe": f_cwe,
+                    "line": f_line,
+                    "type": f.get("type", "Vulnerability"),
+                    "severity": f.get("severity", "MEDIUM"),
+                    "seen_in_runs": []
+                }
+            all_findings_map[sig]["seen_in_runs"].append(r.id)
+
+        finding_sets.append(run_sig_set)
+
+        runs_summary.append({
+            "run_index": idx,
+            "id": r.id,
+            "label": r.label,
+            "status": r.status,
+            "created_at": r.created_at,
+            "finished_at": r.finished_at,
+            "findings_count": len(r_findings),
+            "is_current": (r.id == job_id),
+            "benchmark": bench_eval.get("metrics") if bench_eval.get("supported") else None,
+        })
+
+    total_runs = len(matching_runs)
+    stable_findings = []
+    intermittent_findings = []
+
+    for sig, item in all_findings_map.items():
+        seen_count = len(item["seen_in_runs"])
+        item_copy = {**item, "runs_count": seen_count, "presence_rate_pct": round((seen_count / total_runs) * 100, 1) if total_runs else 100.0}
+        if seen_count == total_runs:
+            stable_findings.append(item_copy)
+        else:
+            intermittent_findings.append(item_copy)
+
+    total_unique = len(all_findings_map)
+    consistency_rate = round((len(stable_findings) / total_unique) * 100, 1) if total_unique else 100.0
+    variance_rate = round(100.0 - consistency_rate, 1)
+
+    counts_list = [r["findings_count"] for r in runs_summary]
+    min_count = min(counts_list) if counts_list else 0
+    max_count = max(counts_list) if counts_list else 0
+    avg_count = round(sum(counts_list) / len(counts_list), 1) if counts_list else 0
+
+    return {
+        "has_multiple_runs": total_runs > 1,
+        "total_runs": total_runs,
+        "target_source": target_src,
+        "mode_display": format_mode_display(mode, job_options.get("verify")),
+        "model_display": format_model_short_name(model_id),
+        "model_id": model_id,
+        "runs": runs_summary,
+        "variance_analysis": {
+            "consistency_rate_pct": consistency_rate,
+            "hallucination_rate_pct": variance_rate,
+            "total_unique_findings": total_unique,
+            "stable_findings_count": len(stable_findings),
+            "intermittent_findings_count": len(intermittent_findings),
+            "findings_spread": {
+                "min": min_count,
+                "max": max_count,
+                "avg": avg_count,
+                "delta": max_count - min_count
+            },
+            "stable_findings": stable_findings[:40],
+            "intermittent_findings": intermittent_findings[:40],
+        }
+    }
 
 
 @app.get("/api/jobs/{job_id}")
@@ -909,12 +1123,15 @@ async def get_job(job_id: str) -> Dict[str, Any]:
     if job.status == "done" and job.result:
         bench_eval = evaluate_job_benchmark_data(job)
 
+    history_eval = compute_scan_configuration_history(job)
+
     return {
         **job.as_summary(),
         "options": job.options,
         "result": job.result,
         "events": job.events[-80:],
         "benchmark_evaluation": bench_eval,
+        "configuration_history": history_eval,
     }
 
 
@@ -1149,6 +1366,18 @@ async def list_benchmark_evaluations() -> Dict[str, Any]:
         "benchmark_jobs": bench_jobs,
         "aggregations": aggregations,
     }
+
+
+
+@app.get("/api/jobs/{job_id}/history")
+async def get_job_history(job_id: str) -> Dict[str, Any]:
+    """
+    Get run history and variance analysis for this job's scan configuration.
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+    return compute_scan_configuration_history(job)
 
 
 @app.delete("/api/jobs/{job_id}")
@@ -1427,48 +1656,6 @@ async def test_settings_connection(req: SettingsRequest) -> Dict[str, Any]:
             "latency_sec": round(dur, 2),
             "message": f"Connection failed ({dur:.2f}s): {str(e)}"
         }
-
-
-MODELS_FILE = Path(".vulnagent-models.json")
-
-
-def load_model_profiles() -> List[Dict[str, Any]]:
-    if not MODELS_FILE.is_file():
-        default_profiles = [
-            {"id": "glm53flash9r", "name": "GLM-5.3 Flash", "model": "oc/glm-5.3-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": True},
-            {"id": "beam", "name": "Beam Free", "model": "cmc/reflection/beam:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "deepseek", "name": "DeepSeek V4.1 Flash", "model": "oc/deepseek-v4.1-flash-free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "solar", "name": "Solar Mini", "model": "nous/upstage/solar-mini4:free", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "gemma4", "name": "Gemma4", "model": "ollama/gemma4", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "luna", "name": "gpt-5.6-luna", "model": "cx/gpt-5.6-luna", "base_url": "http://127.0.0.1:20128/v1", "api_key": "sk-d8d38c4dbe7182c6-5wpch9-c84f2f0a", "is_default": False},
-            {"id": "glm53proxy", "name": "GLM-5.3 Proxy", "model": "glm-5.3", "base_url": "http://localhost:8080/v1", "api_key": "your-proxy-secret", "is_default": False},
-        ]
-        save_model_profiles(default_profiles)
-        return default_profiles
-    try:
-        data = json.loads(MODELS_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, list) and data:
-            return data
-    except Exception:
-        pass
-    return []
-
-
-def save_model_profiles(profiles: List[Dict[str, Any]]) -> None:
-    try:
-        MODELS_FILE.write_text(json.dumps(profiles, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:
-        logging.warning(f"Could not persist model profiles: {e}")
-
-
-def resolve_model_profile(identifier: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not identifier:
-        return None
-    ident = str(identifier).strip().lower()
-    for p in load_model_profiles():
-        if p.get("id", "").lower() == ident or p.get("model", "").lower() == ident:
-            return p
-    return None
 
 
 @app.get("/api/models")

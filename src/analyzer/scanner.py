@@ -61,6 +61,8 @@ class ScanOptions:
         min_confidence: Optional[float] = None,
         offline: bool = False,
         model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -80,6 +82,8 @@ class ScanOptions:
         self.min_confidence = min_confidence
         self.offline = offline
         self.model = model
+        self.base_url = base_url
+        self.api_key = api_key
 
         if suppress_unconfirmed_rules is None:
             self.suppress_unconfirmed_rules = True if verify else False
@@ -253,24 +257,28 @@ class ScanResult:
 
 def normalize_model_identifier(model_str: Optional[str]) -> Optional[str]:
     """
-    Map shorthand or proxy model names to exact 9Router provider model IDs.
-    Prevents 404 model_not_found errors when requesting models without provider prefixes.
+    Preserve user-configured model strings as-is.
+    Only map bare shorthand keywords (with no provider slash '/') to their default provider ID.
     """
     if not model_str:
         return None
     m = model_str.strip()
+    if "/" in m:
+        # Full provider/model ID (e.g. 'cbai/deepseek-v4.1-flash-sg', 'cbai/glm-5.3-flash', 'cmc/reflection/beam:free')
+        # Preserve exact string as configured by the user without overriding to oc/!
+        return m
     m_lower = m.lower()
-    if m_lower in ("glm-5.3", "glm-5.3-flash", "glm53", "glm53flash", "oc/glm-5.3-flash", "glm-5.3 proxy", "glm-5.3 flash"):
+    if m_lower in ("glm-5.3", "glm-5.3-flash", "glm53", "glm53flash", "glm"):
         return "oc/glm-5.3-flash-free"
-    if m_lower in ("deepseek", "deepseek-v4.1", "deepseek-v4.1-flash", "oc/deepseek-v4.1-flash", "deepseek v4.1 flash", "cbai/deepseek-v4.1-flash-sg"):
+    if m_lower in ("deepseek", "deepseek-v4.1", "deepseek-v4.1-flash"):
         return "oc/deepseek-v4.1-flash-free"
-    if m_lower in ("beam", "beam free", "reflection/beam", "cmc/reflection/beam"):
+    if m_lower in ("beam", "beam free"):
         return "cmc/reflection/beam:free"
-    if m_lower in ("solar", "solar-mini", "solar mini", "upstage/solar-mini4:free"):
+    if m_lower in ("solar", "solar-mini", "solar mini"):
         return "nous/upstage/solar-mini4:free"
-    if m_lower in ("gemma4", "gemma", "gemma:latest"):
+    if m_lower in ("gemma4", "gemma"):
         return "ollama/gemma4"
-    if m_lower in ("luna", "gpt-5.6-luna", "codex/gpt-5.6-luna", "codex luna"):
+    if m_lower in ("luna", "gpt-5.6-luna"):
         return "cx/gpt-5.6-luna"
     return m
 
@@ -292,6 +300,17 @@ class Scanner:
             norm_model = normalize_model_identifier(options.model)
             self.analyzer.ai_client.openai_default_model = norm_model
             self.options.model = norm_model
+
+        if getattr(options, "base_url", None) or getattr(options, "api_key", None):
+            client_kwargs: Dict[str, Any] = {
+                "api_key": getattr(options, "api_key", None) or os.getenv("OPENAI_API_KEY", "")
+            }
+            if getattr(options, "base_url", None):
+                client_kwargs["base_url"] = options.base_url
+            else:
+                client_kwargs["base_url"] = os.getenv("OPENAI_BASE_URL")
+            import openai
+            self.analyzer.ai_client._openai_client = openai.Client(**client_kwargs)
         semgrep_kw = {}
         if options.semgrep_configs:
             semgrep_kw["configs"] = options.semgrep_configs
