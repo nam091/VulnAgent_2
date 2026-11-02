@@ -232,16 +232,115 @@ const emptyState = (title, sub) =>
    <div style="font-weight:600;color:var(--fg-dim)">${esc(title)}</div>
    <div style="font-size:13px;margin-top:5px">${esc(sub)}</div></div>`;
 
-function jobRow(job) {
+let isDraggingJob = false;
+let draggedJobId = null;
+
+function onJobRowClick(jobId, e) {
+  if (isDraggingJob) return;
+  if (e.target.closest('button') || e.target.closest('.job-drag-handle') || e.target.closest('a')) {
+    return;
+  }
+  location.hash = `#/job/${jobId}`;
+}
+
+function onJobDragStart(e, jobId) {
+  isDraggingJob = true;
+  draggedJobId = jobId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', jobId);
+  const card = e.currentTarget;
+  setTimeout(() => {
+    if (card) card.classList.add('dragging');
+  }, 0);
+}
+
+function onJobDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget;
+  if (!card || card.dataset.jobId === draggedJobId) return;
+
+  const rect = card.getBoundingClientRect();
+  const relY = e.clientY - rect.top;
+  const isTop = relY < rect.height / 2;
+
+  card.classList.toggle('drag-over-top', isTop);
+  card.classList.toggle('drag-over-bottom', !isTop);
+}
+
+function onJobDragLeave(e) {
+  const card = e.currentTarget;
+  if (card) {
+    card.classList.remove('drag-over-top', 'drag-over-bottom');
+  }
+}
+
+async function onJobDrop(e, targetJobId) {
+  e.preventDefault();
+  e.stopPropagation();
+  const card = e.currentTarget;
+  if (card) {
+    card.classList.remove('drag-over-top', 'drag-over-bottom');
+  }
+
+  if (!draggedJobId || draggedJobId === targetJobId) return;
+
+  const container = document.getElementById('jobs-list-container');
+  if (!container) return;
+
+  const jobElements = [...container.querySelectorAll('.job[data-job-id]')];
+  let orderedIds = jobElements.map(el => el.dataset.jobId);
+
+  const draggedIdx = orderedIds.indexOf(draggedJobId);
+  const targetIdx = orderedIds.indexOf(targetJobId);
+  if (draggedIdx === -1 || targetIdx === -1) return;
+
+  orderedIds.splice(draggedIdx, 1);
+  const rect = card.getBoundingClientRect();
+  const relY = e.clientY - rect.top;
+  const insertBefore = relY < rect.height / 2;
+  const newTargetIdx = orderedIds.indexOf(targetJobId);
+  orderedIds.splice(insertBefore ? newTargetIdx : newTargetIdx + 1, 0, draggedJobId);
+
+  try {
+    localStorage.setItem('vulnagent-jobs-order', JSON.stringify(orderedIds));
+  } catch (err) {}
+
+  await renderJobs();
+}
+
+function onJobDragEnd(e) {
+  setTimeout(() => { isDraggingJob = false; }, 80);
+  document.querySelectorAll('.job').forEach(el => {
+    el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+  });
+}
+
+function jobRow(job, isDraggable = true) {
   const counts = job.counts || {};
   const badges = SEV_ORDER.filter(s => counts[s])
     .map(s => `<span class="pill ${s}">${counts[s]}</span>`).join(' ');
   return `
-    <div class="job" onclick="location.hash='#/job/${esc(job.id)}'">
+    <div class="job" ${isDraggable ? 'draggable="true"' : ''}
+         data-job-id="${esc(job.id)}"
+         onclick="onJobRowClick('${esc(job.id)}', event)"
+         ondragstart="onJobDragStart(event, '${esc(job.id)}')"
+         ondragover="onJobDragOver(event)"
+         ondragleave="onJobDragLeave(event)"
+         ondrop="onJobDrop(event, '${esc(job.id)}')"
+         ondragend="onJobDragEnd(event)">
+      ${isDraggable ? `
+      <span class="job-drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">
+        <svg width="10" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <circle cx="8" cy="4" r="2.5"></circle><circle cx="16" cy="4" r="2.5"></circle>
+          <circle cx="8" cy="12" r="2.5"></circle><circle cx="16" cy="12" r="2.5"></circle>
+          <circle cx="8" cy="20" r="2.5"></circle><circle cx="16" cy="20" r="2.5"></circle>
+        </svg>
+      </span>` : ''}
       <span class="job-status ${esc(job.status)}"></span>
-      <div style="min-width:0">
+      <div style="min-width:0;flex:1">
         <div class="job-label">${esc(job.label)}</div>
-        <div class="job-meta">${esc(job.kind)} · ${esc(job.status)}${
+        <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · ${esc(job.status)}${
           job.status === 'running' ? ` · ${Math.round(job.percent)}%` : ''} · ${ago(job.created_at)}</div>
       </div>
       <div class="job-right">
@@ -615,23 +714,52 @@ async function submit(pane) {
 
 /* ---------------- job list ---------------- */
 
+function sortJobsBySavedOrder(jobs) {
+  try {
+    const raw = localStorage.getItem('vulnagent-jobs-order');
+    if (!raw) return jobs;
+    const order = JSON.parse(raw);
+    if (!Array.isArray(order) || !order.length) return jobs;
+    const orderMap = new Map(order.map((id, idx) => [id, idx]));
+    return [...jobs].sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id) : 999999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id) : 999999;
+      if (idxA !== idxB) return idxA - idxB;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+  } catch (e) {
+    return jobs;
+  }
+}
+
+function resetJobsOrder() {
+  try {
+    localStorage.removeItem('vulnagent-jobs-order');
+  } catch (e) {}
+  renderJobs();
+}
+
 async function renderJobs() {
   view.innerHTML = `<div class="page-head"><h1>Scans</h1><p>Every scan this server has run.</p></div>
     <div class="empty"><span class="spinner"></span>Loading</div>`;
-  const { jobs } = await api('/api/jobs?limit=100');
+  const { jobs: rawJobs } = await api('/api/jobs?limit=100');
+  const jobs = sortJobsBySavedOrder(rawJobs || []);
+  const hasCustomOrder = !!localStorage.getItem('vulnagent-jobs-order');
+
   view.innerHTML = `
     <div class="page-head">
       <div class="row">
         <div>
           <h1>Scans</h1>
-          <p>Every scan this server has run across all benchmarks and targets.</p>
+          <p>Every scan this server has run across all benchmarks and targets. Drag &amp; drop cards to reorder.</p>
         </div>
         <div class="spacer"></div>
+        ${hasCustomOrder ? `<button type="button" class="btn ghost sm" onclick="resetJobsOrder()">Reset order</button>` : ''}
         ${jobs.length ? `<button class="btn ghost sm danger" onclick="clearAllJobs()">Clear history</button>` : ''}
       </div>
     </div>
-    <div class="card">
-      ${jobs.length ? jobs.map(jobRow).join('')
+    <div class="card" id="jobs-list-container">
+      ${jobs.length ? jobs.map(j => jobRow(j, true)).join('')
         : emptyState('No scans yet', 'Start one from the New scan tab.')}
     </div>`;
 }
