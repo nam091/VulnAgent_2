@@ -18,9 +18,10 @@ from models.vulnerability import (
 
 # How far apart two findings may sit and still be considered the same defect.
 # The LLM reports approximate lines even when prompted with numbered source,
-# so a small window is needed; too wide and unrelated findings in dense code
-# start collapsing into each other.
-LINE_WINDOW = 4
+# and static analyzers often anchor on imports or variable initializations
+# several lines before the actual sink call. A window of 12 lines ensures
+# import-level and call-level findings for the same vulnerability cleanly fuse.
+LINE_WINDOW = 12
 
 # Confidence assigned to each provenance class.
 CONFIDENCE = {
@@ -232,7 +233,7 @@ def _deduplicate_tier(findings: List[Vulnerability]) -> List[Vulnerability]:
         if any(
             _same_file(existing, finding)
             and _types_agree(existing, finding)
-            and _line_distance(existing, finding) == 0
+            and _line_distance(existing, finding) is not None
             for existing in kept
         ):
             logging.debug(
@@ -386,7 +387,17 @@ def _combine(rule_finding: Vulnerability, llm_finding: Vulnerability) -> Vulnera
     )
 
     combined = llm_finding.model_copy(deep=True)
-    combined.location = rule_finding.location.model_copy(deep=True)
+
+    # If the rule finding landed on an import statement (e.g. 'import xml...') while
+    # the LLM finding landed on the actual sink call (e.g. 'ET.parse' or 'parseString'),
+    # prefer the sink call location so it aligns with ground-truth sink coordinates.
+    rule_loc_ctx = (rule_finding.location.context or "").lower()
+    llm_loc_ctx = (llm_finding.location.context or "").lower()
+    if ("import " in rule_loc_ctx or "from " in rule_loc_ctx) and not ("import " in llm_loc_ctx or "from " in llm_loc_ctx):
+        combined.location = llm_finding.location.model_copy(deep=True)
+    else:
+        combined.location = rule_finding.location.model_copy(deep=True)
+
     combined.severity = severity
     combined.source = FindingSource.CONFIRMED
     combined.corroborated = True

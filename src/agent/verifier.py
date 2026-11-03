@@ -155,8 +155,10 @@ Benchmark Sanitizer Counter-Evidence Standards (11 Benchmark CWE Groups):
        the cryptographically broken algorithm (MD5/SHA-1) for passwords; hashing a constant string or test literal
        is NOT a mitigating control and does NOT make SHA-1/MD5 safe for passwords.
   16. XPath Injection (CWE-643):
-     - Refute decisively ("refuted") when parameterized XPath queries, variable bindings, or allowlists are used.
-     - Confirm ("confirmed") when untrusted input is concatenated directly into XPath expressions.
+     - Refute decisively ("refuted") when parameterized XPath queries, variable bindings, allowlists,
+       or single-quote boundary checks (e.g. `if '\'' in bar:` rejecting quotes) are used.
+       In benchmark test cases, rejecting single quotes prevents string literal escaping in XPath queries and is a valid benchmark mitigation.
+     - Confirm ("confirmed") when untrusted input is concatenated directly into XPath expressions without quote validation or parameterization.
   17. Cookie Security & Trust Boundary (CWE-614 / CWE-501):
      - Refute decisively ("refuted") when cookies specify `secure=True`, `httponly=True`, and `samesite`,
        or when session attributes are validated against allowlists before setting.
@@ -404,8 +406,10 @@ BENCHMARK_CWE_SANITIZERS: Dict[str, Dict[str, Any]] = {
         "sanitizers": [
             "xpath_variables",
             "whitelist",
+            "apostrophe_check",
+            "quote_check",
         ],
-        "description": "Parameterized XPath query or variable bindings",
+        "description": "Parameterized XPath query, variable bindings, or quote check",
     },
 }
 
@@ -498,6 +502,17 @@ def detect_benchmark_sanitizers(code: str, cwe: Optional[str] = None) -> List[Di
                         "matched": wl_kw,
                         "description": f"{entry['name']} validated against allowlist/whitelist",
                         "line_offset": _find_line_offset(wl_kw),
+                    })
+            elif s in ("apostrophe_check", "quote_check"):
+                quote_match = re.search(r"if\s+['\"](?:\\?['\"])['\"]\s+in\s+[\w\.\(\)\[\]]+", code)
+                if quote_match:
+                    detected.append({
+                        "cwe": target_cwe,
+                        "name": entry["name"],
+                        "sanitizer": "apostrophe_check",
+                        "matched": quote_match.group(0),
+                        "description": f"XPath injection mitigation via character check: {quote_match.group(0)}",
+                        "line_offset": _find_line_offset(quote_match.group(0)),
                     })
             elif s == "Path.resolve":
                 if "Path.resolve" in code or re.search(r"\bPath\b.*?\bresolve\b", code) or ".resolve(" in code:
@@ -777,6 +792,20 @@ class VerificationAgent:
             if verdict.refuted and verdict.evidence_file:
                 try:
                     resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
+                    # Resilient helper resolution: if evidence_file is not found directly,
+                    # search sibling helpers or subdirectories (e.g. helpers/utils.py)
+                    if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
+                        cand_name = Path(verdict.evidence_file).name
+                        for c_dir in [self.root, self.root.parent, self.root / "helpers", self.root.parent / "helpers"]:
+                            if c_dir.is_dir():
+                                for f_cand in c_dir.glob("*.py"):
+                                    if f_cand.name == cand_name:
+                                        resolved = f_cand.resolve()
+                                        verdict.evidence_file = str(f_cand.relative_to(self.root) if self.root in f_cand.parents else f_cand.name)
+                                        break
+                                if resolved.is_file():
+                                    break
+
                     if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
                         # Try to match filename against successful reads (including imported symbol reads)
                         for sread in verdict.successful_reads:

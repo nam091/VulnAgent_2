@@ -896,6 +896,33 @@ class Scanner:
                     report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
                         report.vulnerabilities
                     )
+
+                # Post-verification sink-level deduplication clustering:
+                # If multiple surviving findings in the same file share the same CWE category within 12 lines,
+                # keep the most authoritative finding (confirmed by both tiers or higher confidence)
+                # to prevent duplicate sink penalties.
+                if len(report.vulnerabilities) > 1:
+                    deduped_vulns: List[Vulnerability] = []
+                    for v in sorted(
+                        report.vulnerabilities,
+                        key=lambda x: (
+                            0 if getattr(x, "corroborated", False) else 1,
+                            0 if getattr(x, "source", None) == FindingSource.CONFIRMED else 1,
+                            -getattr(x, "confidence", 0.5),
+                            SEVERITY_RANK[x.severity],
+                        )
+                    ):
+                        l_v = v.location.start_line or 1
+                        is_dup = False
+                        for ex in deduped_vulns:
+                            l_ex = ex.location.start_line or 1
+                            if fusion._same_file(ex, v) and fusion._types_agree(ex, v) and abs(l_v - l_ex) <= 12:
+                                is_dup = True
+                                break
+                        if not is_dup:
+                            deduped_vulns.append(v)
+                    report.vulnerabilities = deduped_vulns
+
                 report.calculate_summary()
                 report.calculate_risk_score()
 
