@@ -812,6 +812,29 @@ class CodeAnalyzer:
                         fallback_content=code_content,
                     )
 
+                # Derive canonical CWE if missing or generic
+                cwe_raw = str(vuln_data.get('cwe_id') or vuln_data.get('cwe') or '').strip()
+                if not cwe_raw or cwe_raw in ('CWE-Other', 'CWE-000', 'CWE-Unknown', 'None'):
+                    type_canonical_cwe = {
+                        VulnerabilityType.CROSS_SITE_SCRIPTING: 'CWE-79',
+                        VulnerabilityType.SQL_INJECTION: 'CWE-89',
+                        VulnerabilityType.OS_COMMAND_INJECTION: 'CWE-78',
+                        VulnerabilityType.CODE_INJECTION: 'CWE-94',
+                        VulnerabilityType.PATH_TRAVERSAL: 'CWE-22',
+                        VulnerabilityType.INSECURE_DESERIALIZATION: 'CWE-502',
+                        VulnerabilityType.XML_EXTERNAL_ENTITY: 'CWE-611',
+                        VulnerabilityType.XPATH_INJECTION: 'CWE-643',
+                        VulnerabilityType.LDAP_INJECTION: 'CWE-90',
+                        VulnerabilityType.SECURE_RANDOMNESS: 'CWE-330',
+                        VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM: 'CWE-328',
+                        VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS: 'CWE-601',
+                        VulnerabilityType.SECURE_COOKIE: 'CWE-614',
+                        VulnerabilityType.SERVER_SIDE_REQUEST_FORGERY: 'CWE-918',
+                        VulnerabilityType.HARDCODED_CREDENTIALS: 'CWE-798',
+                        VulnerabilityType.CSRF: 'CWE-352',
+                    }
+                    cwe_raw = type_canonical_cwe.get(vuln_type, cwe_raw or 'CWE-Other')
+
                 # Create Vulnerability object with validated data
                 vulnerability = Vulnerability(
                     type=vuln_type,
@@ -820,7 +843,7 @@ class CodeAnalyzer:
                     description=vuln_data.get('description', ''),
                     impact=vuln_data.get('impact', ''),
                     remediation=vuln_data.get('remediation', ''),
-                    cwe_id=vuln_data.get('cwe_id', ''),
+                    cwe_id=cwe_raw,
                     owasp_category=vuln_data.get('owasp_category', ''),
                     cvss_score=float(vuln_data.get('cvss_score', 5.0)),
                     references=vuln_data.get('references', []),

@@ -909,7 +909,7 @@ class Scanner:
                             0 if getattr(x, "corroborated", False) else 1,
                             0 if getattr(x, "source", None) == FindingSource.CONFIRMED else 1,
                             -getattr(x, "confidence", 0.5),
-                            SEVERITY_RANK[x.severity],
+                            fusion.SEVERITY_RANK.get(x.severity, 2),
                         )
                     ):
                         l_v = v.location.start_line or 1

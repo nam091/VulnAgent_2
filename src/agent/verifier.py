@@ -56,7 +56,7 @@ Adversarial Verification Standards (CWE Counter-Evidence Guidelines):
   2. Insecure Randomness (CWE-330):
      - Refute when cryptographically secure pseudo-random generators are used for security tokens:
        secrets module (secrets.token_hex, secrets.token_urlsafe, secrets.token_bytes,
-       secrets.choice, secrets.randbelow) or os.urandom.
+       secrets.choice, secrets.randbelow), os.urandom, or random.SystemRandom() (which delegates directly to os.urandom).
      - Refute if standard library random (random.random, random.randint, random.choice) is used
        strictly in non-security contexts (games, simulations, data shuffling, UI animation jitter).
      - Confirm if standard random or numpy.random is used to generate security-sensitive tokens,
@@ -353,8 +353,10 @@ BENCHMARK_CWE_SANITIZERS: Dict[str, Dict[str, Any]] = {
             "secrets.choice",
             "secrets.randbelow",
             "os.urandom",
+            "random.SystemRandom",
+            "SystemRandom",
         ],
-        "description": "secrets module or os.urandom for security tokens",
+        "description": "secrets module, os.urandom, or random.SystemRandom for security tokens",
     },
     "CWE-501": {
         "name": "Trust Boundary Violation",
@@ -1043,8 +1045,10 @@ class VerificationAgent:
         # Multi-field reason / reasoning list extraction
         reason_val = (
             payload.get("reason")
+            or payload.get("summary")
             or payload.get("conclusion")
             or payload.get("reasoning")
+            or payload.get("notes")
             or payload.get("analysis")
             or ""
         )
@@ -1059,20 +1063,36 @@ class VerificationAgent:
         if not isinstance(path, list):
             path = []
 
-        # Extract file & line from evidence_file or location string (e.g. "BenchmarkTest00015.py:50-60")
+        # Extract file & line from evidence_file, location, or evidence list
         evidence_file = str(payload.get("evidence_file") or payload.get("file") or "").strip()
         line_val = payload.get("evidence_line") or payload.get("line")
 
+        if "evidence" in payload and isinstance(payload["evidence"], list) and payload["evidence"]:
+            ev_first = payload["evidence"][0]
+            if isinstance(ev_first, dict):
+                if not evidence_file and ev_first.get("file"):
+                    evidence_file = str(ev_first["file"]).strip()
+                if not line_val and ev_first.get("lines"):
+                    digits = re.findall(r"\d+", str(ev_first["lines"]))
+                    if digits:
+                        line_val = int(digits[0])
+
         if "location" in payload and (not evidence_file or not line_val):
             loc_str = str(payload["location"])
+            sink_m = re.search(r"sink\D*?(\d+)", loc_str, re.IGNORECASE) or re.search(r"(\d+)\D*?(?:sink|call)", loc_str, re.IGNORECASE)
             if ":" in loc_str:
                 f_part, l_part = loc_str.split(":", 1)
                 if not evidence_file:
                     evidence_file = f_part.strip()
                 if not line_val:
-                    digits = re.findall(r"\d+", l_part)
-                    if digits:
-                        line_val = int(digits[0])
+                    if sink_m:
+                        line_val = int(sink_m.group(1))
+                    else:
+                        digits = [int(x) for x in re.findall(r"\b\d+\b", l_part) if 0 < int(x) < 5000]
+                        if digits:
+                            line_val = digits[-1]
+            elif sink_m and not line_val:
+                line_val = int(sink_m.group(1))
 
         try:
             if isinstance(line_val, str):

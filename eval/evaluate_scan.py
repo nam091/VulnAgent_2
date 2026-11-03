@@ -312,6 +312,30 @@ def finding_to_detection(
         raw_cwe = item["metadata"].get("cwe")
 
     cwe_clean = normalize_cwe_string(raw_cwe)
+    if not cwe_clean or cwe_clean in ("OTHER", "000", "UNKNOWN"):
+        v_str = str(item.get("type") or item.get("vulnerability_type") or "").upper()
+        type_to_cwe_map = {
+            "CROSS_SITE_SCRIPTING": "79",
+            "SQL_INJECTION": "89",
+            "OS_COMMAND_INJECTION": "78",
+            "CODE_INJECTION": "94",
+            "PATH_TRAVERSAL": "22",
+            "INSECURE_DESERIALIZATION": "502",
+            "XML_EXTERNAL_ENTITY": "611",
+            "XPATH_INJECTION": "643",
+            "LDAP_INJECTION": "90",
+            "SECURE_RANDOMNESS": "330",
+            "USE_OF_WEAK_HASHING_ALGORITHM": "328",
+            "UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS": "601",
+            "SECURE_COOKIE": "614",
+            "SERVER_SIDE_REQUEST_FORGERY": "918",
+            "HARDCODED_CREDENTIALS": "798",
+            "CSRF": "352",
+        }
+        for k, v in type_to_cwe_map.items():
+            if k in v_str:
+                cwe_clean = v
+                break
 
     # Extract vulnerability type
     vuln_type = (

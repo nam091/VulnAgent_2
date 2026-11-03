@@ -516,8 +516,15 @@ class AIClient:
             v.setdefault("severity", "MEDIUM")
 
             # Flexible mapping for remediation / recommended_fix
-            remed = v.get("remediation") or v.get("recommended_fix") or v.get("fix") or ""
-            v.setdefault("remediation", remed)
+            raw_remed = v.get("remediation") or v.get("recommended_fix") or v.get("fix") or ""
+            if isinstance(raw_remed, dict):
+                if not v.get("secure_code_example") and raw_remed.get("secure_code_example"):
+                    v["secure_code_example"] = str(raw_remed["secure_code_example"])
+                remed = str(raw_remed.get("recommendation") or raw_remed.get("fix") or raw_remed.get("description") or str(raw_remed))
+            else:
+                remed = str(raw_remed or "")
+            v["remediation"] = remed
+            v["recommended_fix"] = remed
             v.setdefault("impact", "")
 
             # Flexible mapping for CWE
@@ -529,7 +536,15 @@ class AIClient:
             # Flexible mapping for location
             loc = v.get("location")
             if not isinstance(loc, dict):
-                s_line = v.get("start_line") or v.get("line") or 1
+                loc_str = str(loc or "")
+                sink_m = re.search(r"sink\D*?(\d+)", loc_str, re.IGNORECASE) or re.search(r"(\d+)\D*?(?:sink|call)", loc_str, re.IGNORECASE)
+                digits = [int(x) for x in re.findall(r"\b\d+\b", loc_str) if 0 < int(x) < 5000]
+                if sink_m:
+                    s_line = int(sink_m.group(1))
+                elif digits:
+                    s_line = digits[-1]
+                else:
+                    s_line = v.get("start_line") or v.get("line") or 1
                 e_line = v.get("end_line") or s_line
                 v["location"] = {"file_path": "", "start_line": s_line, "end_line": e_line}
             else:
