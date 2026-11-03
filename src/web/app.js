@@ -18,6 +18,130 @@ const PHASES = [
 let liveStream = null;
 let pollTimer = null;
 
+function renderMarkdown(raw) {
+  if (!raw) return '';
+  const text = String(raw).trim();
+
+  // Split into code blocks and normal text
+  const parts = [];
+  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'codeblock', lang: match[1], code: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(lastIndex) });
+  }
+
+  function formatInline(str) {
+    let s = esc(str);
+    // Double backticks ``code``
+    s = s.replace(/``([^`]+)``/g, '<code class="inline-code">$1</code>');
+    // Single backticks `code`
+    s = s.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    // Single-quoted tokens like 'BenchmarkTest00511', 'param', 'echo <payload>'
+    s = s.replace(/&#39;([a-zA-Z0-9_.\-\/\$\\()\*&lt;&gt; ]+?)&#39;/g, '<code class="inline-code">$1</code>');
+    // Bold **text**
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic *text*
+    s = s.replace(/(^|[^\*])\*([^\*]+)\*([^\*]|$)/g, '$1<em>$2</em>$3');
+    // Links [text](url)
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return s;
+  }
+
+  let html = '';
+  for (const part of parts) {
+    if (part.type === 'codeblock') {
+      html += `<pre class="md-code-block"><code>${esc(part.code.trimEnd())}</code></pre>`;
+    } else {
+      const lines = part.content.split('\n');
+      let inList = false;
+      let para = [];
+
+      function flushPara() {
+        if (para.length) {
+          html += `<p class="md-p">${para.join('<br>')}</p>`;
+          para = [];
+        }
+      }
+      function flushList() {
+        if (inList) {
+          html += `</ul>`;
+          inList = false;
+        }
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          flushPara();
+          flushList();
+          continue;
+        }
+
+        // Headings: ### H3, ## H2, # H1
+        const hMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+        if (hMatch) {
+          flushPara();
+          flushList();
+          const level = Math.min(6, hMatch[1].length + 2);
+          html += `<h${level} class="md-heading">${formatInline(hMatch[2])}</h${level}>`;
+          continue;
+        }
+
+        // Section labels on own line: "Impact", "Fix", "Remediation", "Analysis"
+        if (/^(Impact|Fix|Remediation|Analysis|Evidence|Notes?|Details?):?$/i.test(trimmed)) {
+          flushPara();
+          flushList();
+          html += `<h5 class="md-subheading">${esc(trimmed.replace(/:$/, ''))}</h5>`;
+          continue;
+        }
+
+        // Unordered list item: - item or * item
+        const listMatch = trimmed.match(/^[-*•]\s+(.+)$/);
+        if (listMatch) {
+          flushPara();
+          if (!inList) {
+            html += `<ul class="md-ul">`;
+            inList = true;
+          }
+          html += `<li class="md-li">${formatInline(listMatch[1])}</li>`;
+          continue;
+        }
+
+        // Ordered list item: 1. item
+        const oListMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
+        if (oListMatch) {
+          flushPara();
+          if (!inList) {
+            html += `<ul class="md-ul">`;
+            inList = true;
+          }
+          html += `<li class="md-li"><strong>${oListMatch[1]}.</strong> ${formatInline(oListMatch[2])}</li>`;
+          continue;
+        }
+
+        flushList();
+        para.push(formatInline(line));
+      }
+
+      flushPara();
+      flushList();
+    }
+  }
+
+  return `<div class="md-rendered">${html}</div>`;
+}
+
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -1220,15 +1344,15 @@ function findingCard(f, jobId = '') {
         <span class="f-loc">${esc(f.file)}:${f.start_line}</span>
       </div>
       <div class="f-body hide">
-        ${f.description ? `<div>${esc(f.description)}</div>` : ''}
-        ${f.impact ? `<h4>Impact</h4><div>${esc(f.impact)}</div>` : ''}
-        ${f.remediation ? `<h4>Fix</h4><div>${esc(f.remediation)}</div>` : ''}
+        ${f.description ? `<div class="f-desc">${renderMarkdown(f.description)}</div>` : ''}
+        ${f.impact ? `<h4>Impact</h4><div class="f-impact">${renderMarkdown(f.impact)}</div>` : ''}
+        ${f.remediation ? `<h4>Fix</h4><div class="f-remed">${renderMarkdown(f.remediation)}</div>` : ''}
         ${f.assessment ? `
           <h4>Assessment Audit</h4>
           <div><b>Status:</b> ${esc(f.assessment.status || assessmentStatus)}</div>
-          ${f.assessment.reason ? `<div><b>Reason:</b> ${esc(f.assessment.reason)}</div>` : ''}
-          ${f.assessment.mitigating_control ? `<div><b>Mitigating Control:</b> ${esc(f.assessment.mitigating_control)}</div>` : ''}
-          ${(f.assessment.evidence_ids || []).length ? `<div><b>Evidence IDs:</b> ${esc(f.assessment.evidence_ids.join(', '))}</div>` : ''}
+          ${f.assessment.reason ? `<div style="margin-top:4px"><b>Reason:</b> ${renderMarkdown(f.assessment.reason)}</div>` : ''}
+          ${f.assessment.mitigating_control ? `<div style="margin-top:4px"><b>Mitigating Control:</b> <code class="inline-code">${esc(f.assessment.mitigating_control)}</code></div>` : ''}
+          ${(f.assessment.evidence_ids || []).length ? `<div style="margin-top:4px"><b>Evidence IDs:</b> ${esc(f.assessment.evidence_ids.join(', '))}</div>` : ''}
         ` : ''}
         ${(f.taint_path || []).length ? `
           <div class="taint-header">
@@ -1249,7 +1373,7 @@ function findingCard(f, jobId = '') {
                        data-line="${stepLine}"
                        data-job-id="${esc(jobId)}">
                     <span class="taint-kind ${esc(stepKind)}">${esc(stepKind)}</span>
-                    <span class="taint-desc">${esc(stepDesc)}</span>
+                    <span class="taint-desc">${renderMarkdown(stepDesc)}</span>
                     <span class="taint-loc">
                       ${esc(stepFile)}:${stepLine}
                       <span class="taint-code-badge"><svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>Code</span>
@@ -1263,7 +1387,7 @@ function findingCard(f, jobId = '') {
           </div>` : ''}
         ${f.verification && (f.verification.reason || f.verification.error) ? `
           <h4>Verification</h4>
-          <div><b>${esc(f.verification.verdict)}</b> — ${esc(f.verification.reason || 'Verification completed')}</div>
+          <div style="margin-top:4px"><b>${esc(f.verification.verdict)}</b> — ${renderMarkdown(f.verification.reason || 'Verification completed')}</div>
           ${f.verification.error ? `<div class="banner warn" style="margin-top:8px;font-size:12.5px;padding:8px 12px"><b>Verification error / API issue:</b> ${esc(f.verification.error)}</div>` : ''}` : ''}
         ${f.snippet ? `<h4>Code</h4><pre>${esc(f.snippet)}</pre>` : ''}
         ${fixBlock(f)}
