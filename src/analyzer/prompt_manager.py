@@ -20,6 +20,7 @@ structured prompts for LLM-based security analysis:
 from __future__ import annotations
 
 import ast
+import re
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 __all__ = [
@@ -1561,13 +1562,74 @@ Format response as JSON matching the Vulnerability model structure.
 
         return "\n".join(slice_lines)
 
+    def _resolve_relevant_cwes_for_slices(self, slices: list) -> List[str]:
+        """
+        Identify relevant CWEs from AST slices to adaptively prune prompt bloat,
+        always retaining core high-risk injection and memory/logic defect classes.
+        """
+        # Always retain core high-priority CWEs across Web & API contexts
+        core = {"CWE-89", "CWE-78", "CWE-22", "CWE-79", "CWE-502", "CWE-798"}
+        matched = set(core)
+
+        cat_map = {
+            "sql": "CWE-89",
+            "command": "CWE-78",
+            "traversal": "CWE-22",
+            "path": "CWE-22",
+            "xss": "CWE-79",
+            "scripting": "CWE-79",
+            "secret": "CWE-798",
+            "credential": "CWE-798",
+            "ssrf": "CWE-918",
+            "deserializ": "CWE-502",
+            "pickle": "CWE-502",
+            "yaml": "CWE-502",
+            "csrf": "CWE-352",
+            "hash": "CWE-328",
+            "random": "CWE-330",
+            "xpath": "CWE-643",
+            "cookie": "CWE-614",
+            "ldap": "CWE-90",
+            "redirect": "CWE-601",
+            "xxe": "CWE-611",
+            "xml": "CWE-611",
+            "code_injection": "CWE-78",
+            "eval": "CWE-78",
+            "idor": "CWE-639",
+            "auth": "CWE-287",
+            "access": "CWE-284",
+            "error": "CWE-209",
+            "logging": "CWE-209",
+        }
+
+        for s in slices:
+            cat = ""
+            if isinstance(s, dict):
+                cat = str(s.get("sink_category") or s.get("sink_name") or s.get("cwe_id") or "")
+            elif s is not None:
+                cat = str(getattr(s, "sink_category", None) or getattr(s, "sink_name", None) or getattr(s, "cwe_id", None) or "")
+            cat_lower = cat.lower()
+
+            cwe_match = re.search(r"cwe[-_]?(\d+)", cat_lower)
+            if cwe_match:
+                norm_cwe = f"CWE-{cwe_match.group(1)}"
+                if norm_cwe in self.cwe_taint_rules:
+                    matched.add(norm_cwe)
+
+            for key, cwe_id in cat_map.items():
+                if key in cat_lower:
+                    matched.add(cwe_id)
+
+        return sorted(list(matched))
+
     def _build_semantic_taint_reasoning_block(
         self,
         file_path: str,
         slices: list
     ) -> str:
         """Construct the [LLM SEMANTIC TAINT REASONING (DUAL-SCOPE ANALYSIS)] section."""
-        cwe_rules_summary = self.format_cwe_rules_summary()
+        relevant_cwes = self._resolve_relevant_cwes_for_slices(slices) if slices else None
+        cwe_rules_summary = self.format_cwe_rules_summary(relevant_cwes)
 
         return f"""================================================================================
 [LLM SEMANTIC TAINT REASONING]

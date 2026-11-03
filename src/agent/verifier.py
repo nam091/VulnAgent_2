@@ -236,7 +236,11 @@ Code at the reported location:
 
 {context}
 
-Investigate and return your verdict as JSON. If imported symbols (helpers, wrappers, sanitizers) are involved, call `read_imported_symbol(symbol_name=..., from_file=...)` to inspect their cross-file definitions and trace cross-file dataflow."""
+Investigate and return your verdict as JSON.
+Anti-Wandering Guidance:
+  - Focus your inspection strictly on {file} around lines {start_line}-{end_line}.
+  - If imported helpers, sanitizers, or wrappers are called, use `read_imported_symbol(symbol_name=..., from_file="{file}")` to inspect their cross-file definitions.
+  - Do NOT run broad unconstrained searches across unrelated project files."""
 
 
 BENCHMARK_CWE_SANITIZERS: Dict[str, Dict[str, Any]] = {
@@ -635,6 +639,7 @@ class VerificationAgent:
             evidence_store=self.evidence_store,
             snapshot_id=self.snapshot_id,
             symbol_index=self.symbol_index,
+            focus_file=vuln.location.file_path,
         )
         agent = ToolCallingAgent(
             client=self.client,

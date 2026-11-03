@@ -237,8 +237,7 @@ class AIClient:
         3. Language-specific security issues
         4. Security best practices
 
-        IMPORTANT: Respond with ONLY the raw JSON data, without any markdown formatting or code blocks.
-        Your response should be a valid Python dictionary that can be evaluated using eval().
+        IMPORTANT: Respond with ONLY a valid, raw JSON object (RFC 8259), without any markdown formatting, code blocks, or Python dictionary syntax (all property names and strings must use double quotes).
 
         The response must follow this structure:
         {

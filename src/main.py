@@ -100,6 +100,7 @@ class SnippetRequest(BaseModel):
     verify: bool = Field(True, description="Run the adversarial verification agent")
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
     use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
@@ -111,6 +112,7 @@ class RepositoryRequest(BaseModel):
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     max_files: int = Field(40, ge=1, le=200)
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
     use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
@@ -120,6 +122,7 @@ class BenchmarkPresetRequest(BaseModel):
     verify: bool = Field(True, description="Run adversarial verification agent")
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
+    verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
     use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
 
 
@@ -483,11 +486,12 @@ def build_job_standard_label(
     source: str,
     mode: str = "deep-verify",
     model_id: Optional[str] = None,
-    verify: Optional[bool] = None
+    verify: Optional[bool] = None,
+    verify_model_id: Optional[str] = None,
 ) -> str:
     """
     Format scan job title as: Source · Mode by <model>
-    e.g. 'student_portal.py · DeepVerify by glm-5.3-flash'
+    e.g. 'student_portal.py · DeepVerify by glm-5.3-flash' or '... · DeepVerify by glm-5.3 + beam'
     """
     clean_src = Path(str(source or "Target")).name
     if not clean_src or clean_src == ".":
@@ -499,6 +503,9 @@ def build_job_standard_label(
 
     if mode_str == "Semgrep":
         return f"{clean_src} · Semgrep"
+    if verify_model_id and verify_model_id != model_id and mode_str == "DeepVerify":
+        v_short = format_model_short_name(verify_model_id)
+        return f"{clean_src} · DeepVerify by {model_short} + {v_short}"
     return f"{clean_src} · {mode_str} by {model_short}"
 
 
@@ -678,8 +685,14 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         chosen_base_url = os.getenv("OPENAI_BASE_URL")
         chosen_api_key = os.getenv("OPENAI_API_KEY")
 
+    verify_model_param = form.get("verify_model")
+    chosen_verify_model = None
+    if verify_model_param and str(verify_model_param).strip() and str(verify_model_param).strip() != "custom":
+        v_prof = resolve_model_profile(verify_model_param)
+        chosen_verify_model = v_prof["model"] if v_prof else normalize_model_identifier(str(verify_model_param).strip())
+
     src_name = Path(root_name or "upload").stem or (root_name or "upload")
-    job_label = build_job_standard_label(src_name, mode, chosen_model, verify)
+    job_label = build_job_standard_label(src_name, mode, chosen_model, verify, verify_model_id=chosen_verify_model)
     job = store.create(
         kind="folder",
         label=job_label,
@@ -689,6 +702,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
             "skipped_oversized": oversized,
             "source_name": src_name,
             "model": chosen_model,
+            "verify_model": chosen_verify_model,
             "base_url": chosen_base_url,
             "api_key": chosen_api_key,
             "use_cache": use_cache,
@@ -702,6 +716,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
         concurrency=max(1, min(concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        verify_model=chosen_verify_model,
         base_url=chosen_base_url,
         api_key=chosen_api_key,
         use_cache=use_cache,
@@ -751,8 +766,14 @@ async def scan_snippet(
         chosen_base_url = os.getenv("OPENAI_BASE_URL")
         chosen_api_key = os.getenv("OPENAI_API_KEY")
 
+    verify_model_param = getattr(request, "verify_model", None)
+    chosen_verify_model = None
+    if verify_model_param and str(verify_model_param).strip() and str(verify_model_param).strip() != "custom":
+        v_prof = resolve_model_profile(verify_model_param)
+        chosen_verify_model = v_prof["model"] if v_prof else normalize_model_identifier(str(verify_model_param).strip())
+
     src_name = _safe_label(request.filename) or "snippet.py"
-    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
+    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify, verify_model_id=chosen_verify_model)
     job = store.create(
         kind="snippet",
         label=job_label,
@@ -760,6 +781,7 @@ async def scan_snippet(
             "mode": request.mode, "verify": verify, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "verify_model": chosen_verify_model,
             "base_url": chosen_base_url,
             "api_key": chosen_api_key,
             "use_cache": request.use_cache,
@@ -773,6 +795,7 @@ async def scan_snippet(
         concurrency=max(1, min(getattr(request, "concurrency", 4), 50)),
         verify=verify,
         model=chosen_model,
+        verify_model=chosen_verify_model,
         base_url=chosen_base_url,
         api_key=chosen_api_key,
         use_cache=request.use_cache,
@@ -842,7 +865,13 @@ async def scan_repository(
         chosen_base_url = os.getenv("OPENAI_BASE_URL")
         chosen_api_key = os.getenv("OPENAI_API_KEY")
 
-    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify)
+    verify_model_param = getattr(request, "verify_model", None)
+    chosen_verify_model = None
+    if verify_model_param and str(verify_model_param).strip() and str(verify_model_param).strip() != "custom":
+        v_prof = resolve_model_profile(verify_model_param)
+        chosen_verify_model = v_prof["model"] if v_prof else normalize_model_identifier(str(verify_model_param).strip())
+
+    job_label = build_job_standard_label(src_name, request.mode, chosen_model, verify, verify_model_id=chosen_verify_model)
     job = store.create(
         kind="repository",
         label=job_label,
@@ -850,6 +879,7 @@ async def scan_repository(
             "mode": request.mode, "verify": verify, "url": url, "concurrency": request.concurrency,
             "source_name": src_name,
             "model": chosen_model,
+            "verify_model": chosen_verify_model,
             "base_url": chosen_base_url,
             "api_key": chosen_api_key,
             "use_cache": request.use_cache,
@@ -865,6 +895,7 @@ async def scan_repository(
         max_llm_files=request.max_files,
         verify=verify,
         model=chosen_model,
+        verify_model=chosen_verify_model,
         base_url=chosen_base_url,
         api_key=chosen_api_key,
         use_cache=request.use_cache,
@@ -926,7 +957,13 @@ async def scan_benchmark_preset(
         chosen_base_url = os.getenv("OPENAI_BASE_URL")
         chosen_api_key = os.getenv("OPENAI_API_KEY")
 
-    job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify)
+    verify_model_param = getattr(request, "verify_model", None)
+    chosen_verify_model = None
+    if verify_model_param and str(verify_model_param).strip() and str(verify_model_param).strip() != "custom":
+        v_prof = resolve_model_profile(verify_model_param)
+        chosen_verify_model = v_prof["model"] if v_prof else normalize_model_identifier(str(verify_model_param).strip())
+
+    job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify, verify_model_id=chosen_verify_model)
     job = store.create(
         kind="folder",
         label=job_label,
@@ -937,6 +974,7 @@ async def scan_benchmark_preset(
             "target": str(target_dir),
             "source_name": suite_name,
             "model": chosen_model,
+            "verify_model": chosen_verify_model,
             "base_url": chosen_base_url,
             "api_key": chosen_api_key,
             "use_cache": request.use_cache,
@@ -950,6 +988,7 @@ async def scan_benchmark_preset(
         concurrency=max(1, min(request.concurrency, 50)),
         verify=verify,
         model=chosen_model,
+        verify_model=chosen_verify_model,
         base_url=chosen_base_url,
         api_key=chosen_api_key,
         use_cache=request.use_cache,

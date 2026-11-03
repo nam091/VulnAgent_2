@@ -477,8 +477,15 @@ async function renderScan() {
           <option value="semgrep">Semgrep only — Rule engine only</option>
         </select>
         <div id="model-select-group" style="display:inline-flex;align-items:center;gap:6px">
-          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Model:</span>
+          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Scanner:</span>
           <select id="scan-model" style="width:auto">
+            ${modelOptionsHtml}
+          </select>
+        </div>
+        <div id="verify-model-select-group" style="display:inline-flex;align-items:center;gap:6px">
+          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Verifier:</span>
+          <select id="scan-verify-model" style="width:auto">
+            <option value="">Same as Scanner</option>
             ${modelOptionsHtml}
           </select>
         </div>
@@ -521,21 +528,26 @@ async function renderScan() {
   const modeSelect = document.getElementById('mode');
   const verifyCheck = document.getElementById('verify');
   const modelGroup = document.getElementById('model-select-group');
+  const verifyModelGroup = document.getElementById('verify-model-select-group');
 
   function updateModelControls() {
     const m = modeSelect.value;
+    const isDeepVerify = (m === 'deep-verify') || (verifyCheck && verifyCheck.checked);
     if (m === 'deep-verify') {
       verifyCheck.checked = true;
       verifyCheck.disabled = false;
       if (modelGroup) modelGroup.classList.remove('hide');
+      if (verifyModelGroup) verifyModelGroup.classList.remove('hide');
     } else if (m === 'llm') {
       verifyCheck.checked = false;
       verifyCheck.disabled = false;
       if (modelGroup) modelGroup.classList.remove('hide');
+      if (verifyModelGroup) verifyModelGroup.classList.add('hide');
     } else if (m === 'semgrep') {
       verifyCheck.checked = false;
       verifyCheck.disabled = true;
       if (modelGroup) modelGroup.classList.add('hide');
+      if (verifyModelGroup) verifyModelGroup.classList.add('hide');
     }
   }
 
@@ -547,6 +559,7 @@ async function renderScan() {
     } else if (!verifyCheck.checked && modeSelect.value === 'deep-verify') {
       modeSelect.value = 'llm';
     }
+    updateModelControls();
   };
 
   const drop = document.getElementById('drop');
@@ -641,6 +654,10 @@ async function submit(pane) {
   const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
     ? scanModelEl.value
     : null;
+  const scanVerifyModelEl = document.getElementById('scan-verify-model');
+  const chosenVerifyModel = (verify && scanVerifyModelEl && scanVerifyModelEl.value && scanVerifyModelEl.value !== 'custom')
+    ? scanVerifyModelEl.value
+    : null;
   const customTitle = document.getElementById('scan-custom-title')?.value.trim() || '';
 
   button.disabled = true;
@@ -659,6 +676,7 @@ async function submit(pane) {
       form.append('concurrency', String(concurrency));
       form.append('use_cache', String(useCache));
       if (chosenModel) form.append('model', chosenModel);
+      if (chosenVerifyModel) form.append('verify_model', chosenVerifyModel);
       job = await api('/api/jobs/folder', { method: 'POST', body: form });
     } else if (pane === 'snippet') {
       const code = document.getElementById('code').value;
@@ -667,7 +685,7 @@ async function submit(pane) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code, filename: document.getElementById('snippet-name').value || 'snippet.py',
-          mode, verify, concurrency, model: chosenModel, use_cache: useCache
+          mode, verify, concurrency, model: chosenModel, verify_model: chosenVerifyModel, use_cache: useCache
         })
       });
     } else if (pane === 'benchmark') {
@@ -680,6 +698,7 @@ async function submit(pane) {
           verify,
           concurrency,
           model: chosenModel,
+          verify_model: chosenVerifyModel,
           use_cache: useCache
         })
       });
@@ -691,7 +710,7 @@ async function submit(pane) {
         body: JSON.stringify({
           repository_url: url,
           branch: document.getElementById('repo-branch').value.trim() || 'main',
-          mode, verify, concurrency, model: chosenModel, use_cache: useCache
+          mode, verify, concurrency, model: chosenModel, verify_model: chosenVerifyModel, use_cache: useCache
         })
       });
     }

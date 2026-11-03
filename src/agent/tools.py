@@ -77,6 +77,7 @@ class CodeTools:
         evidence_store: Optional[Any] = None,
         snapshot_id: Optional[str] = None,
         symbol_index: Optional[Any] = None,
+        focus_file: Optional[str] = None,
     ) -> None:
         """
         Args:
@@ -84,6 +85,7 @@ class CodeTools:
             evidence_store: Optional EvidenceStore for recording inspected code slices
             snapshot_id: Optional snapshot identifier
             symbol_index: Optional pre-configured or mock ProjectSymbolIndex
+            focus_file: Optional target file path for prioritized anti-wandering search
         """
 
         self.root = Path(root).resolve()
@@ -93,6 +95,7 @@ class CodeTools:
         self.evidence_store = evidence_store
         self.snapshot_id = snapshot_id
         self._symbol_index = symbol_index
+        self.focus_file = focus_file
 
     @property
     def symbol_index(self) -> Any:
@@ -338,8 +341,36 @@ class CodeTools:
         regex_chars = set(r"^$*+?{}[]\|()")
         is_literal = literal or not any(c in regex_chars for c in pattern)
 
-        targets = [self._resolve(path)] if path else self._python_files()
-        targets = targets[:100]
+        if path:
+            targets = [self._resolve(path)]
+            return self._do_search(targets, pattern, is_literal)
+
+        # Anti-wandering guard: search focus_file first when path is omitted
+        if self.focus_file:
+            try:
+                focus_target = self._resolve(self.focus_file)
+                focus_res = self._do_search([focus_target], pattern, is_literal)
+                if focus_res.get("matches"):
+                    focus_res["scope"] = f"local to {self.focus_file}"
+                    focus_res["note"] = (
+                        f"Matches found within focus file '{self.focus_file}'. "
+                        "Specify 'path' explicitly if you need to search imported modules or other files."
+                    )
+                    return focus_res
+            except Exception:
+                pass
+            targets = [t for t in self._python_files() if not self.focus_file or self._relative(t) != self.focus_file][:25]
+        else:
+            targets = self._python_files()[:50]
+
+        return self._do_search(targets, pattern, is_literal)
+
+    def _do_search(
+        self,
+        targets: List[Path],
+        pattern: str,
+        is_literal: bool
+    ) -> Dict[str, Any]:
         matches: List[Dict[str, Any]] = []
 
         if is_literal:
@@ -602,8 +633,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "function": {
             "name": "search",
             "description": (
-                "Search the project for a regular expression. Use this to trace "
-                "where a value comes from or where a function is called."
+                "Search the project for a regular expression or literal string. "
+                "Always specify 'path' to search within the file under investigation or an imported module; "
+                "omit path only when tracing an unknown symbol across files."
             ),
             "parameters": {
                 "type": "object",

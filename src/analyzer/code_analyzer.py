@@ -2,6 +2,7 @@ import ast
 import asyncio
 import logging
 import os
+import random
 import re
 import tempfile
 from datetime import datetime
@@ -271,8 +272,20 @@ class CodeAnalyzer:
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(f"Failed to get AI analysis after {max_retries} attempts: {str(e)}")
-                backoff = 2 ** attempt
-                logging.warning(f"Retry {attempt + 1}/{max_retries} failed ({str(e)}), waiting {backoff}s...")
+                err_str = str(e)
+                # Parse upstream rate-limit delay if specified (e.g. 'reset after 4s' or 'retry after 5s')
+                delay_match = re.search(r"(?:reset|retry)\s+after\s+(\d+(?:\.\d+)?)\s*s?", err_str, re.IGNORECASE)
+                if delay_match:
+                    try:
+                        extracted_delay = float(delay_match.group(1))
+                        backoff = max(1.0, min(60.0, round(extracted_delay + random.uniform(0.3, 1.2), 2)))
+                    except (ValueError, TypeError):
+                        backoff = round((2 ** attempt) * random.uniform(0.75, 1.35), 2)
+                else:
+                    # Full jitter exponential backoff: prevents thundering herd on concurrent 429s
+                    backoff = round((2 ** attempt) * random.uniform(0.75, 1.35), 2)
+
+                logging.warning(f"Retry {attempt + 1}/{max_retries} failed ({err_str}), waiting {backoff}s...")
                 await asyncio.sleep(backoff)
                 continue
 

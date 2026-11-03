@@ -103,6 +103,10 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
         help="Investigation budget per finding, in model turns (default: 6)"
     )
     parser.add_argument(
+        "--verify-model", default=None,
+        help="Optional separate model identifier for Tier-3 Adversarial Verification (e.g. Beam, DeepSeek-R1, Luna)"
+    )
+    parser.add_argument(
         "--no-ast-slicer", action="store_true",
         help="Disable intra-procedural backward AST slicing for LLM prompts"
     )
@@ -345,6 +349,7 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
         suppress_unconfirmed_rules=suppress_unconfirmed_rules,
         min_confidence=getattr(args, "min_confidence", None),
         offline=offline,
+        verify_model=getattr(args, "verify_model", None),
     )
 
 

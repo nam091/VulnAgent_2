@@ -63,6 +63,7 @@ class ScanOptions:
         model: Optional[str] = None,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        verify_model: Optional[str] = None,
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -84,6 +85,7 @@ class ScanOptions:
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
+        self.verify_model = verify_model
 
         if suppress_unconfirmed_rules is None:
             self.suppress_unconfirmed_rules = True if verify else False
@@ -785,14 +787,13 @@ class Scanner:
         if not candidates:
             return {"verified_candidates": 0}
 
+        verify_model = self.options.verify_model or self.analyzer.ai_client.openai_default_model
         agent = VerificationAgent(
             client=self.analyzer.ai_client.openai_client,
-            model=self.analyzer.ai_client.openai_default_model,
+            model=verify_model,
             root=root,
             max_turns=self.options.verify_turns,
-            temperature=None if self.analyzer.ai_client._is_reasoning_model(
-                self.analyzer.ai_client.openai_default_model
-            ) else 0,
+            temperature=None if self.analyzer.ai_client._is_reasoning_model(verify_model) else 0,
         )
 
         semaphore = asyncio.Semaphore(self.options.concurrency)
@@ -947,13 +948,12 @@ class Scanner:
         if not candidates:
             return {}
 
+        verify_model = self.options.verify_model or self.analyzer.ai_client.openai_default_model
         judge = ChainJudge(
             client=self.analyzer.ai_client.openai_client,
-            model=self.analyzer.ai_client.openai_default_model,
+            model=verify_model,
             root=root,
-            temperature=None if self.analyzer.ai_client._is_reasoning_model(
-                self.analyzer.ai_client.openai_default_model
-            ) else 0,
+            temperature=None if self.analyzer.ai_client._is_reasoning_model(verify_model) else 0,
         )
 
         semaphore = asyncio.Semaphore(self.options.concurrency)
