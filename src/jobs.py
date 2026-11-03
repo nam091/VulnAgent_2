@@ -57,6 +57,7 @@ class Job:
         """
 
         counts = (self.result or {}).get("counts", {})
+        opts = self.options or {}
         return {
             "id": self.id,
             "kind": self.kind,
@@ -71,6 +72,10 @@ class Job:
             "counts": counts,
             "risk_score": (self.result or {}).get("risk_score", 0),
             "error": self.error,
+            "model": opts.get("model"),
+            "verify_model": opts.get("verify_model"),
+            "mode": opts.get("mode"),
+            "source_name": opts.get("source_name"),
         }
 
 

@@ -428,6 +428,7 @@ async function onJobDrop(e, targetJobId) {
 
   try {
     localStorage.setItem('vulnagent-jobs-order', JSON.stringify(orderedIds));
+    localStorage.setItem('vulnagent-jobs-sort', 'custom');
   } catch (err) {}
 
   await renderJobs();
@@ -442,6 +443,7 @@ function onJobDragEnd(e) {
 
 function jobRow(job, isDraggable = true) {
   const counts = job.counts || {};
+  const meta = getJobMetadata(job);
   const badges = SEV_ORDER.filter(s => counts[s])
     .map(s => `<span class="pill ${s}">${counts[s]}</span>`).join(' ');
   return `
@@ -464,7 +466,7 @@ function jobRow(job, isDraggable = true) {
       <span class="job-status ${esc(job.status)}"></span>
       <div style="min-width:0;flex:1">
         <div class="job-label">${esc(job.label)}</div>
-        <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · ${esc(job.status)}${
+        <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · Model: <code class="job-meta-model">${esc(meta.model)}</code> · ${esc(job.status)}${
           job.status === 'running' ? ` · ${Math.round(job.percent)}%` : ''} · ${ago(job.created_at)}</div>
       </div>
       <div class="job-right">
@@ -857,6 +859,34 @@ async function submit(pane) {
 
 /* ---------------- job list ---------------- */
 
+function getJobMetadata(job) {
+  let benchmark = job.source_name || '';
+  let mode = job.mode || '';
+  let model = job.model || '';
+
+  const label = job.label || '';
+  const parts = label.split('·').map(s => s.trim());
+  if (parts.length >= 1 && !benchmark) {
+    benchmark = parts[0];
+  }
+  if (parts.length >= 2) {
+    const rest = parts.slice(1).join('·').trim();
+    if (rest.toLowerCase().includes(' by ')) {
+      const byParts = rest.split(/ by /i);
+      if (!mode) mode = byParts[0].trim();
+      if (!model) model = byParts.slice(1).join(' by ').trim();
+    } else {
+      if (!mode) mode = rest;
+      if (!model && rest.toLowerCase() === 'semgrep') model = 'Semgrep (Static)';
+    }
+  }
+  return {
+    benchmark: benchmark || 'Target',
+    mode: mode || (job.kind === 'snippet' ? 'Snippet' : 'DeepVerify'),
+    model: model || (job.kind === 'snippet' ? 'Snippet' : 'Default')
+  };
+}
+
 function sortJobsBySavedOrder(jobs) {
   try {
     const raw = localStorage.getItem('vulnagent-jobs-order');
@@ -875,9 +905,48 @@ function sortJobsBySavedOrder(jobs) {
   }
 }
 
+function sortJobs(jobs, sortBy) {
+  if (sortBy === 'custom') {
+    return sortJobsBySavedOrder(jobs);
+  }
+  return [...jobs].sort((a, b) => {
+    const metaA = getJobMetadata(a);
+    const metaB = getJobMetadata(b);
+
+    if (sortBy === 'time-asc') {
+      return (a.created_at || '').localeCompare(b.created_at || '');
+    }
+    if (sortBy === 'benchmark') {
+      const cmp = metaA.benchmark.localeCompare(metaB.benchmark);
+      if (cmp !== 0) return cmp;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    }
+    if (sortBy === 'mode') {
+      const cmp = metaA.mode.localeCompare(metaB.mode);
+      if (cmp !== 0) return cmp;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    }
+    if (sortBy === 'model') {
+      const cmp = metaA.model.localeCompare(metaB.model);
+      if (cmp !== 0) return cmp;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    }
+    // Default time-desc (Newest first)
+    return (b.created_at || '').localeCompare(a.created_at || '');
+  });
+}
+
+function onJobsSortChange(newSort) {
+  try {
+    localStorage.setItem('vulnagent-jobs-sort', newSort);
+  } catch (e) {}
+  renderJobs();
+}
+
 function resetJobsOrder() {
   try {
     localStorage.removeItem('vulnagent-jobs-order');
+    localStorage.setItem('vulnagent-jobs-sort', 'time-desc');
   } catch (e) {}
   renderJobs();
 }
@@ -886,18 +955,30 @@ async function renderJobs() {
   view.innerHTML = `<div class="page-head"><h1>Scans</h1><p>Every scan this server has run.</p></div>
     <div class="empty"><span class="spinner"></span>Loading</div>`;
   const { jobs: rawJobs } = await api('/api/jobs?limit=100');
-  const jobs = sortJobsBySavedOrder(rawJobs || []);
+  const currentSort = localStorage.getItem('vulnagent-jobs-sort') || 'time-desc';
   const hasCustomOrder = !!localStorage.getItem('vulnagent-jobs-order');
+  const jobs = sortJobs(rawJobs || [], currentSort);
 
   view.innerHTML = `
     <div class="page-head">
-      <div class="row">
+      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:center">
         <div>
           <h1>Scans</h1>
           <p>Every scan this server has run across all benchmarks and targets. Drag &amp; drop cards to reorder.</p>
         </div>
         <div class="spacer"></div>
-        ${hasCustomOrder ? `<button type="button" class="btn ghost sm" onclick="resetJobsOrder()">Reset order</button>` : ''}
+        <div class="jobs-sort-bar" style="display:inline-flex;align-items:center;gap:7px">
+          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Sort by:</span>
+          <select id="jobs-sort-select" onchange="onJobsSortChange(this.value)" style="width:auto;padding:5px 9px;font:500 12.5px/1 var(--sans);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
+            <option value="time-desc" ${currentSort === 'time-desc' ? 'selected' : ''}>Time: Newest first</option>
+            <option value="time-asc" ${currentSort === 'time-asc' ? 'selected' : ''}>Time: Oldest first</option>
+            <option value="benchmark" ${currentSort === 'benchmark' ? 'selected' : ''}>Benchmark / Target (A-Z)</option>
+            <option value="mode" ${currentSort === 'mode' ? 'selected' : ''}>Mode (DeepVerify / LLM / Semgrep)</option>
+            <option value="model" ${currentSort === 'model' ? 'selected' : ''}>Model (A-Z)</option>
+            <option value="custom" ${currentSort === 'custom' ? 'selected' : ''}>Custom (Drag &amp; drop order)</option>
+          </select>
+        </div>
+        ${hasCustomOrder ? `<button type="button" class="btn ghost sm" onclick="resetJobsOrder()" title="Reset to newest first">Reset drag order</button>` : ''}
         ${jobs.length ? `<button class="btn ghost sm danger" onclick="clearAllJobs()">Clear history</button>` : ''}
       </div>
     </div>

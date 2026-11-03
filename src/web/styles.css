@@ -840,6 +840,14 @@ pre.diff .del { color: var(--crit); display: block; }
   border-radius: 3px;
   border: 1px solid var(--edge);
 }
+.job-meta code.job-meta-model {
+  color: var(--signal);
+  font-weight: 600;
+  background: var(--raised);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
 .job-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .btn-del {
   background: transparent; border: 0; color: var(--text-faint); padding: 5px 8px;
