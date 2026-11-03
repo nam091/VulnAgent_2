@@ -711,8 +711,9 @@ class CodeAnalyzer:
                         mapped_type = type_mapping.get(original_type.upper())
 
                     # CWE-based fallback if type name is unfamiliar
-                    if mapped_type is None and vuln_data.get('cwe_id'):
-                        cwe_num = str(vuln_data['cwe_id']).upper().replace('CWE-', '').strip()
+                    if mapped_type is None:
+                        cwe_candidate = str(vuln_data.get('cwe_id') or vuln_data.get('cwe') or original_type).upper()
+                        cwe_num_match = re.search(r'CWE[-_]?(\d+)', cwe_candidate)
                         cwe_to_type = {
                             '90': VulnerabilityType.LDAP_INJECTION,
                             '643': VulnerabilityType.XPATH_INJECTION,
@@ -733,7 +734,40 @@ class CodeAnalyzer:
                             '798': VulnerabilityType.HARDCODED_CREDENTIALS,
                             '352': VulnerabilityType.CSRF,
                         }
-                        mapped_type = cwe_to_type.get(cwe_num)
+                        if cwe_num_match:
+                            mapped_type = cwe_to_type.get(cwe_num_match.group(1))
+
+                        # Keyword-based semantic mapping fallback
+                        if mapped_type is None:
+                            orig_lower = original_type.lower()
+                            if 'cross-site scripting' in orig_lower or 'xss' in orig_lower or 'input during web page generation' in orig_lower:
+                                mapped_type = VulnerabilityType.CROSS_SITE_SCRIPTING
+                            elif 'sql' in orig_lower:
+                                mapped_type = VulnerabilityType.SQL_INJECTION
+                            elif 'command' in orig_lower or 'cmdi' in orig_lower:
+                                mapped_type = VulnerabilityType.OS_COMMAND_INJECTION
+                            elif 'traversal' in orig_lower or 'path' in orig_lower:
+                                mapped_type = VulnerabilityType.PATH_TRAVERSAL
+                            elif 'deserializ' in orig_lower:
+                                mapped_type = VulnerabilityType.INSECURE_DESERIALIZATION
+                            elif 'xpath' in orig_lower:
+                                mapped_type = VulnerabilityType.XPATH_INJECTION
+                            elif 'ldap' in orig_lower:
+                                mapped_type = VulnerabilityType.LDAP_INJECTION
+                            elif 'xml' in orig_lower or 'xxe' in orig_lower:
+                                mapped_type = VulnerabilityType.XML_EXTERNAL_ENTITY
+                            elif 'random' in orig_lower or 'prng' in orig_lower:
+                                mapped_type = VulnerabilityType.SECURE_RANDOMNESS
+                            elif 'hash' in orig_lower:
+                                mapped_type = VulnerabilityType.USE_OF_WEAK_HASHING_ALGORITHM
+                            elif 'redirect' in orig_lower:
+                                mapped_type = VulnerabilityType.UNVALIDATED_REDIRECTS_AND_FORWARDED_REQUESTS
+                            elif 'csrf' in orig_lower:
+                                mapped_type = VulnerabilityType.CSRF
+                            elif 'eval' in orig_lower or 'code injection' in orig_lower:
+                                mapped_type = VulnerabilityType.CODE_INJECTION
+                            elif 'trust boundary' in orig_lower or 'user-controlled key' in orig_lower:
+                                mapped_type = VulnerabilityType.INSUFFICIENT_INPUT_VALIDATION
 
                     if mapped_type is None:
                         logging.warning(f"Unknown vulnerability type encountered: {original_type}")

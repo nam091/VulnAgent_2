@@ -506,13 +506,36 @@ class AIClient:
             v.setdefault("defect_replication_notes", poc)
             v.setdefault("proof_of_concept", poc)
             v.setdefault("secure_code_example", "")
+
+            # Flexible mapping for type/vulnerability_type
+            if "type" not in v and "vulnerability_type" in v:
+                v["type"] = v["vulnerability_type"]
+            elif "type" in v and "vulnerability_type" not in v:
+                v["vulnerability_type"] = v["type"]
+            v.setdefault("type", "VULNERABILITY")
+            v.setdefault("severity", "MEDIUM")
+
+            # Flexible mapping for remediation / recommended_fix
+            remed = v.get("remediation") or v.get("recommended_fix") or v.get("fix") or ""
+            v.setdefault("remediation", remed)
             v.setdefault("impact", "")
-            v.setdefault("remediation", "")
-            v.setdefault("cwe_id", "CWE-Other")
-            v.setdefault("owasp_category", "A00: Other")
+
+            # Flexible mapping for CWE
+            cwe = v.get("cwe_id") or v.get("cwe") or "CWE-Other"
+            v.setdefault("cwe_id", cwe)
+            v.setdefault("owasp_category", v.get("owasp") or "A00: Other")
             v.setdefault("cvss_score", 5.0)
-            if "location" not in v or not isinstance(v["location"], dict):
-                v["location"] = {"file_path": "", "start_line": 1, "end_line": 1}
+
+            # Flexible mapping for location
+            loc = v.get("location")
+            if not isinstance(loc, dict):
+                s_line = v.get("start_line") or v.get("line") or 1
+                e_line = v.get("end_line") or s_line
+                v["location"] = {"file_path": "", "start_line": s_line, "end_line": e_line}
+            else:
+                loc.setdefault("file_path", "")
+                loc.setdefault("start_line", 1)
+                loc.setdefault("end_line", loc.get("start_line", 1))
         return data
 
     @staticmethod
@@ -698,8 +721,8 @@ class AIClient:
                             except (ValueError, SyntaxError, MemoryError, RecursionError):
                                 continue
                         # Only keep objects that actually look like findings.
-                        if isinstance(obj, dict) and "type" in obj and "severity" in obj:
-                            if not any(f.get("type") == obj.get("type") and f.get("location") == obj.get("location") for f in findings):
+                        if isinstance(obj, dict) and ("type" in obj or "vulnerability_type" in obj) and "severity" in obj:
+                            if not any((f.get("type") or f.get("vulnerability_type")) == (obj.get("type") or obj.get("vulnerability_type")) and f.get("location") == obj.get("location") for f in findings):
                                 findings.append(obj)
                         break
 
