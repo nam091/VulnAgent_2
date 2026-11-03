@@ -191,7 +191,15 @@ class ToolCallingAgent:
             "role": "user",
             "content": (
                 "You have used your investigation budget. Give your final answer now "
-                "using only what you have already read. Do not request more tools."
+                "using only what you have already read. Do not request more tools.\n"
+                "IMPORTANT: Respond with ONLY a single raw JSON object matching this schema:\n"
+                "{\n"
+                '  "verdict": "confirmed" | "refuted" | "uncertain",\n'
+                '  "reason": "explanation citing code",\n'
+                '  "evidence_file": "path",\n'
+                '  "evidence_line": 0,\n'
+                '  "mitigating_control": "named control if refuted, else empty"\n'
+                "}"
             ),
         })
         try:
