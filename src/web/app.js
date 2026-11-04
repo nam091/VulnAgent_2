@@ -1183,26 +1183,26 @@ function paintJob(job) {
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg> Rename
         </button>
         <button class="btn ghost sm danger" onclick="deleteJob('${esc(job.id)}', event)">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${running ? 'Stop & Delete' : 'Delete scan'}
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${running ? 'Stop & Delete' : 'Delete'}
         </button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
       <div class="tabs" id="job-detail-tabs" style="margin-top:16px;margin-bottom:0">
         <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" onclick="switchJobDetailTab('findings')">
-          ${running ? `Findings &amp; Progress (${(result.findings || []).length})` : `Findings &amp; Code Analysis (${totalFindings})`}
+          ${running ? `Progress <span class="tab-count">${(result.findings || []).length}</span>` : `Findings <span class="tab-count">${totalFindings}</span>`}
         </button>
         ${isBenchSupported ? `
         <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="2" r="2"></circle></svg> Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="2" r="2"></circle></svg> Benchmark <span class="tab-count">${(bench.metrics.f1 * 100).toFixed(1)}%</span>
         </button>` : ''}
         ${hasHistory ? `
         <button type="button" class="tab ${currentJobDetailTab === 'history' ? 'on' : ''}" onclick="switchJobDetailTab('history')">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Run History &amp; Model Variance (${history.total_runs} runs)
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> History <span class="tab-count">${history.total_runs}</span>
         </button>` : ''}
         <button type="button" class="tab ${currentJobDetailTab === 'debug' ? 'on' : ''}" onclick="switchJobDetailTab('debug')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg> Debug &amp; LLM Logs (${debugItemsCount})
+          </svg> Debug <span class="tab-count">${debugItemsCount}</span>
         </button>
       </div>
     </div>
