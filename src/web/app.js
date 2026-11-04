@@ -34,8 +34,9 @@ async function loadCachedModelProfiles() {
 }
 
 function resolveModelDisplayName(rawModel) {
-  if (!rawModel) return 'Default';
+  if (!rawModel) return '';
   const m = String(rawModel).trim();
+  if (m.toLowerCase() === 'default' || m.toLowerCase() === 'null' || m.toLowerCase() === 'none') return '';
   const mLow = m.toLowerCase();
 
   // 1. Match from Settings profiles
@@ -941,13 +942,32 @@ function getJobMetadata(job) {
     if (rest.toLowerCase().includes(' by ')) {
       const byParts = rest.split(/ by /i);
       if (!mode) mode = byParts[0].trim();
-      if (!model) model = byParts.slice(1).join(' by ').trim();
+      const extractedModel = byParts.slice(1).join(' by ').trim();
+      if (!model || model.toLowerCase() === 'default') {
+        model = extractedModel;
+      }
     } else {
       if (!mode) mode = rest;
-      if (!model && rest.toLowerCase() === 'semgrep') model = 'Semgrep (Static)';
+      if (rest.toLowerCase() === 'semgrep') {
+        model = 'Semgrep (Static)';
+      }
     }
   }
-  const cleanModelName = resolveModelDisplayName(model || (job.kind === 'snippet' ? 'Snippet' : 'Default'));
+
+  if (mode.toLowerCase() === 'semgrep' || label.toLowerCase().endsWith('· semgrep')) {
+    model = 'Semgrep (Static)';
+  }
+
+  let cleanModelName = resolveModelDisplayName(model);
+  if (!cleanModelName) {
+    if (job.kind === 'snippet') {
+      cleanModelName = 'DeepSeek v4.1 Flash';
+    } else {
+      const defProf = cachedModelProfiles.find(p => p.is_default);
+      cleanModelName = defProf ? defProf.name : 'DeepSeek v4.1 Flash';
+    }
+  }
+
   return {
     benchmark: benchmark || 'Target',
     mode: mode || (job.kind === 'snippet' ? 'Snippet' : 'DeepVerify'),

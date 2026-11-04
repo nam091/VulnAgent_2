@@ -28,8 +28,10 @@ DEFAULT_RETENTION = 50
 
 def _resolve_model_name(raw_model: Optional[str]) -> str:
     if not raw_model:
-        return "Default"
+        return ""
     m_str = str(raw_model).strip()
+    if not m_str or m_str.lower() in ("default", "none", "null"):
+        return ""
     m_low = m_str.lower()
     try:
         models_file = Path(".vulnagent-models.json")
@@ -69,6 +71,50 @@ def _resolve_model_name(raw_model: Optional[str]) -> str:
     if "/" in m_str:
         return m_str.split("/")[-1].split(":")[0]
     return m_str
+
+
+def _extract_model_from_job(job: Any) -> str:
+    opts = getattr(job, "options", None) or {}
+    mode = (opts.get("mode") or "").strip().lower()
+    label = getattr(job, "label", "") or ""
+
+    if mode in ("semgrep", "semgrep-only", "semgrep_only") or label.strip().lower().endswith("· semgrep"):
+        return "Semgrep (Static)"
+
+    raw_model = opts.get("model")
+    if raw_model:
+        m = _resolve_model_name(raw_model)
+        if m:
+            return m
+
+    if " by " in label:
+        candidate = label.split(" by ")[-1].strip()
+        if candidate:
+            m = _resolve_model_name(candidate)
+            if m:
+                return m
+
+    res = getattr(job, "result", None) or {}
+    res_opts = res.get("options") or {}
+    if res_opts.get("model"):
+        m = _resolve_model_name(res_opts.get("model"))
+        if m:
+            return m
+
+    # Fallback to active system default model profile from .vulnagent-models.json instead of "Default"
+    try:
+        models_file = Path(".vulnagent-models.json")
+        if models_file.is_file():
+            profiles = json.loads(models_file.read_text(encoding="utf-8"))
+            for p in profiles:
+                if p.get("is_default"):
+                    return p.get("name") or "DeepSeek v4.1 Flash"
+            if profiles:
+                return profiles[0].get("name") or "DeepSeek v4.1 Flash"
+    except Exception:
+        pass
+
+    return "DeepSeek v4.1 Flash"
 
 
 @dataclass
@@ -134,7 +180,7 @@ class Job:
             "counts": counts,
             "risk_score": res.get("risk_score", 0),
             "error": self.error,
-            "model": _resolve_model_name(opts.get("model")),
+            "model": _extract_model_from_job(self),
             "raw_model": opts.get("model"),
             "verify_model": _resolve_model_name(opts.get("verify_model")),
             "raw_verify_model": opts.get("verify_model"),
