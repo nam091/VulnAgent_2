@@ -162,6 +162,19 @@ const ago = iso => {
   return `${Math.floor(secs / 86400)}d ago`;
 };
 
+function formatTokensNumber(num) {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  return Number(num).toLocaleString('en-US');
+}
+
+function formatCompactTokens(num) {
+  if (!num) return '0';
+  const n = Number(num);
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.00$/, '') + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+}
+
 /* ---------------- charts (inline SVG, no libraries) ---------------- */
 
 function severityStack(counts) {
@@ -446,6 +459,15 @@ function jobRow(job, isDraggable = true) {
   const meta = getJobMetadata(job);
   const badges = SEV_ORDER.filter(s => counts[s])
     .map(s => `<span class="pill ${s}">${counts[s]}</span>`).join(' ');
+
+  const tokens = job.tokens || (job.result && job.result.stats && {
+    input: job.result.stats.input_tokens,
+    output: job.result.stats.output_tokens,
+    thinking: job.result.stats.thinking_tokens || job.result.stats.reasoning_tokens,
+    total: job.result.stats.total_tokens
+  }) || {};
+  const hasTokens = (tokens.total || tokens.input || tokens.output) > 0;
+
   return `
     <div class="job" ${isDraggable ? 'draggable="true"' : ''}
          data-job-id="${esc(job.id)}"
@@ -466,7 +488,9 @@ function jobRow(job, isDraggable = true) {
       <span class="job-status ${esc(job.status)}"></span>
       <div style="min-width:0;flex:1">
         <div class="job-label">${esc(job.label)}</div>
-        <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · Model: <code class="job-meta-model">${esc(meta.model)}</code> · ${esc(job.status)}${
+        <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · Model: <code class="job-meta-model">${esc(meta.model)}</code>${
+          hasTokens ? ` · <code class="job-meta-tok" title="Input: ${formatTokensNumber(tokens.input)} | Output: ${formatTokensNumber(tokens.output)}${tokens.thinking ? ` | Thinking: ${formatTokensNumber(tokens.thinking)}` : ''}">⚡ ${formatCompactTokens(tokens.input)} in / ${formatCompactTokens(tokens.output)} out${tokens.thinking ? ` (${formatCompactTokens(tokens.thinking)} think)` : ''}</code>` : ''
+        } · ${esc(job.status)}${
           job.status === 'running' ? ` · ${Math.round(job.percent)}%` : ''} · ${ago(job.created_at)}</div>
       </div>
       <div class="job-right">
@@ -1154,6 +1178,18 @@ function paintJob(job) {
     });
   });
 
+  const telem = stats.telemetry || {};
+  const inputTokens = telem.input_tokens || stats.input_tokens || (job.tokens && job.tokens.input) || 0;
+  const outputTokens = telem.output_tokens || stats.output_tokens || (job.tokens && job.tokens.output) || 0;
+  const thinkingTokens = telem.thinking_tokens || telem.reasoning_tokens || stats.thinking_tokens || stats.reasoning_tokens || (job.tokens && job.tokens.thinking) || 0;
+  const totalTokens = telem.total_tokens || stats.total_tokens || (job.tokens && job.tokens.total) || (inputTokens + outputTokens);
+  const apiCalls = telem.api_requests || stats.api_requests || 0;
+  const hasTelemetry = (totalTokens > 0) || (inputTokens > 0);
+
+  currentJobFindings = findings;
+  currentJobId = job.id;
+  currentRenderedLimit = 35;
+
   const findingsTabHtml = `
     ${(result.degraded && degradedFiles.length) ? `<div class="banner warn" style="margin-bottom:18px">
       <b>Analysis Coverage Note:</b> ${degradedFiles.length} file(s) encountered a local tier limitation (e.g., syntax or timeout), while remaining tiers completed and guarded results.</div>` : ''}
@@ -1173,6 +1209,42 @@ function paintJob(job) {
         <div class="metric-label">Duration</div>
         <div class="metric-sub">${stats.files_sent_to_llm ?? 0} file(s) to the LLM</div></div>
     </div>
+
+    ${hasTelemetry ? `
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="align-items:center;margin-bottom:14px">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:8px">
+          <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Token Consumption &amp; LLM Telemetry
+        </div>
+        <div class="spacer"></div>
+        <span class="muted" style="font-size:12px;font-variant-numeric:tabular-nums">${apiCalls ? `<b>${apiCalls}</b> API calls · ` : ''}Total: <b style="color:var(--text)">${formatTokensNumber(totalTokens)}</b> tokens</span>
+      </div>
+      <div class="metrics" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));margin-top:0">
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${formatTokensNumber(inputTokens)}</div>
+          <div class="metric-label">Input Tokens (Prompt)</div>
+          <div class="metric-sub">${totalTokens ? Math.round((inputTokens / totalTokens) * 100) : 0}% of total volume</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${formatTokensNumber(outputTokens)}</div>
+          <div class="metric-label">Output Tokens (Completion)</div>
+          <div class="metric-sub">${totalTokens ? Math.round((outputTokens / totalTokens) * 100) : 0}% of total volume</div>
+        </div>
+        <div class="metric ${thinkingTokens ? 'ok' : ''}">
+          <div class="metric-value" style="font-size:19px;color:${thinkingTokens ? 'var(--signal)' : 'var(--text-faint)'}">${thinkingTokens ? formatTokensNumber(thinkingTokens) : '—'}</div>
+          <div class="metric-label">Thinking / Reasoning Tokens</div>
+          <div class="metric-sub">${thinkingTokens && outputTokens ? Math.round((thinkingTokens / outputTokens) * 100) + '% of completion' : (thinkingTokens ? 'Deep reasoning' : 'Standard generation')}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${formatTokensNumber(totalTokens)}</div>
+          <div class="metric-label">Total Tokens</div>
+          <div class="metric-sub">${apiCalls ? `avg ${Math.round(totalTokens / apiCalls)} tok/call` : 'accumulated'}</div>
+        </div>
+      </div>
+    </div>` : ''}
 
     ${stats.verified_candidates ? `<div class="card">
       <div class="card-title">Verification agent</div>
@@ -1235,7 +1307,7 @@ function paintJob(job) {
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input type="text" id="finding-search-input" class="search-input" placeholder="Search by file, type, CWE, line, description..." autocomplete="off">
+          <input type="text" id="finding-search-input" class="search-input" placeholder="Search by file, type, CWE, line, description..." autocomplete="off" oninput="onFindingSearchInput()">
           <button type="button" id="finding-search-clear" class="search-clear-btn hide" onclick="clearFindingSearch()" title="Clear search">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1275,7 +1347,7 @@ function paintJob(job) {
       </div>
 
       <div id="findings-list">
-        ${findings.length ? findings.map(f => findingCard(f, job.id)).join('')
+        ${findings.length ? ''
           : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
       </div>
     </div>`;
@@ -1296,25 +1368,9 @@ function paintJob(job) {
       ${historyTabHtml}
     </div>` : ''}`;
 
-  const searchInput = body.querySelector('#finding-search-input');
-  if (searchInput) {
-    searchInput.oninput = () => applyFindingsFilter();
+  if (findings.length > 0) {
+    renderFindingsBatch(true);
   }
-
-  body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
-    head.nextElementSibling.classList.toggle('hide'));
-
-  body.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async e => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
-      const was = btn.textContent;
-      btn.textContent = 'Copied';
-      setTimeout(() => { btn.textContent = was; }, 1400);
-    } catch (err) {
-      btn.textContent = 'Copy failed';
-    }
-  });
 }
 
 /* Findings already merged, shown while verification is still running. */
@@ -1504,74 +1560,170 @@ function fixBlock(f) {
     </div>`;
 }
 
-/* ---------------- findings search & filtering ---------------- */
+/* ---------------- findings search & filtering & virtual chunked rendering ---------------- */
 
+let currentJobFindings = [];
+let currentJobId = '';
 let currentFindingFilter = 'all';
+let currentRenderedLimit = 35;
+let searchDebounceTimer = null;
+let findingsIntersectionObserver = null;
+
+function getFilteredFindings() {
+  const searchInput = document.getElementById('finding-search-input');
+  const sevSelect = document.getElementById('finding-severity-select');
+  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+  const selectedSev = sevSelect ? sevSelect.value : 'all';
+
+  return (currentJobFindings || []).filter(f => {
+    const isConfirmed = f.source === 'confirmed' || f.corroborated || (f.provenance && f.provenance.corroborated);
+    const isVerified = f.verification && f.verification.verdict === 'confirmed';
+    const isLlm = f.source === 'llm-only' || f.source === 'llm';
+    const isRule = f.source === 'rule-only' || f.source === 'semgrep';
+
+    if (currentFindingFilter === 'confirmed' && !isConfirmed) return false;
+    if (currentFindingFilter === 'verified' && !isVerified) return false;
+    if (currentFindingFilter === 'llm' && !isLlm) return false;
+    if (currentFindingFilter === 'rule' && !isRule) return false;
+
+    if (selectedSev !== 'all' && f.severity !== selectedSev) return false;
+
+    if (query) {
+      const searchTarget = [
+        f.file || '',
+        f.type || '',
+        f.vulnerability_type || '',
+        f.cwe || '',
+        f.description || '',
+        f.rule_id || '',
+        f.severity || '',
+        f.start_line ? `line ${f.start_line}` : '',
+        f.end_line ? `line ${f.end_line}` : '',
+        f.source || '',
+        (f.verification && f.verification.note) || '',
+        (f.verification && f.verification.mitigating_control) || ''
+      ].join(' ').toLowerCase();
+      if (!searchTarget.includes(query)) return false;
+    }
+    return true;
+  });
+}
+
+function renderFindingsBatch(reset = false) {
+  const container = document.getElementById('findings-list');
+  const counterBadge = document.getElementById('findings-counter-badge');
+  if (!container) return;
+
+  if (reset) {
+    currentRenderedLimit = 35;
+  }
+
+  const filtered = getFilteredFindings();
+  const total = (currentJobFindings || []).length;
+  const filteredCount = filtered.length;
+
+  if (counterBadge) {
+    if (filteredCount === total) {
+      counterBadge.textContent = `Showing ${Math.min(currentRenderedLimit, total)} of ${total} findings`;
+    } else {
+      counterBadge.textContent = `Showing ${Math.min(currentRenderedLimit, filteredCount)} of ${filteredCount} findings (${total} total)`;
+    }
+  }
+
+  if (filteredCount === 0) {
+    container.innerHTML = emptyState('No vulnerabilities match filter', 'Try clearing search query or choosing another filter/severity.');
+    return;
+  }
+
+  const visible = filtered.slice(0, currentRenderedLimit);
+  let html = visible.map(f => findingCard(f, currentJobId)).join('');
+
+  if (currentRenderedLimit < filteredCount) {
+    html += `
+      <div class="findings-pagination-bar" id="findings-pagination-bar">
+        <span class="muted" style="font-size:12.5px">Showing <b>${visible.length}</b> of <b>${filteredCount}</b> matching findings</span>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn primary sm" onclick="loadMoreFindings()">Load next 35 findings</button>
+          <button type="button" class="btn ghost sm" onclick="loadAllFindings()">Show all (${filteredCount})</button>
+        </div>
+      </div>
+      <div id="findings-scroll-sentinel" style="height:14px"></div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Bind head accordion and copy buttons
+  container.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
+    head.nextElementSibling.classList.toggle('hide'));
+
+  container.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = async e => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(decodeURIComponent(btn.dataset.copy));
+      const was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = was; }, 1400);
+    } catch (err) {
+      btn.textContent = 'Copy failed';
+    }
+  });
+
+  // Setup infinite scroll sentinel
+  if (findingsIntersectionObserver) {
+    findingsIntersectionObserver.disconnect();
+    findingsIntersectionObserver = null;
+  }
+  const sentinel = document.getElementById('findings-scroll-sentinel');
+  if (sentinel && window.IntersectionObserver) {
+    findingsIntersectionObserver = new IntersectionObserver((entries) => {
+      if (entries[0] && entries[0].isIntersecting) {
+        loadMoreFindings();
+      }
+    }, { rootMargin: '250px' });
+    findingsIntersectionObserver.observe(sentinel);
+  }
+}
+
+function loadMoreFindings() {
+  currentRenderedLimit += 35;
+  renderFindingsBatch(false);
+}
+
+function loadAllFindings() {
+  currentRenderedLimit = 999999;
+  renderFindingsBatch(false);
+}
+
+function onFindingSearchInput() {
+  const input = document.getElementById('finding-search-input');
+  const clearBtn = document.getElementById('finding-search-clear');
+  const query = (input ? input.value : '').trim();
+  if (clearBtn) clearBtn.classList.toggle('hide', !query);
+
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    renderFindingsBatch(true);
+  }, 120);
+}
+
+function clearFindingSearch() {
+  const input = document.getElementById('finding-search-input');
+  const clearBtn = document.getElementById('finding-search-clear');
+  if (input) input.value = '';
+  if (clearBtn) clearBtn.classList.add('hide');
+  renderFindingsBatch(true);
+}
 
 function setFindingFilter(filterName) {
   currentFindingFilter = filterName;
   document.querySelectorAll('#finding-filter-pills .filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.filter === filterName);
   });
-  applyFindingsFilter();
-}
-
-function clearFindingSearch() {
-  const input = document.getElementById('finding-search-input');
-  if (input) {
-    input.value = '';
-    applyFindingsFilter();
-  }
+  renderFindingsBatch(true);
 }
 
 function applyFindingsFilter() {
-  const searchInput = document.getElementById('finding-search-input');
-  const clearBtn = document.getElementById('finding-search-clear');
-  const sevSelect = document.getElementById('finding-severity-select');
-  const counterBadge = document.getElementById('findings-counter-badge');
-  const container = document.getElementById('findings-list');
-  if (!container) return;
-
-  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
-  if (clearBtn) clearBtn.classList.toggle('hide', !query);
-
-  const selectedSev = sevSelect ? sevSelect.value : 'all';
-  const cards = container.querySelectorAll('.finding');
-  let visibleCount = 0;
-
-  cards.forEach(card => {
-    const sev = card.dataset.severity;
-    const isConfirmed = card.dataset.confirmed === 'true';
-    const isVerified = card.dataset.verified === 'true';
-    const isLlm = card.dataset.llm === 'true';
-    const isRule = card.dataset.rule === 'true';
-    const searchText = card.dataset.search || '';
-
-    // Check filter pill
-    let matchesPill = true;
-    if (currentFindingFilter === 'confirmed') matchesPill = isConfirmed;
-    else if (currentFindingFilter === 'verified') matchesPill = isVerified;
-    else if (currentFindingFilter === 'llm') matchesPill = isLlm;
-    else if (currentFindingFilter === 'rule') matchesPill = isRule;
-
-    // Check severity
-    let matchesSev = true;
-    if (selectedSev !== 'all') matchesSev = (sev === selectedSev);
-
-    // Check search query
-    let matchesSearch = true;
-    if (query) {
-      matchesSearch = searchText.includes(query);
-    }
-
-    const show = matchesPill && matchesSev && matchesSearch;
-    card.classList.toggle('hide', !show);
-    if (show) visibleCount++;
-  });
-
-  if (counterBadge) {
-    counterBadge.textContent = `Showing ${visibleCount} of ${cards.length} findings`;
-  }
+  renderFindingsBatch(true);
 }
 
 /* ---------------- interactive taint step code viewer ---------------- */

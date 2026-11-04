@@ -848,6 +848,26 @@ pre.diff .del { color: var(--crit); display: block; }
   padding: 1px 6px;
   border-radius: 3px;
 }
+.job-meta code.job-meta-tok {
+  color: var(--text-dim);
+  font-weight: 500;
+  background: var(--raised);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.findings-pagination-bar {
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .job-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .btn-del {
   background: transparent; border: 0; color: var(--text-faint); padding: 5px 8px;

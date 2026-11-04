@@ -58,6 +58,20 @@ class Job:
 
         counts = (self.result or {}).get("counts", {})
         opts = self.options or {}
+        res = self.result or {}
+        stats = res.get("stats") or {}
+        telemetry = res.get("telemetry") or stats.get("telemetry") or {}
+        input_tokens = telemetry.get("input_tokens") or stats.get("input_tokens") or 0
+        output_tokens = telemetry.get("output_tokens") or stats.get("output_tokens") or 0
+        thinking_tokens = (
+            telemetry.get("thinking_tokens")
+            or telemetry.get("reasoning_tokens")
+            or stats.get("thinking_tokens")
+            or stats.get("reasoning_tokens")
+            or 0
+        )
+        total_tokens = telemetry.get("total_tokens") or stats.get("total_tokens") or (input_tokens + output_tokens)
+
         return {
             "id": self.id,
             "kind": self.kind,
@@ -68,14 +82,20 @@ class Job:
             "message": self.message,
             "created_at": self.created_at,
             "finished_at": self.finished_at,
-            "findings": len((self.result or {}).get("findings", [])),
+            "findings": len(res.get("findings", [])),
             "counts": counts,
-            "risk_score": (self.result or {}).get("risk_score", 0),
+            "risk_score": res.get("risk_score", 0),
             "error": self.error,
             "model": opts.get("model"),
             "verify_model": opts.get("verify_model"),
             "mode": opts.get("mode"),
             "source_name": opts.get("source_name"),
+            "tokens": {
+                "input": input_tokens,
+                "output": output_tokens,
+                "thinking": thinking_tokens,
+                "total": total_tokens,
+            },
         }
 
 

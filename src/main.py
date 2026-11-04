@@ -24,6 +24,7 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 # The form parser produces Starlette's UploadFile, and fastapi.UploadFile is
 # a subclass of it, so an isinstance check against the FastAPI class silently
 # matches nothing.
@@ -86,6 +87,8 @@ app = FastAPI(
     description="Hybrid vulnerability detection: rule-based static analysis + LLM agent",
     version="1.0.0"
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 store = JobStore()
 

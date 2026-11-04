@@ -521,6 +521,7 @@ class Scanner:
             "api_requests": telemetry_stats.get("api_requests", 0),
             "input_tokens": telemetry_stats.get("input_tokens", 0),
             "output_tokens": telemetry_stats.get("output_tokens", 0),
+            "thinking_tokens": telemetry_stats.get("thinking_tokens", 0),
             "total_tokens": telemetry_stats.get("total_tokens", 0),
             "telemetry": telemetry_stats,
             **verify_stats,
