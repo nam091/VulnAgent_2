@@ -65,7 +65,8 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("target", help="File or directory to scan")
     parser.add_argument("--no-llm", action="store_true", help="Rule tier only")
     parser.add_argument("--no-semgrep", action="store_true", help="LLM tier only")
-    parser.add_argument("--no-cache", action="store_true", help="Ignore the content-hash cache")
+    parser.add_argument("--use-cache", "--cache", dest="use_cache", action="store_true", default=False, help="Enable content-hash cache (default: disabled)")
+    parser.add_argument("--no-cache", dest="no_cache", action="store_true", default=False, help="Explicitly disable the content-hash cache (default)")
     parser.add_argument(
         "-j", "--concurrency", type=int, default=4,
         help="Concurrent LLM calls (default: 4)"
@@ -340,7 +341,7 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
         min_risk=min_risk,
         max_llm_files=getattr(args, "max_llm_files", None),
         excludes=getattr(args, "exclude", None),
-        use_cache=not getattr(args, "no_cache", False),
+        use_cache=bool(getattr(args, "use_cache", False) and not getattr(args, "no_cache", False)),
         verify=verify,
         verify_all=verify_all,
         verify_turns=getattr(args, "verify_turns", 6),

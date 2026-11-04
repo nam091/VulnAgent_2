@@ -47,7 +47,7 @@ class ScanOptions:
         min_risk: Optional[int] = None,
         max_llm_files: Optional[int] = None,
         excludes: Optional[List[str]] = None,
-        use_cache: bool = True,
+        use_cache: bool = False,
         cache_dir: Optional[str] = None,
         verify: bool = False,
         verify_all: Optional[bool] = None,

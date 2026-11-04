@@ -684,7 +684,7 @@ async function renderScan() {
           </select>
         </div>
         <label class="check"><input type="checkbox" id="verify" checked> Verification agent</label>
-        <label class="check"><input type="checkbox" id="use-cache" checked> Use cache</label>
+        <label class="check"><input type="checkbox" id="use-cache"> Use cache</label>
         <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--text-dim);margin-left:4px">
           <span>Threads:</span>
           <input type="number" id="concurrency" value="4" min="1" max="50" style="width:58px;padding:6px 8px;font:600 12px/1 var(--mono);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
@@ -843,7 +843,7 @@ async function submit(pane) {
   const mode = document.getElementById('mode').value;
   const verify = (mode === 'deep-verify') || document.getElementById('verify').checked;
   const concurrency = parseInt(document.getElementById('concurrency')?.value, 10) || 4;
-  const useCache = document.getElementById('use-cache') ? document.getElementById('use-cache').checked : true;
+  const useCache = document.getElementById('use-cache') ? document.getElementById('use-cache').checked : false;
   const scanModelEl = document.getElementById('scan-model');
   const chosenModel = (mode !== 'semgrep' && scanModelEl && scanModelEl.value !== 'custom')
     ? scanModelEl.value
@@ -1125,12 +1125,13 @@ function switchJobDetailTab(tab) {
   if (dTab) dTab.classList.toggle('hide', tab !== 'debug');
 
   tabBtns.forEach(btn => {
-    btn.classList.toggle('on',
-      (tab === 'findings' && btn.textContent.includes('Findings')) ||
-      (tab === 'benchmark' && btn.textContent.includes('Benchmark')) ||
-      (tab === 'history' && btn.textContent.includes('Run History')) ||
-      (tab === 'debug' && btn.textContent.includes('Debug'))
+    const btnTab = btn.dataset.tab || (
+      (btn.textContent.includes('Findings') || btn.textContent.includes('Progress')) ? 'findings' :
+      (btn.textContent.includes('Benchmark') ? 'benchmark' :
+      (btn.textContent.includes('History') ? 'history' :
+      (btn.textContent.includes('Debug') ? 'debug' : '')))
     );
+    btn.classList.toggle('on', btnTab === tab);
   });
 }
 
@@ -1188,18 +1189,18 @@ function paintJob(job) {
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
       <div class="tabs" id="job-detail-tabs" style="margin-top:16px;margin-bottom:0">
-        <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" onclick="switchJobDetailTab('findings')">
+        <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" data-tab="findings" onclick="switchJobDetailTab('findings')">
           ${running ? `Progress <span class="tab-count">${(result.findings || []).length}</span>` : `Findings <span class="tab-count">${totalFindings}</span>`}
         </button>
         ${isBenchSupported ? `
-        <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
+        <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" data-tab="benchmark" onclick="switchJobDetailTab('benchmark')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="2" r="2"></circle></svg> Benchmark <span class="tab-count">${(bench.metrics.f1 * 100).toFixed(1)}%</span>
         </button>` : ''}
         ${hasHistory ? `
-        <button type="button" class="tab ${currentJobDetailTab === 'history' ? 'on' : ''}" onclick="switchJobDetailTab('history')">
+        <button type="button" class="tab ${currentJobDetailTab === 'history' ? 'on' : ''}" data-tab="history" onclick="switchJobDetailTab('history')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> History <span class="tab-count">${history.total_runs}</span>
         </button>` : ''}
-        <button type="button" class="tab ${currentJobDetailTab === 'debug' ? 'on' : ''}" onclick="switchJobDetailTab('debug')">
+        <button type="button" class="tab ${currentJobDetailTab === 'debug' ? 'on' : ''}" data-tab="debug" onclick="switchJobDetailTab('debug')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
           </svg> Debug <span class="tab-count">${debugItemsCount}</span>

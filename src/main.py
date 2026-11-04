@@ -104,7 +104,7 @@ class SnippetRequest(BaseModel):
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
     verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
-    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
+    use_cache: bool = Field(False, description="Whether to reuse content-hash LLM cache (default: False)")
 
 
 class RepositoryRequest(BaseModel):
@@ -116,7 +116,7 @@ class RepositoryRequest(BaseModel):
     max_files: int = Field(40, ge=1, le=200)
     model: Optional[str] = Field(None, description="Optional model identifier override")
     verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
-    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
+    use_cache: bool = Field(False, description="Whether to reuse content-hash LLM cache (default: False)")
 
 
 class BenchmarkPresetRequest(BaseModel):
@@ -126,7 +126,7 @@ class BenchmarkPresetRequest(BaseModel):
     concurrency: int = Field(4, ge=1, le=50, description="Parallel analysis workers")
     model: Optional[str] = Field(None, description="Optional model identifier override")
     verify_model: Optional[str] = Field(None, description="Optional separate model identifier for Tier-3 Verification")
-    use_cache: bool = Field(True, description="Whether to reuse content-hash LLM cache")
+    use_cache: bool = Field(False, description="Whether to reuse content-hash LLM cache (default: False)")
 
 
 class ModelProfileRequest(BaseModel):
@@ -605,7 +605,7 @@ async def scan_folder(request: Request, background: BackgroundTasks) -> Dict[str
     files = [v for v in form.getlist("files") if isinstance(v, StarletteUploadFile)]
     mode = str(form.get("mode") or "deep-verify")
     raw_verify = str(form.get("verify") or "false").lower() in ("1", "true", "yes", "on")
-    use_cache = str(form.get("use_cache") or "true").lower() in ("1", "true", "yes", "on")
+    use_cache = str(form.get("use_cache") or "false").lower() in ("1", "true", "yes", "on")
     use_semgrep, use_llm, verify = _resolve_mode(mode, raw_verify)
     try:
         concurrency = int(form.get("concurrency") or 4)
