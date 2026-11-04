@@ -1292,6 +1292,7 @@ function paintJob(job) {
   currentJobFindings = findings;
   currentJobId = job.id;
   currentRenderedLimit = 35;
+  isFindingsExpanded = false;
 
   const findingsTabHtml = `
     ${(result.degraded && degradedFiles.length) ? `<div class="banner warn" style="margin-bottom:18px">
@@ -1397,61 +1398,86 @@ function paintJob(job) {
       </div>
     </div>` : ''}
 
-    <div class="card">
-      <div class="row" style="margin-bottom:12px;align-items:baseline">
-        <div class="card-title" style="margin:0">Findings</div>
-        <div class="spacer"></div>
-        <span id="findings-counter-badge" class="filter-status-text">Showing ${totalFindings} of ${totalFindings} findings</span>
-      </div>
-
-      <div class="findings-toolbar">
-        <div class="search-wrap">
-          <svg class="search-svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    <div class="card" id="findings-section-card">
+      <div class="row" style="margin-bottom:0;align-items:center;cursor:pointer" onclick="toggleFindingsDisplay()">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:8px">
+          <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
-          <input type="text" id="finding-search-input" class="search-input" placeholder="Search by file, type, CWE, line, description..." autocomplete="off" oninput="onFindingSearchInput()">
-          <button type="button" id="finding-search-clear" class="search-clear-btn hide" onclick="clearFindingSearch()" title="Clear search">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+          Findings (${totalFindings})
         </div>
-
-        <div class="filter-pills" id="finding-filter-pills">
-          <button type="button" class="filter-pill active" data-filter="all" onclick="setFindingFilter('all')">
-            All <span class="pill-count">${totalFindings}</span>
-          </button>
-          <button type="button" class="filter-pill" data-filter="confirmed" onclick="setFindingFilter('confirmed')">
-            <span class="dot-indicator green"></span> Confirmed <span class="pill-count">${countConfirmed}</span>
-          </button>
-          <button type="button" class="filter-pill" data-filter="verified" onclick="setFindingFilter('verified')">
-            <span class="dot-indicator teal"></span> Agent-Verified <span class="pill-count">${countVerified}</span>
-          </button>
-          <button type="button" class="filter-pill" data-filter="llm" onclick="setFindingFilter('llm')">
-            <span class="dot-indicator purple"></span> LLM-only <span class="pill-count">${countLlm}</span>
-          </button>
-          <button type="button" class="filter-pill" data-filter="rule" onclick="setFindingFilter('rule')">
-            <span class="dot-indicator slate"></span> Rule-only <span class="pill-count">${countRule}</span>
-          </button>
-        </div>
-
-        <div class="filter-select-wrap">
-          <select id="finding-severity-select" onchange="applyFindingsFilter()">
-            <option value="all">All Severities</option>
-            <option value="CRITICAL">Critical</option>
-            <option value="HIGH">High</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="LOW">Low</option>
-            <option value="INFO">Info</option>
-          </select>
-        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn ghost sm" id="btn-toggle-findings" onclick="event.stopPropagation(); toggleFindingsDisplay()">
+          <svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          Show Findings (${totalFindings})
+        </button>
       </div>
 
-      <div id="findings-list">
-        ${findings.length ? ''
-          : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
+      <!-- Collapsed Prompt State (Default) -->
+      <div id="findings-collapsed-prompt" style="margin-top:14px;padding:24px 20px;text-align:center;background:var(--raised);border:1px dashed var(--edge)">
+        <div style="font-weight:700;font-size:13.5px;color:var(--text);margin-bottom:4px">Findings are collapsed by default</div>
+        <div class="muted" style="margin-bottom:14px;font-size:12px">Click below to view and filter ${totalFindings} detected vulnerability findings.</div>
+        <button type="button" class="btn sm" onclick="toggleFindingsDisplay()">
+          Show Findings (${totalFindings})
+        </button>
+      </div>
+
+      <!-- Active Expanded Area (Hidden by default) -->
+      <div id="findings-active-area" class="hide" style="margin-top:16px">
+        <div class="findings-toolbar">
+          <div class="search-wrap">
+            <svg class="search-svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="finding-search-input" class="search-input" placeholder="Search by file, type, CWE, line, description..." autocomplete="off" oninput="onFindingSearchInput()">
+            <button type="button" id="finding-search-clear" class="search-clear-btn hide" onclick="clearFindingSearch()" title="Clear search">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="filter-pills" id="finding-filter-pills">
+            <button type="button" class="filter-pill active" data-filter="all" onclick="setFindingFilter('all')">
+              All <span class="pill-count">${totalFindings}</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="confirmed" onclick="setFindingFilter('confirmed')">
+              <span class="dot-indicator green"></span> Confirmed <span class="pill-count">${countConfirmed}</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="verified" onclick="setFindingFilter('verified')">
+              <span class="dot-indicator teal"></span> Agent-Verified <span class="pill-count">${countVerified}</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="llm" onclick="setFindingFilter('llm')">
+              <span class="dot-indicator purple"></span> LLM-only <span class="pill-count">${countLlm}</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="rule" onclick="setFindingFilter('rule')">
+              <span class="dot-indicator slate"></span> Rule-only <span class="pill-count">${countRule}</span>
+            </button>
+          </div>
+
+          <div class="filter-select-wrap">
+            <select id="finding-severity-select" onchange="applyFindingsFilter()">
+              <option value="all">All Severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+              <option value="INFO">Info</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-bottom:12px;padding:0 2px">
+          <span id="findings-counter-badge" class="filter-status-text">Showing 0 of ${totalFindings} findings</span>
+        </div>
+
+        <div id="findings-list">
+          ${findings.length ? ''
+            : emptyState('No vulnerabilities found', (result && (result.status === 'failed' || result.degraded)) ? 'Scan completed with degraded coverage or failed engine.' : 'Scanned scope came back clean.')}
+        </div>
       </div>
     </div>`;
 
@@ -1473,6 +1499,27 @@ function paintJob(job) {
     </div>` : ''}
     <div id="job-tab-debug-content" class="${currentJobDetailTab === 'debug' ? '' : 'hide'}">
       ${debugTabHtml}
+    </div>`;
+}
+
+/* Findings already merged, shown while verification is still running. */
+function partialResults(job) {
+  const result = job.result;
+  const found = (result && result.findings) || [];
+  if (!found.length) return '';
+
+  const counts = result.counts || {};
+  const sorted = [...found].sort(
+    (a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
+
+  return `
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">Found so far &mdash; scan still running</div>
+      ${severityStack(counts)}
+      <div style="margin-top:16px">${sorted.map(f => findingCard(f, job.id)).join('')}</div>
+      <p class="muted" style="margin-top:12px">
+        These are merged results. The verification agent may still remove some
+        of them, and later phases may add more.</p>
     </div>`;
 }
 
@@ -1650,6 +1697,29 @@ let currentFindingFilter = 'all';
 let currentRenderedLimit = 35;
 let searchDebounceTimer = null;
 let findingsIntersectionObserver = null;
+let isFindingsExpanded = false;
+
+function toggleFindingsDisplay() {
+  const prompt = document.getElementById('findings-collapsed-prompt');
+  const activeArea = document.getElementById('findings-active-area');
+  const btn = document.getElementById('btn-toggle-findings');
+  if (!activeArea) return;
+
+  isFindingsExpanded = !isFindingsExpanded;
+  if (isFindingsExpanded) {
+    if (prompt) prompt.classList.add('hide');
+    activeArea.classList.remove('hide');
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Findings`;
+    renderFindingsBatch(true);
+  } else {
+    if (prompt) prompt.classList.remove('hide');
+    activeArea.classList.add('hide');
+    const total = (currentJobFindings || []).length;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="6 9 12 15 18 9"></polyline></svg> Show Findings (${total})`;
+    const list = document.getElementById('findings-list');
+    if (list) list.innerHTML = '';
+  }
+}
 
 function getFilteredFindings() {
   const searchInput = document.getElementById('finding-search-input');

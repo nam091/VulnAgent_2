@@ -241,6 +241,7 @@ class JobStore:
                 job.error = "Interrupted by a server restart"
                 job.phase = "failed"
                 job.message = job.error
+                self._persist(job)
             self._jobs[job.id] = job
 
         logging.info(f"Loaded {len(self._jobs)} job(s) from {self.directory}")
@@ -358,7 +359,11 @@ class JobStore:
                 try:
                     payload = json.loads(path.read_text(encoding="utf-8"))
                     job_fields = {f.name for f in fields(Job)}
-                    self._jobs[job_id] = Job(**{k: v for k, v in payload.items() if k in job_fields})
+                    loaded_job = Job(**{k: v for k, v in payload.items() if k in job_fields})
+                    if loaded_job.id not in self._tasks and loaded_job.status in ("running", "queued"):
+                        loaded_job.status = "done" if loaded_job.result else "failed"
+                        loaded_job.message = "Completed/Archived" if loaded_job.result else "Interrupted by server restart"
+                    self._jobs[job_id] = loaded_job
                 except Exception:
                     pass
 
