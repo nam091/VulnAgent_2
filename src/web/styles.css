@@ -22,6 +22,17 @@
   --on-crit: #fff; --on-high: #1a0c00; --on-med: #1a1400; --on-low: #002a1c;
   --texture-ink: 255, 255, 255; --texture: .014;
   --sweep: 255, 255, 255;
+  --surface: #101318;
+  --text-bright: #ffffff;
+  --code-bg: #07090d;
+  --code-text: #f0f6fc;
+  --code-thinking-bg: #040910;
+  --code-thinking-text: #38bdf8;
+  --code-border: #252d38;
+  --debug-head-bg: #141920;
+  --debug-head-hover: #1a212b;
+  --debug-card-bg: #0e1217;
+  --debug-rationale-bg: rgba(56, 189, 248, 0.07);
 }
 
 /* ============ LIGHT — the same tool, inverted ============
@@ -43,6 +54,17 @@
   --on-crit: #fff; --on-high: #fff; --on-med: #fff; --on-low: #fff;
   --texture-ink: 0, 0, 0; --texture: .022;
   --sweep: 0, 0, 0;
+  --surface: #ffffff;
+  --text-bright: #0f172a;
+  --code-bg: #f8fafc;
+  --code-text: #0f172a;
+  --code-thinking-bg: #f0f9ff;
+  --code-thinking-text: #0369a1;
+  --code-border: #cbd5e1;
+  --debug-head-bg: #f1f5f9;
+  --debug-head-hover: #e2e8f0;
+  --debug-card-bg: #ffffff;
+  --debug-rationale-bg: rgba(2, 132, 199, 0.08);
 }
 
 /* Shared form: identical in both, so switching changes tone and nothing else. */
@@ -869,6 +891,60 @@ pre.diff .del { color: var(--crit); display: block; }
   gap: 12px;
 }
 
+/* ---------- scans sort bar & dropdown ---------- */
+
+.jobs-sort-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.jobs-sort-label {
+  font: 600 11.5px/1 var(--ui-font);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.jobs-sort-dropdown {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 6px 30px 6px 12px;
+  font: 500 12.5px/1.4 var(--sans);
+  cursor: pointer;
+  transition: all .15s ease;
+  outline: none;
+}
+.jobs-sort-dropdown:hover {
+  border-color: var(--edge-hot);
+  background: var(--deck);
+}
+.jobs-sort-dropdown:focus {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 2px var(--signal-dim);
+}
+.select-chevron {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: var(--text-dim);
+  transition: color .15s ease;
+}
+.select-wrapper:hover .select-chevron {
+  color: var(--text);
+}
+
 /* ---------- debug & trace tab styles ---------- */
 
 .debug-toolbar {
@@ -881,14 +957,14 @@ pre.diff .del { color: var(--crit); display: block; }
 }
 .debug-trace-card {
   border: 1px solid var(--edge);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--debug-card-bg);
+  margin-bottom: 14px;
   overflow: hidden;
   transition: border-color .15s ease;
 }
 .debug-trace-card:hover {
-  border-color: rgba(56, 189, 248, 0.4);
+  border-color: var(--edge-hot);
 }
 .debug-trace-head {
   padding: 12px 16px;
@@ -897,80 +973,159 @@ pre.diff .del { color: var(--crit); display: block; }
   gap: 10px;
   cursor: pointer;
   user-select: none;
-  background: var(--raised);
+  background: var(--debug-head-bg);
+  color: var(--text);
   flex-wrap: wrap;
+  transition: background .15s ease;
 }
 .debug-trace-head:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--debug-head-hover);
+}
+.debug-trace-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
 }
 .debug-trace-body {
   padding: 16px;
   border-top: 1px solid var(--edge);
-  background: var(--surface);
+  background: var(--debug-card-bg);
+  color: var(--text);
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 .debug-block {
-  border: 1px solid var(--edge);
+  border: 1px solid var(--code-border);
   border-radius: var(--radius-sm);
-  background: #090c10;
+  background: var(--code-bg);
   overflow: hidden;
 }
 .debug-block-title {
-  padding: 8px 12px;
-  font: 600 11.5px/1 var(--ui-font);
+  padding: 9px 14px;
+  font: 600 12px/1 var(--ui-font);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid var(--edge);
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--code-border);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 .debug-block-title.thinking-title {
   color: var(--signal);
-  background: rgba(56, 189, 248, 0.06);
+  background: var(--signal-dim);
 }
 .debug-block-title.output-title {
-  color: var(--ok);
-  background: rgba(46, 204, 113, 0.06);
+  color: var(--low);
+  background: rgba(16, 185, 129, 0.08);
 }
 .debug-block-title.transcript-title {
-  color: var(--warn);
-  background: rgba(241, 196, 15, 0.06);
+  color: var(--high);
+  background: rgba(255, 140, 42, 0.08);
 }
-.debug-code-view {
-  margin: 0;
-  padding: 12px 14px;
-  font: 400 12px/1.55 var(--mono);
-  color: #c9d1d9;
+pre.debug-code-view {
+  margin: 0 !important;
+  padding: 14px 16px !important;
+  font: 400 12.5px/1.65 var(--mono) !important;
+  background: var(--code-bg) !important;
+  color: var(--code-text) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 480px;
+  max-height: 520px;
   overflow-y: auto;
+}
+pre.debug-code-view.thinking {
+  background: var(--code-thinking-bg) !important;
+  color: var(--code-thinking-text) !important;
+}
+pre.debug-code-view code {
+  font: inherit !important;
+  color: inherit !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+.debug-transcript-box {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--code-bg);
+}
+.debug-transcript-step {
+  font: 400 12.5px/1.5 var(--mono);
+  color: var(--code-text);
+}
+.debug-transcript-step .tool-call-name {
+  color: var(--signal);
+  font-weight: 600;
+}
+.debug-transcript-step .tool-call-args {
+  color: var(--text-dim);
+}
+.debug-rationale-box {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--debug-rationale-bg);
+  border: 1px solid var(--edge);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.debug-rationale-box b {
+  color: var(--text);
 }
 .debug-tag {
   font: 600 10.5px/1 var(--mono);
-  padding: 3px 6px;
+  padding: 3px 7px;
   border-radius: 3px;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
 }
 .debug-tag.scan {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(139, 92, 246, 0.15);
   color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  border: 1px solid rgba(139, 92, 246, 0.4);
 }
 .debug-tag.verify {
-  background: rgba(14, 165, 233, 0.2);
-  color: #38bdf8;
-  border: 1px solid rgba(14, 165, 233, 0.35);
+  background: rgba(14, 165, 233, 0.15);
+  color: var(--signal);
+  border: 1px solid rgba(14, 165, 233, 0.4);
 }
 .debug-tag.rule {
-  background: rgba(100, 116, 139, 0.2);
+  background: rgba(100, 116, 139, 0.15);
   color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+}
+.debug-phase-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  margin-right: 8px;
+  border-radius: 3px;
+  font: 700 10.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  color: var(--signal);
+}
+code.job-meta-tok {
+  color: var(--signal);
+  font-weight: 600;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+code.job-meta-model {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  padding: 2px 7px;
+  border-radius: 3px;
 }
 .job-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .btn-del {

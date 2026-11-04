@@ -26,6 +26,51 @@ MAX_EVENTS = 1500
 DEFAULT_RETENTION = 50
 
 
+def _resolve_model_name(raw_model: Optional[str]) -> str:
+    if not raw_model:
+        return "Default"
+    m_str = str(raw_model).strip()
+    m_low = m_str.lower()
+    try:
+        models_file = Path(".vulnagent-models.json")
+        if models_file.is_file():
+            profiles = json.loads(models_file.read_text(encoding="utf-8"))
+            for p in profiles:
+                if (p.get("model") or "").lower() == m_low:
+                    return p.get("name") or m_str
+                if (p.get("id") or "").lower() == m_low:
+                    return p.get("name") or m_str
+                if (p.get("name") or "").lower() == m_low:
+                    return p.get("name") or m_str
+    except Exception:
+        pass
+
+    if "hy3" in m_low or "hunyuan" in m_low:
+        return "hy3"
+    if "deepseek" in m_low:
+        return "DeepSeek v4.1 Flash"
+    if "beam" in m_low:
+        return "Beam Free"
+    if "glm-5.3-flash" in m_low:
+        return "GLM-5.3 Flash"
+    if "glm-5.3" in m_low:
+        return "GLM-5.3"
+    if "luna" in m_low:
+        return "gpt-5.6-luna"
+    if "solar" in m_low:
+        return "Solar Mini"
+    if "gemma" in m_low:
+        return "Gemma4"
+    if "gemini-3.8-flash" in m_low:
+        return "gemini-3.8-flash"
+    if m_low == "semgrep":
+        return "Semgrep (Static)"
+
+    if "/" in m_str:
+        return m_str.split("/")[-1].split(":")[0]
+    return m_str
+
+
 @dataclass
 class Job:
     """
@@ -89,8 +134,10 @@ class Job:
             "counts": counts,
             "risk_score": res.get("risk_score", 0),
             "error": self.error,
-            "model": opts.get("model"),
-            "verify_model": opts.get("verify_model"),
+            "model": _resolve_model_name(opts.get("model")),
+            "raw_model": opts.get("model"),
+            "verify_model": _resolve_model_name(opts.get("verify_model")),
+            "raw_verify_model": opts.get("verify_model"),
             "mode": opts.get("mode"),
             "source_name": opts.get("source_name"),
             "tokens": {

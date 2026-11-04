@@ -18,6 +18,49 @@ const PHASES = [
 let liveStream = null;
 let pollTimer = null;
 
+const TOKEN_SVG = `<svg class="tok-svg-icon" width="10.5" height="10.5" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-1px;margin-right:3px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`;
+
+var cachedModelProfiles = [];
+
+async function loadCachedModelProfiles() {
+  if (cachedModelProfiles.length) return cachedModelProfiles;
+  try {
+    const res = await api('/api/models');
+    if (res && res.models) {
+      cachedModelProfiles = res.models;
+    }
+  } catch (e) {}
+  return cachedModelProfiles;
+}
+
+function resolveModelDisplayName(rawModel) {
+  if (!rawModel) return 'Default';
+  const m = String(rawModel).trim();
+  const mLow = m.toLowerCase();
+
+  // 1. Match from Settings profiles
+  for (const p of cachedModelProfiles) {
+    if (p.model && p.model.toLowerCase() === mLow) return p.name;
+    if (p.id && p.id.toLowerCase() === mLow) return p.name;
+    if (p.name && p.name.toLowerCase() === mLow) return p.name;
+  }
+
+  // 2. Standard settings names fallback
+  if (mLow.includes('hy3') || mLow.includes('hunyuan')) return 'hy3';
+  if (mLow.includes('deepseek')) return 'DeepSeek v4.1 Flash';
+  if (mLow.includes('beam')) return 'Beam Free';
+  if (mLow.includes('glm-5.3-flash')) return 'GLM-5.3 Flash';
+  if (mLow.includes('glm-5.3')) return 'GLM-5.3';
+  if (mLow.includes('luna')) return 'gpt-5.6-luna';
+  if (mLow.includes('solar')) return 'Solar Mini';
+  if (mLow.includes('gemma')) return 'Gemma4';
+  if (mLow.includes('gemini-3.8-flash')) return 'gemini-3.8-flash';
+  if (mLow === 'semgrep') return 'Semgrep (Static)';
+
+  if (!m.includes('/') && !m.includes(':')) return m;
+  return m.split('/').pop().split(':')[0];
+}
+
 function renderMarkdown(raw) {
   if (!raw) return '';
   const text = String(raw).trim();
@@ -489,7 +532,7 @@ function jobRow(job, isDraggable = true) {
       <div style="min-width:0;flex:1">
         <div class="job-label">${esc(job.label)}</div>
         <div class="job-meta">${esc(job.kind)} · ID: <code>${esc(job.id)}</code> · Model: <code class="job-meta-model">${esc(meta.model)}</code>${
-          hasTokens ? ` · <code class="job-meta-tok" title="Input: ${formatTokensNumber(tokens.input)} | Output: ${formatTokensNumber(tokens.output)}${tokens.thinking ? ` | Thinking: ${formatTokensNumber(tokens.thinking)}` : ''}">⚡ ${formatCompactTokens(tokens.input)} in / ${formatCompactTokens(tokens.output)} out${tokens.thinking ? ` (${formatCompactTokens(tokens.thinking)} think)` : ''}</code>` : ''
+          hasTokens ? ` · <code class="job-meta-tok" title="Input: ${formatTokensNumber(tokens.input)} | Output: ${formatTokensNumber(tokens.output)}${tokens.thinking ? ` | Thinking: ${formatTokensNumber(tokens.thinking)}` : ''}">${TOKEN_SVG}${formatCompactTokens(tokens.input)} in / ${formatCompactTokens(tokens.output)} out${tokens.thinking ? ` (${formatCompactTokens(tokens.thinking)} think)` : ''}</code>` : ''
         } · ${esc(job.status)}${
           job.status === 'running' ? ` · ${Math.round(job.percent)}%` : ''} · ${ago(job.created_at)}</div>
       </div>
@@ -904,10 +947,11 @@ function getJobMetadata(job) {
       if (!model && rest.toLowerCase() === 'semgrep') model = 'Semgrep (Static)';
     }
   }
+  const cleanModelName = resolveModelDisplayName(model || (job.kind === 'snippet' ? 'Snippet' : 'Default'));
   return {
     benchmark: benchmark || 'Target',
     mode: mode || (job.kind === 'snippet' ? 'Snippet' : 'DeepVerify'),
-    model: model || (job.kind === 'snippet' ? 'Snippet' : 'Default')
+    model: cleanModelName
   };
 }
 
@@ -976,6 +1020,7 @@ function resetJobsOrder() {
 }
 
 async function renderJobs() {
+  loadCachedModelProfiles().catch(() => {});
   view.innerHTML = `<div class="page-head"><h1>Scans</h1><p>Every scan this server has run.</p></div>
     <div class="empty"><span class="spinner"></span>Loading</div>`;
   const { jobs: rawJobs } = await api('/api/jobs?limit=100');
@@ -991,16 +1036,26 @@ async function renderJobs() {
           <p>Every scan this server has run across all benchmarks and targets. Drag &amp; drop cards to reorder.</p>
         </div>
         <div class="spacer"></div>
-        <div class="jobs-sort-bar" style="display:inline-flex;align-items:center;gap:7px">
-          <span style="font:600 12.5px/1 var(--ui-font);color:var(--text-dim)">Sort by:</span>
-          <select id="jobs-sort-select" onchange="onJobsSortChange(this.value)" style="width:auto;padding:5px 9px;font:500 12.5px/1 var(--sans);background:var(--raised);border:var(--border) solid var(--edge);border-radius:var(--radius-sm);color:var(--text);outline:none">
-            <option value="time-desc" ${currentSort === 'time-desc' ? 'selected' : ''}>Time: Newest first</option>
-            <option value="time-asc" ${currentSort === 'time-asc' ? 'selected' : ''}>Time: Oldest first</option>
-            <option value="benchmark" ${currentSort === 'benchmark' ? 'selected' : ''}>Benchmark / Target (A-Z)</option>
-            <option value="mode" ${currentSort === 'mode' ? 'selected' : ''}>Mode (DeepVerify / LLM / Semgrep)</option>
-            <option value="model" ${currentSort === 'model' ? 'selected' : ''}>Model (A-Z)</option>
-            <option value="custom" ${currentSort === 'custom' ? 'selected' : ''}>Custom (Drag &amp; drop order)</option>
-          </select>
+        <div class="jobs-sort-bar">
+          <span class="jobs-sort-label">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            Sort by:
+          </span>
+          <div class="select-wrapper">
+            <select id="jobs-sort-select" onchange="onJobsSortChange(this.value)" class="jobs-sort-dropdown">
+              <option value="time-desc" ${currentSort === 'time-desc' ? 'selected' : ''}>Time: Newest first</option>
+              <option value="time-asc" ${currentSort === 'time-asc' ? 'selected' : ''}>Time: Oldest first</option>
+              <option value="benchmark" ${currentSort === 'benchmark' ? 'selected' : ''}>Benchmark / Target (A-Z)</option>
+              <option value="mode" ${currentSort === 'mode' ? 'selected' : ''}>Mode (DeepVerify / LLM / Semgrep)</option>
+              <option value="model" ${currentSort === 'model' ? 'selected' : ''}>Model (A-Z)</option>
+              <option value="custom" ${currentSort === 'custom' ? 'selected' : ''}>Custom (Drag &amp; drop order)</option>
+            </select>
+            <svg class="select-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
         </div>
         ${hasCustomOrder ? `<button type="button" class="btn ghost sm" onclick="resetJobsOrder()" title="Reset to newest first">Reset drag order</button>` : ''}
         ${jobs.length ? `<button class="btn ghost sm danger" onclick="clearAllJobs()">Clear history</button>` : ''}
@@ -1824,7 +1879,7 @@ function follow(id) {
       const liveLog = document.getElementById('debug-live-events-log');
       if (liveLog) {
         const div = document.createElement('div');
-        div.innerHTML = `<span class="t" style="min-width:38px">${Math.round(update.latest_event.percent || update.percent || 0)}%</span><span style="display:inline-block;padding:0 5px;margin-right:6px;border-radius:2px;font-size:10px;text-transform:uppercase;background:rgba(255,255,255,0.06);color:var(--text-dim)">${esc(update.latest_event.phase || 'info')}</span>${esc(update.latest_event.message || '')}`;
+        div.innerHTML = `<span class="t" style="min-width:38px">${Math.round(update.latest_event.percent || update.percent || 0)}%</span><span class="debug-phase-tag">${esc(update.latest_event.phase || 'info')}</span>${esc(update.latest_event.message || '')}`;
         liveLog.appendChild(div);
         liveLog.scrollTop = liveLog.scrollHeight;
       }
@@ -2014,8 +2069,6 @@ async function clearAllJobs() {
 }
 
 /* ---------------- settings view & model profiles ---------------- */
-
-let cachedModelProfiles = [];
 
 async function renderSettings() {
   view.innerHTML = `
@@ -3453,7 +3506,7 @@ ${v.reason}` : ''),
           ${currentDebugJobEvents.length ? currentDebugJobEvents.map(e => `
             <div>
               <span class="t" style="min-width:38px">${Math.round(e.percent || 0)}%</span>
-              <span style="display:inline-block;padding:0 5px;margin-right:6px;border-radius:2px;font-size:10px;text-transform:uppercase;background:rgba(255,255,255,0.06);color:var(--text-dim)">${esc(e.phase || 'info')}</span>
+              <span class="debug-phase-tag">${esc(e.phase || 'info')}</span>
               ${esc(e.message || '')}
             </div>`).join('') : '<div class="muted">Waiting for execution events...</div>'}
         </div>
@@ -3522,12 +3575,12 @@ function renderDebugTracesList(traces) {
       <div class="debug-trace-card" data-trace-id="${esc(t.id || 'trace_' + idx)}" data-trace-type="${isScan ? 'scan' : 'verify'}" data-trace-search="${esc([t.target, t.model, t.status, t.thinking || '', t.content || '', t.reason || ''].join(' ').toLowerCase())}">
         <div class="debug-trace-head" onclick="toggleDebugTraceBody(this)">
           <span class="debug-tag ${isScan ? 'scan' : 'verify'}">${isScan ? 'Tier 2 Scan' : 'Tier 3 Verify'}</span>
-          <span style="font-weight:600;font-size:13px">${esc(t.target || 'Analysis Task')}</span>
-          <code class="job-meta-model">${esc(t.model || 'LLM')}</code>
+          <span class="debug-trace-title">${esc(t.target || 'Analysis Task')}</span>
+          <code class="job-meta-model">${esc(resolveModelDisplayName(t.model || 'LLM'))}</code>
           <span class="pill ${statusPillClass}" style="font-size:10px">${esc(t.status || 'OK')}</span>
           ${hasTokens ? `
           <code class="job-meta-tok" title="Input: ${formatTokensNumber(tok.input)} | Output: ${formatTokensNumber(tok.output)}${tok.thinking ? ` | Thinking: ${formatTokensNumber(tok.thinking)}` : ''}">
-            ⚡ ${formatCompactTokens(tok.input)} in / ${formatCompactTokens(tok.output)} out${tok.thinking ? ` (${formatCompactTokens(tok.thinking)} think)` : ''}
+            ${TOKEN_SVG}${formatCompactTokens(tok.input)} in / ${formatCompactTokens(tok.output)} out${tok.thinking ? ` (${formatCompactTokens(tok.thinking)} think)` : ''}
           </code>` : ''}
           <div class="spacer"></div>
           ${t.elapsed_seconds ? `<span class="muted" style="font-size:11.5px;font-variant-numeric:tabular-nums">${t.elapsed_seconds}s</span>` : ''}
@@ -3542,7 +3595,7 @@ function renderDebugTracesList(traces) {
               <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 3 2 5.5 4 7v3h8v-3c2-1.5 4-4 4-7a8 8 0 0 0-8-8z"></path><line x1="9" y1="22" x2="15" y2="22"></line></svg>
               Thinking &amp; Reasoning Process (${formatTokensNumber(tok.thinking || 0)} tokens)
             </div>
-            <pre class="debug-code-view"><code>${esc(t.thinking)}</code></pre>
+            <pre class="debug-code-view thinking"><code>${esc(t.thinking)}</code></pre>
           </div>` : ''}
 
           ${hasContent ? `
@@ -3560,18 +3613,18 @@ function renderDebugTracesList(traces) {
               <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
               Investigation Agent Tool Calls (${t.transcript.length} steps)
             </div>
-            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:6px;background:#090c10">
+            <div class="debug-transcript-box">
               ${t.transcript.map((step, sIdx) => `
-                <div style="font:400 12px/1.4 var(--mono);color:#c9d1d9">
-                  <span style="color:var(--signal);font-weight:600">[Step ${sIdx + 1}] ${esc(step.tool)}</span>(${esc(JSON.stringify(step.args))})
+                <div class="debug-transcript-step">
+                  <span class="tool-call-name">[Step ${sIdx + 1}] ${esc(step.tool)}</span><span class="tool-call-args">(${esc(JSON.stringify(step.args))})</span>
                 </div>`).join('')}
             </div>
           </div>` : ''}
 
           ${(t.reason || t.mitigating_control) ? `
-          <div style="padding:10px 14px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.02);border:1px solid var(--edge);font-size:12.5px">
+          <div class="debug-rationale-box">
             ${t.reason ? `<div><b>Verdict Rationale:</b> ${esc(t.reason)}</div>` : ''}
-            ${t.mitigating_control ? `<div style="margin-top:4px"><b>Mitigating Control:</b> <code class="inline-code">${esc(t.mitigating_control)}</code></div>` : ''}
+            ${t.mitigating_control ? `<div style="margin-top:6px"><b>Mitigating Control:</b> <code class="inline-code">${esc(t.mitigating_control)}</code></div>` : ''}
           </div>` : ''}
         </div>
       </div>`;
