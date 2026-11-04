@@ -1167,13 +1167,41 @@ async def get_job(job_id: str) -> Dict[str, Any]:
 
     history_eval = compute_scan_configuration_history(job)
 
+    debug_traces = (
+        getattr(job, "debug_traces", None)
+        or (job.result and job.result.get("stats", {}).get("debug_traces", []))
+        or []
+    )
+
     return {
         **job.as_summary(),
         "options": job.options,
         "result": job.result,
-        "events": job.events[-80:],
+        "events": job.events,
+        "debug_traces": debug_traces,
         "benchmark_evaluation": bench_eval,
         "configuration_history": history_eval,
+    }
+
+
+@app.get("/api/jobs/{job_id}/debug")
+async def get_job_debug(job_id: str) -> Dict[str, Any]:
+    """
+    Get full execution debug trace and events for a job.
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+    debug_traces = (
+        getattr(job, "debug_traces", None)
+        or (job.result and job.result.get("stats", {}).get("debug_traces", []))
+        or []
+    )
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "events": job.events,
+        "debug_traces": debug_traces,
     }
 
 

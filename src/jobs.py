@@ -16,13 +16,13 @@ import logging
 import shutil
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 JOBS_DIRNAME = ".vulnagent-jobs"
-MAX_EVENTS = 400
+MAX_EVENTS = 1500
 DEFAULT_RETENTION = 50
 
 
@@ -46,6 +46,9 @@ class Job:
     result: Optional[Dict[str, Any]] = None
     error: str = ""
     events: List[Dict[str, Any]] = field(default_factory=list)
+    debug_traces: List[Dict[str, Any]] = field(default_factory=list)
+    latest_event: Optional[Dict[str, Any]] = None
+    latest_trace: Optional[Dict[str, Any]] = None
     workspace: str = ""
 
     def as_summary(self) -> Dict[str, Any]:
@@ -96,6 +99,9 @@ class Job:
                 "thinking": thinking_tokens,
                 "total": total_tokens,
             },
+            "debug_traces_count": len(self.debug_traces),
+            "latest_event": self.latest_event,
+            "latest_trace": self.latest_trace,
         }
 
 
@@ -131,7 +137,8 @@ class JobStore:
         for path in sorted(self.directory.glob("*.json")):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-                job = Job(**payload)
+                job_fields = {f.name for f in fields(Job)}
+                job = Job(**{k: v for k, v in payload.items() if k in job_fields})
             except (OSError, json.JSONDecodeError, TypeError) as e:
                 logging.debug(f"Skipping unreadable job file {path}: {e}")
                 continue
@@ -257,7 +264,8 @@ class JobStore:
             if job_id not in self._jobs:
                 try:
                     payload = json.loads(path.read_text(encoding="utf-8"))
-                    self._jobs[job_id] = Job(**payload)
+                    job_fields = {f.name for f in fields(Job)}
+                    self._jobs[job_id] = Job(**{k: v for k, v in payload.items() if k in job_fields})
                 except Exception:
                     pass
 
@@ -310,22 +318,29 @@ class JobStore:
         if job.id in self._deleted_ids or job.id not in self._jobs:
             return
 
+        if event.get("trace"):
+            job.debug_traces.append(event["trace"])
         stamped = {**event, "at": time.time()}
         job.events.append(stamped)
         if len(job.events) > MAX_EVENTS:
             # Keep the first few so the start of the run stays visible.
-            job.events = job.events[:20] + job.events[-(MAX_EVENTS - 20):]
+            job.events = job.events[:50] + job.events[-(MAX_EVENTS - 50):]
 
         try:
             pct_val = float(event.get("percent", job.percent))
         except (ValueError, TypeError):
             pct_val = job.percent
 
+        job.latest_event = stamped
+        job.latest_trace = event.get("trace")
+
         self.update(
             job,
             phase=event.get("phase", job.phase),
             message=event.get("message", job.message),
             percent=pct_val,
+            latest_event=stamped,
+            latest_trace=event.get("trace"),
         )
 
     # ---- live subscriptions -------------------------------------------------
@@ -485,6 +500,10 @@ async def run_job(
     try:
         result = await scan()
         payload = package(result)
+        traces_from_stats = payload.get("stats", {}).get("debug_traces") or []
+        if traces_from_stats and not job.debug_traces:
+            job.debug_traces = traces_from_stats
+
         store.update(
             job,
             status="done",
@@ -492,6 +511,7 @@ async def run_job(
             phase="done",
             message=f"{len(payload.get('findings', []))} finding(s)",
             result=payload,
+            debug_traces=job.debug_traces,
             finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
     except asyncio.CancelledError:

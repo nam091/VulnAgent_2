@@ -1031,7 +1031,7 @@ async function renderJob(id, subtab) {
   currentLoadedJob = job;
   currentJobDetailTab = (subtab === 'benchmark' || location.hash.includes('/benchmark'))
     ? 'benchmark'
-    : ((subtab === 'history' || location.hash.includes('/history')) ? 'history' : 'findings');
+    : ((subtab === 'history' || location.hash.includes('/history')) ? 'history' : ((subtab === 'debug' || location.hash.includes('/debug')) ? 'debug' : 'findings'));
   paintJob(job);
   if (job.status === 'running' || job.status === 'queued') follow(id);
 }
@@ -1041,17 +1041,20 @@ function switchJobDetailTab(tab) {
   const fTab = document.getElementById('job-tab-findings-content');
   const bTab = document.getElementById('job-tab-benchmark-content');
   const hTab = document.getElementById('job-tab-history-content');
+  const dTab = document.getElementById('job-tab-debug-content');
   const tabBtns = document.querySelectorAll('#job-detail-tabs .tab');
 
   if (fTab) fTab.classList.toggle('hide', tab !== 'findings');
   if (bTab) bTab.classList.toggle('hide', tab !== 'benchmark');
   if (hTab) hTab.classList.toggle('hide', tab !== 'history');
+  if (dTab) dTab.classList.toggle('hide', tab !== 'debug');
 
   tabBtns.forEach(btn => {
     btn.classList.toggle('on',
       (tab === 'findings' && btn.textContent.includes('Findings')) ||
       (tab === 'benchmark' && btn.textContent.includes('Benchmark')) ||
-      (tab === 'history' && btn.textContent.includes('Run History'))
+      (tab === 'history' && btn.textContent.includes('Run History')) ||
+      (tab === 'debug' && btn.textContent.includes('Debug'))
     );
   });
 }
@@ -1064,6 +1067,12 @@ function paintJob(job) {
   const isBenchSupported = bench && bench.supported;
   const history = job.configuration_history;
   const hasHistory = history && history.has_multiple_runs;
+
+  const debugTraces = (job.debug_traces && job.debug_traces.length)
+    ? job.debug_traces
+    : ((job.result && job.result.stats && job.result.stats.debug_traces) || []);
+  const events = job.events || [];
+  const debugItemsCount = debugTraces.length || events.length;
 
   function getTrustRank(f) {
     const isConfirmed = f.source === 'confirmed' || f.corroborated;
@@ -1103,32 +1112,50 @@ function paintJob(job) {
         </button>
         <a class="btn ghost sm" href="#/jobs">All scans</a>
       </div>
-      ${(isBenchSupported || hasHistory) ? `
       <div class="tabs" id="job-detail-tabs" style="margin-top:16px;margin-bottom:0">
         <button type="button" class="tab ${currentJobDetailTab === 'findings' ? 'on' : ''}" onclick="switchJobDetailTab('findings')">
-          Findings &amp; Code Analysis (${totalFindings})
+          ${running ? `Findings &amp; Progress (${(result.findings || []).length})` : `Findings &amp; Code Analysis (${totalFindings})`}
         </button>
         ${isBenchSupported ? `
         <button type="button" class="tab ${currentJobDetailTab === 'benchmark' ? 'on' : ''}" onclick="switchJobDetailTab('benchmark')">
-          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="2" r="2"></circle></svg> Benchmark Evaluation (${esc(bench.dataset_key)}: TP ${bench.metrics.tp}, F1 ${(bench.metrics.f1 * 100).toFixed(1)}%)
         </button>` : ''}
         ${hasHistory ? `
         <button type="button" class="tab ${currentJobDetailTab === 'history' ? 'on' : ''}" onclick="switchJobDetailTab('history')">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Run History &amp; Model Variance (${history.total_runs} runs)
         </button>` : ''}
-      </div>` : ''}
+        <button type="button" class="tab ${currentJobDetailTab === 'debug' ? 'on' : ''}" onclick="switchJobDetailTab('debug')">
+          <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg> Debug &amp; LLM Logs (${debugItemsCount})
+        </button>
+      </div>
     </div>
     <div id="job-body"></div>`;
 
   const body = document.getElementById('job-body');
 
   if (job.status === 'failed') {
-    body.innerHTML = `<div class="banner err"><b>Scan failed.</b> ${esc(job.error || job.message)}</div>`;
+    const debugTabHtml = renderDebugTabContent(job);
+    body.innerHTML = `
+      <div id="job-tab-findings-content" class="${currentJobDetailTab === 'findings' ? '' : 'hide'}">
+        <div class="banner err"><b>Scan failed.</b> ${esc(job.error || job.message)}</div>
+      </div>
+      <div id="job-tab-debug-content" class="${currentJobDetailTab === 'debug' ? '' : 'hide'}">
+        ${debugTabHtml}
+      </div>`;
     return;
   }
 
   if (running) {
-    body.innerHTML = progressCard(job) + partialResults(job);
+    const debugTabHtml = renderDebugTabContent(job);
+    body.innerHTML = `
+      <div id="job-tab-findings-content" class="${currentJobDetailTab === 'findings' ? '' : 'hide'}">
+        ${progressCard(job) + partialResults(job)}
+      </div>
+      <div id="job-tab-debug-content" class="${currentJobDetailTab === 'debug' ? '' : 'hide'}">
+        ${debugTabHtml}
+      </div>`;
     body.querySelectorAll('.f-head').forEach(head => head.onclick = () =>
       head.nextElementSibling.classList.toggle('hide'));
     return;
@@ -1355,6 +1382,7 @@ function paintJob(job) {
   const benchmarkTabHtml = isBenchSupported ? renderBenchmarkTabContent(job) : '';
 
   const historyTabHtml = hasHistory ? renderConfigurationHistoryTabContent(job) : '';
+  const debugTabHtml = renderDebugTabContent(job);
 
   body.innerHTML = `
     <div id="job-tab-findings-content" class="${currentJobDetailTab === 'findings' ? '' : 'hide'}">
@@ -1366,31 +1394,9 @@ function paintJob(job) {
     ${hasHistory ? `
     <div id="job-tab-history-content" class="${currentJobDetailTab === 'history' ? '' : 'hide'}">
       ${historyTabHtml}
-    </div>` : ''}`;
-
-  if (findings.length > 0) {
-    renderFindingsBatch(true);
-  }
-}
-
-/* Findings already merged, shown while verification is still running. */
-function partialResults(job) {
-  const result = job.result;
-  const found = (result && result.findings) || [];
-  if (!found.length) return '';
-
-  const counts = result.counts || {};
-  const sorted = [...found].sort(
-    (a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
-
-  return `
-    <div class="card">
-      <div class="card-title">Found so far &mdash; scan still running</div>
-      ${severityStack(counts)}
-      <div style="margin-top:16px">${sorted.map(f => findingCard(f, job.id)).join('')}</div>
-      <p class="muted" style="margin-top:12px">
-        These are merged results. The verification agent may still remove some
-        of them, and later phases may add more.</p>
+    </div>` : ''}
+    <div id="job-tab-debug-content" class="${currentJobDetailTab === 'debug' ? '' : 'hide'}">
+      ${debugTabHtml}
     </div>`;
 }
 
@@ -1814,6 +1820,26 @@ function follow(id) {
 
     // A phase boundary changes the log, the phase strip and possibly the
     // partial results, so re-fetch rather than patching each piece.
+    if (update.latest_event) {
+      const liveLog = document.getElementById('debug-live-events-log');
+      if (liveLog) {
+        const div = document.createElement('div');
+        div.innerHTML = `<span class="t" style="min-width:38px">${Math.round(update.latest_event.percent || update.percent || 0)}%</span><span style="display:inline-block;padding:0 5px;margin-right:6px;border-radius:2px;font-size:10px;text-transform:uppercase;background:rgba(255,255,255,0.06);color:var(--text-dim)">${esc(update.latest_event.phase || 'info')}</span>${esc(update.latest_event.message || '')}`;
+        liveLog.appendChild(div);
+        liveLog.scrollTop = liveLog.scrollHeight;
+      }
+    }
+    if (update.latest_trace) {
+      const tracesList = document.getElementById('debug-traces-list');
+      if (tracesList) {
+        const temp = document.createElement('div');
+        temp.innerHTML = renderDebugTracesList([update.latest_trace]);
+        if (temp.firstElementChild) {
+          tracesList.appendChild(temp.firstElementChild);
+        }
+      }
+    }
+
     if (update.phase !== lastPhase) {
       lastPhase = update.phase;
       refresh().catch(() => {});
@@ -3290,3 +3316,336 @@ initTheme();
 route();
 checkHealth();
 setInterval(checkHealth, 30000);
+
+
+/* ---------------- debug & execution log tab ---------------- */
+
+let currentDebugFilter = 'all';
+let currentDebugJobTraces = [];
+let currentDebugJobEvents = [];
+let debugSearchDebounceTimer = null;
+
+function renderDebugTabContent(job) {
+  const result = job.result || {};
+  const stats = result.stats || {};
+  const telem = stats.telemetry || {};
+
+  // Extract or synthesize debug traces
+  let rawTraces = (job.debug_traces && job.debug_traces.length)
+    ? job.debug_traces
+    : ((stats.debug_traces && stats.debug_traces.length) ? stats.debug_traces : []);
+
+  // Fallback: If no raw traces, synthesize from findings / refuted / events
+  if (!rawTraces.length) {
+    rawTraces = [];
+    const verifiedFindings = (result.findings || []).filter(f => f.verification);
+    for (const f of verifiedFindings) {
+      const v = f.verification || {};
+      rawTraces.push({
+        id: `synth_verify_${f.id || f.start_line}`,
+        timestamp: f.created_at || job.finished_at || job.created_at,
+        type: 'verification',
+        phase: 'verify',
+        target: `${f.type || f.vulnerability_type || 'Vulnerability'} at ${(f.file || '').split(/[\\/]/).pop()}:${f.start_line}`,
+        model: job.options?.verify_model || job.options?.model || job.model || 'Default',
+        status: (v.verdict || 'CONFIRMED').toUpperCase(),
+        verdict: v.verdict || 'confirmed',
+        elapsed_seconds: v.duration_seconds || 0,
+        tokens: v.tokens || {},
+        thinking: v.thinking || (v.reason ? `Reasoning from verification:
+${v.reason}` : ''),
+        content: v.raw_text || v.note || (v.reason ? JSON.stringify({verdict: v.verdict, reason: v.reason, mitigating_control: v.mitigating_control}, null, 2) : ''),
+        tool_calls: v.tool_calls || 0,
+        transcript: v.transcript || [],
+        reason: v.reason || '',
+        mitigating_control: v.mitigating_control || ''
+      });
+    }
+
+    const refutedFindings = result.refuted_findings || [];
+    for (const f of refutedFindings) {
+      const v = f.verification || {};
+      rawTraces.push({
+        id: `synth_refuted_${f.id || f.start_line}`,
+        timestamp: f.created_at || job.finished_at || job.created_at,
+        type: 'verification',
+        phase: 'verify',
+        target: `${f.type || f.vulnerability_type || 'Candidate'} at ${(f.file || '').split(/[\\/]/).pop()}:${f.start_line}`,
+        model: job.options?.verify_model || job.options?.model || job.model || 'Default',
+        status: 'REFUTED',
+        verdict: 'refuted',
+        elapsed_seconds: v.duration_seconds || 0,
+        tokens: v.tokens || {},
+        thinking: v.thinking || (v.reason ? `Refutation rationale:
+${v.reason}` : ''),
+        content: v.raw_text || (v.reason ? JSON.stringify({verdict: 'refuted', reason: v.reason, mitigating_control: v.mitigating_control}, null, 2) : ''),
+        tool_calls: v.tool_calls || 0,
+        transcript: v.transcript || [],
+        reason: v.reason || '',
+        mitigating_control: v.mitigating_control || ''
+      });
+    }
+  }
+
+  currentDebugJobTraces = rawTraces;
+  currentDebugJobEvents = job.events || [];
+
+  const inputTokens = telem.input_tokens || stats.input_tokens || (job.tokens && job.tokens.input) || 0;
+  const outputTokens = telem.output_tokens || stats.output_tokens || (job.tokens && job.tokens.output) || 0;
+  const thinkingTokens = telem.thinking_tokens || telem.reasoning_tokens || stats.thinking_tokens || stats.reasoning_tokens || (job.tokens && job.tokens.thinking) || 0;
+  const totalTokens = telem.total_tokens || stats.total_tokens || (job.tokens && job.tokens.total) || (inputTokens + outputTokens);
+  const totalCalls = telem.api_requests || stats.api_requests || rawTraces.length || 0;
+
+  const scanTraces = rawTraces.filter(t => t.type === 'llm_scan');
+  const verifyTraces = rawTraces.filter(t => t.type === 'verification');
+
+  return `
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:8px">
+          <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          Live Execution &amp; LLM Generation Debug Logs
+        </div>
+        <div class="spacer"></div>
+        <span class="muted" style="font-size:12px">Status: <b style="color:${job.status === 'done' ? 'var(--ok)' : (job.status === 'running' ? 'var(--signal)' : 'var(--crit)')};text-transform:uppercase">${esc(job.status)}</b> · ${job.status === 'running' ? `${Math.round(job.percent)}%` : `${stats.total_seconds || 0}s duration`}</span>
+      </div>
+
+      <div class="metrics" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));margin-top:0">
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${totalCalls || rawTraces.length}</div>
+          <div class="metric-label">Model API Calls</div>
+          <div class="metric-sub">${scanTraces.length} scan + ${verifyTraces.length} verify</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${formatTokensNumber(inputTokens)}</div>
+          <div class="metric-label">Input Prompt Tokens</div>
+          <div class="metric-sub">${totalTokens ? Math.round((inputTokens / totalTokens) * 100) : 0}% of total volume</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:19px">${formatTokensNumber(outputTokens)}</div>
+          <div class="metric-label">Output Completion Tokens</div>
+          <div class="metric-sub">${totalTokens ? Math.round((outputTokens / totalTokens) * 100) : 0}% of total volume</div>
+        </div>
+        <div class="metric ${thinkingTokens ? 'ok' : ''}">
+          <div class="metric-value" style="font-size:19px;color:${thinkingTokens ? 'var(--signal)' : 'var(--text-faint)'}">${thinkingTokens ? formatTokensNumber(thinkingTokens) : '—'}</div>
+          <div class="metric-label">Thinking / Reasoning Tokens</div>
+          <div class="metric-sub">${thinkingTokens && outputTokens ? Math.round((thinkingTokens / outputTokens) * 100) + '% of completion' : (thinkingTokens ? 'Deep reasoning' : 'Standard generation')}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Execution Timeline (Progressing events) -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="cursor:pointer;user-select:none" onclick="document.getElementById('debug-terminal-events-body').classList.toggle('hide')">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:7px">
+          <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          Execution Timeline &amp; Progress Events (${currentDebugJobEvents.length} events)
+        </div>
+        <div class="spacer"></div>
+        <span class="muted" style="font-size:12px">Toggle stream <svg class="svg-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+      </div>
+      <div id="debug-terminal-events-body" style="margin-top:14px">
+        <div class="log" id="debug-live-events-log" style="max-height:280px;margin-top:0">
+          ${currentDebugJobEvents.length ? currentDebugJobEvents.map(e => `
+            <div>
+              <span class="t" style="min-width:38px">${Math.round(e.percent || 0)}%</span>
+              <span style="display:inline-block;padding:0 5px;margin-right:6px;border-radius:2px;font-size:10px;text-transform:uppercase;background:rgba(255,255,255,0.06);color:var(--text-dim)">${esc(e.phase || 'info')}</span>
+              ${esc(e.message || '')}
+            </div>`).join('') : '<div class="muted">Waiting for execution events...</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Generation Traces Card -->
+    <div class="card">
+      <div class="row" style="margin-bottom:14px;align-items:baseline">
+        <div class="card-title" style="margin:0">Model Generation Traces (Thinking &amp; Content)</div>
+        <div class="spacer"></div>
+        <span id="debug-traces-counter-badge" class="filter-status-text">Showing ${rawTraces.length} traces</span>
+      </div>
+
+      <div class="debug-toolbar">
+        <div class="search-wrap" style="flex:1;max-width:440px">
+          <svg class="search-svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="debug-trace-search-input" class="search-input" placeholder="Search traces by file, thinking, response, model..." autocomplete="off" oninput="onDebugTraceSearchInput()">
+          <button type="button" id="debug-trace-search-clear" class="search-clear-btn hide" onclick="clearDebugTraceSearch()" title="Clear search">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="filter-pills" id="debug-filter-pills">
+          <button type="button" class="filter-pill active" data-filter="all" onclick="setDebugFilter('all')">
+            All <span class="pill-count">${rawTraces.length}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="scan" onclick="setDebugFilter('scan')">
+            <span class="dot-indicator purple"></span> LLM Scan <span class="pill-count">${scanTraces.length}</span>
+          </button>
+          <button type="button" class="filter-pill" data-filter="verify" onclick="setDebugFilter('verify')">
+            <span class="dot-indicator teal"></span> Verification Agent <span class="pill-count">${verifyTraces.length}</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="debug-traces-list">
+        ${renderDebugTracesList(rawTraces)}
+      </div>
+    </div>`;
+}
+
+function renderDebugTracesList(traces) {
+  if (!traces || !traces.length) {
+    return emptyState('No LLM traces recorded', 'Traces are captured in real-time when the LLM scanner or verifier agent runs.');
+  }
+
+  return traces.map((t, idx) => {
+    const isScan = t.type === 'llm_scan';
+    const tok = t.tokens || {};
+    const hasTokens = (tok.total || tok.input || tok.output) > 0;
+    const hasThinking = t.thinking && String(t.thinking).trim().length > 0;
+    const hasContent = t.content && String(t.content).trim().length > 0;
+    const hasTranscript = t.transcript && t.transcript.length > 0;
+
+    const statusPillClass = (t.status === 'SUCCESS' || t.status === 'CONFIRMED' || t.status === 'UPHELD')
+      ? 'LOW'
+      : ((t.status === 'REFUTED') ? 'CRITICAL' : 'MEDIUM');
+
+    return `
+      <div class="debug-trace-card" data-trace-id="${esc(t.id || 'trace_' + idx)}" data-trace-type="${isScan ? 'scan' : 'verify'}" data-trace-search="${esc([t.target, t.model, t.status, t.thinking || '', t.content || '', t.reason || ''].join(' ').toLowerCase())}">
+        <div class="debug-trace-head" onclick="toggleDebugTraceBody(this)">
+          <span class="debug-tag ${isScan ? 'scan' : 'verify'}">${isScan ? 'Tier 2 Scan' : 'Tier 3 Verify'}</span>
+          <span style="font-weight:600;font-size:13px">${esc(t.target || 'Analysis Task')}</span>
+          <code class="job-meta-model">${esc(t.model || 'LLM')}</code>
+          <span class="pill ${statusPillClass}" style="font-size:10px">${esc(t.status || 'OK')}</span>
+          ${hasTokens ? `
+          <code class="job-meta-tok" title="Input: ${formatTokensNumber(tok.input)} | Output: ${formatTokensNumber(tok.output)}${tok.thinking ? ` | Thinking: ${formatTokensNumber(tok.thinking)}` : ''}">
+            ⚡ ${formatCompactTokens(tok.input)} in / ${formatCompactTokens(tok.output)} out${tok.thinking ? ` (${formatCompactTokens(tok.thinking)} think)` : ''}
+          </code>` : ''}
+          <div class="spacer"></div>
+          ${t.elapsed_seconds ? `<span class="muted" style="font-size:11.5px;font-variant-numeric:tabular-nums">${t.elapsed_seconds}s</span>` : ''}
+          <span class="trace-expand-icon muted" style="font-size:11px;display:flex;align-items:center">
+            <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </span>
+        </div>
+        <div class="debug-trace-body hide">
+          ${hasThinking ? `
+          <div class="debug-block">
+            <div class="debug-block-title thinking-title">
+              <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 3 2 5.5 4 7v3h8v-3c2-1.5 4-4 4-7a8 8 0 0 0-8-8z"></path><line x1="9" y1="22" x2="15" y2="22"></line></svg>
+              Thinking &amp; Reasoning Process (${formatTokensNumber(tok.thinking || 0)} tokens)
+            </div>
+            <pre class="debug-code-view"><code>${esc(t.thinking)}</code></pre>
+          </div>` : ''}
+
+          ${hasContent ? `
+          <div class="debug-block">
+            <div class="debug-block-title output-title">
+              <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+              Model Generated Content / Output (${formatTokensNumber(tok.output || 0)} tokens)
+            </div>
+            <pre class="debug-code-view"><code>${esc(t.content)}</code></pre>
+          </div>` : ''}
+
+          ${hasTranscript ? `
+          <div class="debug-block">
+            <div class="debug-block-title transcript-title">
+              <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              Investigation Agent Tool Calls (${t.transcript.length} steps)
+            </div>
+            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:6px;background:#090c10">
+              ${t.transcript.map((step, sIdx) => `
+                <div style="font:400 12px/1.4 var(--mono);color:#c9d1d9">
+                  <span style="color:var(--signal);font-weight:600">[Step ${sIdx + 1}] ${esc(step.tool)}</span>(${esc(JSON.stringify(step.args))})
+                </div>`).join('')}
+            </div>
+          </div>` : ''}
+
+          ${(t.reason || t.mitigating_control) ? `
+          <div style="padding:10px 14px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.02);border:1px solid var(--edge);font-size:12.5px">
+            ${t.reason ? `<div><b>Verdict Rationale:</b> ${esc(t.reason)}</div>` : ''}
+            ${t.mitigating_control ? `<div style="margin-top:4px"><b>Mitigating Control:</b> <code class="inline-code">${esc(t.mitigating_control)}</code></div>` : ''}
+          </div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleDebugTraceBody(headEl) {
+  const body = headEl.nextElementSibling;
+  if (!body) return;
+  body.classList.toggle('hide');
+  const chevron = headEl.querySelector('.trace-expand-icon svg');
+  if (chevron) {
+    chevron.style.transform = body.classList.contains('hide') ? 'rotate(0deg)' : 'rotate(180deg)';
+    chevron.style.transition = 'transform .2s ease';
+  }
+}
+
+function onDebugTraceSearchInput() {
+  const input = document.getElementById('debug-trace-search-input');
+  const clearBtn = document.getElementById('debug-trace-search-clear');
+  const query = (input ? input.value : '').trim();
+  if (clearBtn) clearBtn.classList.toggle('hide', !query);
+
+  clearTimeout(debugSearchDebounceTimer);
+  debugSearchDebounceTimer = setTimeout(() => {
+    applyDebugFilter();
+  }, 120);
+}
+
+function clearDebugTraceSearch() {
+  const input = document.getElementById('debug-trace-search-input');
+  const clearBtn = document.getElementById('debug-trace-search-clear');
+  if (input) input.value = '';
+  if (clearBtn) clearBtn.classList.add('hide');
+  applyDebugFilter();
+}
+
+function setDebugFilter(filterName) {
+  currentDebugFilter = filterName;
+  document.querySelectorAll('#debug-filter-pills .filter-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filterName);
+  });
+  applyDebugFilter();
+}
+
+function applyDebugFilter() {
+  const searchInput = document.getElementById('debug-trace-search-input');
+  const counterBadge = document.getElementById('debug-traces-counter-badge');
+  const container = document.getElementById('debug-traces-list');
+  if (!container) return;
+
+  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+  const cards = container.querySelectorAll('.debug-trace-card');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const type = card.dataset.traceType;
+    const searchText = card.dataset.traceSearch || '';
+
+    let matchesFilter = true;
+    if (currentDebugFilter === 'scan') matchesFilter = (type === 'scan');
+    else if (currentDebugFilter === 'verify') matchesFilter = (type === 'verify');
+
+    let matchesSearch = true;
+    if (query) {
+      matchesSearch = searchText.includes(query);
+    }
+
+    const show = matchesFilter && matchesSearch;
+    card.classList.toggle('hide', !show);
+    if (show) visibleCount++;
+  });
+
+  if (counterBadge) {
+    counterBadge.textContent = `Showing ${visibleCount} of ${cards.length} traces`;
+  }
+}

@@ -563,6 +563,10 @@ class Verdict:
     evidence_line: int = 0
     taint_path: List[Dict[str, Any]] = field(default_factory=list)
     mitigating_control: str = ""
+    raw_text: str = ""
+    thinking: str = ""
+    tokens: Dict[str, int] = field(default_factory=dict)
+    transcript: List[Dict[str, Any]] = field(default_factory=list)
     tool_calls: int = 0
     investigated: bool = False
     hit_turn_cap: bool = False
@@ -587,6 +591,10 @@ class Verdict:
             "evidence_line": self.evidence_line,
             "taint_path": self.taint_path,
             "mitigating_control": self.mitigating_control,
+            "raw_text": self.raw_text,
+            "thinking": self.thinking,
+            "tokens": self.tokens,
+            "transcript": self.transcript,
             "tool_calls": self.tool_calls,
             "investigated": self.investigated,
             "hit_turn_cap": self.hit_turn_cap,
@@ -698,6 +706,10 @@ class VerificationAgent:
         verdict.investigated = run.investigated
         verdict.successful_reads = getattr(run, "successful_reads", [])
         verdict.duration_seconds = round(time.perf_counter() - start_time, 2)
+        verdict.raw_text = run.text
+        verdict.thinking = getattr(run, "thinking", "")
+        verdict.tokens = getattr(run, "tokens", {})
+        verdict.transcript = getattr(run, "transcript", [])
         if hasattr(run, "hit_turn_cap"):
             verdict.hit_turn_cap = getattr(run, "hit_turn_cap", False)
 

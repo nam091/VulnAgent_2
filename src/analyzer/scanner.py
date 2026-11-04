@@ -13,7 +13,7 @@ import os
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -329,6 +329,7 @@ class Scanner:
         # it rather than its own.
         self._cache_hits = 0
         self._cache_misses = 0
+        self._debug_traces: List[Dict[str, Any]] = []
 
     async def scan(self) -> ScanResult:
         """
@@ -524,6 +525,7 @@ class Scanner:
             "thinking_tokens": telemetry_stats.get("thinking_tokens", 0),
             "total_tokens": telemetry_stats.get("total_tokens", 0),
             "telemetry": telemetry_stats,
+            "debug_traces": self._debug_traces,
             **verify_stats,
         }
         # Guarantee 100% of taint path steps across all findings are enriched
@@ -702,16 +704,25 @@ class Scanner:
         completed = {"n": 0}
         total = len(routed)
 
-        def tick(relative: str, outcome: str = "ok", count: int = 0, elapsed_file: float = 0.0) -> None:
+        def tick(
+            relative: str,
+            outcome: str = "ok",
+            count: int = 0,
+            elapsed_file: float = 0.0,
+            trace: Optional[Dict[str, Any]] = None
+        ) -> None:
             completed["n"] += 1
             # The LLM tier owns the 28-70 band of the overall progress bar.
             percent = 28 + 42 * (completed["n"] / total)
             found = sum(len(v) for v in results.values())
             timing_note = f"in {elapsed_file:.1f}s" if elapsed_file > 0 else "from cache"
+            extra_kwargs: Dict[str, Any] = {"current": completed["n"], "total": total, "findings": found}
+            if trace:
+                extra_kwargs["trace"] = trace
             self._emit(
                 "llm",
                 f"[{completed['n']}/{total}] {relative} -> {outcome} ({count} finding(s), {timing_note}) | Total: {found}",
-                percent, current=completed["n"], total=total, findings=found
+                percent, **extra_kwargs
             )
 
         async def analyse(item: DiscoveredFile) -> None:
@@ -750,7 +761,33 @@ class Scanner:
                 results[relative] = vulns
                 status[relative] = "ok"
                 elapsed_req = round(time.perf_counter() - t_file, 2)
-                tick(relative, outcome="SUCCESS", count=len(vulns), elapsed_file=elapsed_req)
+
+                trace_meta = (raw.get("_trace") if isinstance(raw, dict) else {}) or {}
+                tokens_meta = trace_meta.get("usage") or {}
+                thinking_text = trace_meta.get("thinking") or ""
+                raw_text = trace_meta.get("raw_content") or ""
+
+                trace_item = {
+                    "id": f"trace_scan_{relative.replace('/', '_').replace('\\', '_')}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": "llm_scan",
+                    "phase": "llm",
+                    "target": relative,
+                    "model": self.options.model or getattr(self.analyzer.ai_client, "openai_default_model", "default"),
+                    "status": "SUCCESS",
+                    "elapsed_seconds": elapsed_req,
+                    "tokens": {
+                        "input": tokens_meta.get("prompt_tokens", 0),
+                        "output": tokens_meta.get("completion_tokens", 0),
+                        "thinking": tokens_meta.get("thinking_tokens", 0),
+                        "total": tokens_meta.get("total_tokens", 0),
+                    },
+                    "thinking": thinking_text,
+                    "content": raw_text,
+                    "findings_count": len(vulns),
+                }
+                self._debug_traces.append(trace_item)
+                tick(relative, outcome="SUCCESS", count=len(vulns), elapsed_file=elapsed_req, trace=trace_item)
 
         await asyncio.gather(*(analyse(item) for item in routed))
         return results, status
@@ -850,6 +887,27 @@ class Scanner:
 
                 verdict_icon = "[CONFIRMED]" if verdict.confirmed else ("[REFUTED]" if verdict.refuted else "[UNCERTAIN]")
                 tools_note = f"via {verdict.tool_calls} tool call(s)" if verdict.tool_calls > 0 else "no tools needed"
+
+                trace_item = {
+                    "id": f"trace_verify_{vuln.id or Path(vuln.location.file_path).name}_{vuln.location.start_line}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": "verification",
+                    "phase": "verify",
+                    "target": f"{vuln.type.value} at {Path(vuln.location.file_path).name}:{vuln.location.start_line}",
+                    "model": self.options.verify_model or self.options.model or "default",
+                    "status": verdict.verdict.upper(),
+                    "verdict": verdict.verdict,
+                    "elapsed_seconds": verdict.duration_seconds,
+                    "tokens": verdict.tokens or {},
+                    "thinking": verdict.thinking or "",
+                    "content": verdict.raw_text or "",
+                    "tool_calls": verdict.tool_calls,
+                    "transcript": verdict.transcript or [],
+                    "reason": verdict.reason or "",
+                    "mitigating_control": verdict.mitigating_control or "",
+                }
+                self._debug_traces.append(trace_item)
+
                 self._emit(
                     "verify",
                     f"[{done['n']}/{total}] {vuln.type.value} at "
@@ -857,7 +915,8 @@ class Scanner:
                     f"-> {verdict_icon} ({tools_note}) | Upheld: {counters['confirmed']}, Refuted: {counters['refuted']}",
                     75 + 23 * (done["n"] / total),
                     current=done["n"], total=total,
-                    upheld=counters["confirmed"], refuted=counters["refuted"]
+                    upheld=counters["confirmed"], refuted=counters["refuted"],
+                    trace=trace_item,
                 )
 
         await asyncio.gather(*(check(r, v) for r, v in candidates))

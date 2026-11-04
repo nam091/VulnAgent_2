@@ -27,6 +27,8 @@ class AgentRun:
     """
 
     text: str = ""
+    thinking: str = ""
+    tokens: Dict[str, int] = field(default_factory=dict)
     turns: int = 0
     tool_calls: int = 0
     hit_turn_cap: bool = False
@@ -104,12 +106,12 @@ class ToolCallingAgent:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        run = AgentRun()
+        run = AgentRun(tokens={"input": 0, "output": 0, "thinking": 0, "total": 0})
 
         for turn in range(self.max_turns):
             run.turns = turn + 1
             try:
-                message = await self._complete(messages, with_tools=not run.tools_unsupported)
+                message = await self._complete(messages, with_tools=not run.tools_unsupported, run=run)
             except _ToolsUnsupported:
                 # Some OpenAI-compatible providers reject the tools parameter.
                 # Degrade to a single-shot answer rather than failing outright,
@@ -118,7 +120,7 @@ class ToolCallingAgent:
                     "Provider rejected tool calling; falling back to single-shot analysis"
                 )
                 run.tools_unsupported = True
-                message = await self._complete(messages, with_tools=False)
+                message = await self._complete(messages, with_tools=False, run=run)
 
             tool_calls = getattr(message, "tool_calls", None)
             if not tool_calls:
@@ -203,7 +205,7 @@ class ToolCallingAgent:
             ),
         })
         try:
-            message = await self._complete(messages, with_tools=False)
+            message = await self._complete(messages, with_tools=False, run=run)
             run.text = (
                 message.content
                 or getattr(message, "reasoning_content", None)
@@ -406,13 +408,19 @@ class ToolCallingAgent:
 
         return reads
 
-    async def _complete(self, messages: List[Dict[str, Any]], with_tools: bool) -> Any:
+    async def _complete(
+        self,
+        messages: List[Dict[str, Any]],
+        with_tools: bool,
+        run: Optional[AgentRun] = None
+    ) -> Any:
         """
         Make one chat completion request.
 
         Args:
             messages: Conversation so far
             with_tools: Whether to advertise the tool schemas
+            run: Optional AgentRun to record token telemetry and thinking content
 
         Returns:
             Any: The assistant message
@@ -429,6 +437,7 @@ class ToolCallingAgent:
             kwargs["tools"] = self.tool_schemas
             kwargs["tool_choice"] = "auto"
 
+        response = None
         # Synchronous client: run it off-thread or every agent turn stalls
         # the event loop and the "concurrent" verification runs serially.
         try:
@@ -444,21 +453,59 @@ class ToolCallingAgent:
                 response = await asyncio.to_thread(
                     lambda: self.client.chat.completions.create(**kwargs)
                 )
-                try:
-                    from utils.telemetry import TelemetryTracker
-                    TelemetryTracker.get_instance().record_call(getattr(response, "usage", None))
-                except Exception:
-                    pass
-                return response.choices[0].message
-            raise
+            else:
+                raise
 
-        try:
-            from utils.telemetry import TelemetryTracker
-            TelemetryTracker.get_instance().record_call(getattr(response, "usage", None))
-        except Exception:
-            pass
+        if response is not None:
+            usage = getattr(response, "usage", None)
+            try:
+                from utils.telemetry import TelemetryTracker
+                TelemetryTracker.get_instance().record_call(usage)
+            except Exception:
+                pass
 
-        return response.choices[0].message
+            if run is not None and usage is not None:
+                p = int(getattr(usage, "prompt_tokens", 0) or 0)
+                c = int(getattr(usage, "completion_tokens", 0) or 0)
+                t = int(getattr(usage, "total_tokens", 0) or (p + c))
+                details = getattr(usage, "completion_tokens_details", None)
+                r = 0
+                if details:
+                    if isinstance(details, dict):
+                        r = int(details.get("reasoning_tokens") or details.get("thinking_tokens") or 0)
+                    else:
+                        r = int(getattr(details, "reasoning_tokens", 0) or getattr(details, "thinking_tokens", 0) or 0)
+                if not r and usage:
+                    if isinstance(usage, dict):
+                        r = int(usage.get("completion_thinking_tokens") or usage.get("reasoning_tokens") or 0)
+                    else:
+                        r = int(getattr(usage, "completion_thinking_tokens", 0) or getattr(usage, "reasoning_tokens", 0) or 0)
+
+                run.tokens["input"] = run.tokens.get("input", 0) + p
+                run.tokens["output"] = run.tokens.get("output", 0) + c
+                run.tokens["thinking"] = run.tokens.get("thinking", 0) + r
+                run.tokens["total"] = run.tokens.get("total", 0) + t
+
+            choice = response.choices[0]
+            msg = choice.message
+
+            reasoning = (
+                getattr(msg, "reasoning_content", None)
+                or getattr(msg, "reasoning", None)
+                or getattr(choice, "reasoning_content", None)
+                or ""
+            )
+            if not reasoning and msg.content and "<think>" in msg.content:
+                m = re.search(r"<think>(.*?)</think>", msg.content, flags=re.DOTALL)
+                if m:
+                    reasoning = m.group(1).strip()
+            if reasoning and run is not None:
+                if run.thinking:
+                    run.thinking += "\n---\n" + reasoning
+                else:
+                    run.thinking = reasoning
+
+            return msg
 
     @staticmethod
     def _assistant_message(message: Any, tool_calls: Any) -> Dict[str, Any]:

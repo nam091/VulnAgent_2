@@ -400,6 +400,34 @@ class AIClient:
         message = getattr(choice, "message", None)
         content = getattr(message, "content", None) if message else None
 
+        reasoning_content = (
+            getattr(message, "reasoning_content", None)
+            or getattr(message, "reasoning", None)
+            or getattr(choice, "reasoning_content", None)
+            or None
+        )
+        if content and "<think>" in content:
+            m = re.search(r"<think>(.*?)</think>", content, flags=re.DOTALL)
+            if m and not reasoning_content:
+                reasoning_content = m.group(1).strip()
+
+        usage = getattr(response, "usage", None)
+        p = int(getattr(usage, "prompt_tokens", 0) or 0)
+        c = int(getattr(usage, "completion_tokens", 0) or 0)
+        t = int(getattr(usage, "total_tokens", 0) or (p + c))
+        details = getattr(usage, "completion_tokens_details", None)
+        r = 0
+        if details:
+            if isinstance(details, dict):
+                r = int(details.get("reasoning_tokens") or details.get("thinking_tokens") or 0)
+            else:
+                r = int(getattr(details, "reasoning_tokens", 0) or getattr(details, "thinking_tokens", 0) or 0)
+        if not r and usage:
+            if isinstance(usage, dict):
+                r = int(usage.get("completion_thinking_tokens") or usage.get("reasoning_tokens") or 0)
+            else:
+                r = int(getattr(usage, "completion_thinking_tokens", 0) or getattr(usage, "reasoning_tokens", 0) or 0)
+
         finish_reason = getattr(choice, "finish_reason", None)
         if finish_reason == "length":
             logging.warning(
@@ -407,7 +435,19 @@ class AIClient:
                 "salvaging whatever complete findings are present."
             )
 
-        return self._parse_content(content, "OpenAI-compatible")
+        parsed = self._parse_content(content, "OpenAI-compatible")
+        if isinstance(parsed, dict):
+            parsed["_trace"] = {
+                "raw_content": content or "",
+                "thinking": reasoning_content or "",
+                "usage": {
+                    "prompt_tokens": p,
+                    "completion_tokens": c,
+                    "thinking_tokens": r,
+                    "total_tokens": t,
+                },
+            }
+        return parsed
 
     def _parse_anthropic_response(self, response) -> Dict[str, Any]:
         """
