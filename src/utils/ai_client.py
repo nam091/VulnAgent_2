@@ -230,7 +230,25 @@ class AIClient:
             str: The system prompt
         """
 
-        return """You are a software quality and security analysis expert performing defensive code defect analysis.
+        scope_note = ""
+        try:
+            import os as _os
+            from eval.cwe_scope import CORE_CWE_SCOPE, CORE_CWE_TITLES
+
+            if (_os.getenv("VULNAGENT_CWE_SCOPE", "core10") or "core10").strip().lower() != "full":
+                allowed = ", ".join(
+                    f"CWE-{c} ({CORE_CWE_TITLES[c]})" for c in CORE_CWE_SCOPE
+                )
+                scope_note = (
+                    "REPORTING SCOPE: report ONLY defects in these 10 CWEs: "
+                    f"{allowed}. "
+                    "If the code contains a different class of defect, do not report it: "
+                    "an out-of-scope finding is discarded by the pipeline and costs tokens for nothing.\n\n"
+                )
+        except Exception:
+            scope_note = ""
+
+        return scope_note + """You are a software quality and security analysis expert performing defensive code defect analysis.
         Analyze the provided code for security vulnerabilities, focusing on:
         1. OWASP Top 10 vulnerabilities
         2. SANS Top 25 vulnerabilities

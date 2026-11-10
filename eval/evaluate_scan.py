@@ -404,6 +404,7 @@ def evaluate_single_scan(
     labels: Sequence[Label],
     dataset_meta: Dict[str, Any],
     exact_cwe: bool = False,
+    cwe_scope: str = "core10",
 ) -> Dict[str, Any]:
     """
     Evaluate one scan output file against benchmark ground truth.
@@ -423,6 +424,10 @@ def evaluate_single_scan(
         det = finding_to_detection(f, dataset_dir, label_files=label_files)
         if det:
             detections.append(det)
+
+    if cwe_scope == "core10":
+        from eval.cwe_scope import filter_detections
+        detections = filter_detections(detections)
 
     scan_name = scan_file.stem
     match_mode = dataset_meta.get("match_mode", "line")
@@ -692,6 +697,7 @@ def evaluate_scans(
     json_out: Optional[Union[str, Path]] = None,
     detailed: bool = False,
     print_output: bool = True,
+    cwe_scope: str = "core10",
 ) -> Dict[str, Any]:
     """
     Main evaluation routine: evaluates one or more scans against ground truth dataset.
@@ -709,6 +715,15 @@ def evaluate_scans(
     """
     dataset_dir = resolve_dataset_dir(dataset)
     labels, dataset_meta = load_dataset(dataset_dir)
+    labels_full = len(labels)
+    coverage = None
+
+    if cwe_scope == "core10":
+        from eval.cwe_scope import filter_clean_files, filter_labels, scope_coverage
+        labels = filter_labels(labels)
+        dataset_meta = dict(dataset_meta)
+        dataset_meta["clean_files"] = filter_clean_files(dataset_meta)
+        coverage = scope_coverage(labels)
 
     results: List[Dict[str, Any]] = []
     for path in scan_paths:
@@ -718,6 +733,7 @@ def evaluate_scans(
             labels=labels,
             dataset_meta=dataset_meta,
             exact_cwe=exact_cwe,
+            cwe_scope=cwe_scope,
         )
         results.append(res)
 
@@ -745,6 +761,8 @@ def evaluate_scans(
         "dataset": dataset_name,
         "dataset_dir": str(dataset_dir),
         "total_ground_truth": total_labels,
+        "total_ground_truth_full": labels_full,
+        "cwe_scope": coverage,
         "exact_cwe": exact_cwe,
         "match_mode": dataset_meta.get("match_mode", "line"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -810,6 +828,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print detailed per-CWE breakdown table",
     )
+    parser.add_argument(
+        "--cwe-scope",
+        choices=("core10", "full"),
+        default="core10",
+        help=(
+            "Scoring scope (default: core10). 'core10' restricts ground truth, clean "
+            "controls and detections to CWE 22/78/79/89/94/328/330/502/611/643; "
+            "'full' scores every CWE in the dataset."
+        ),
+    )
     return parser
 
 
@@ -828,6 +856,7 @@ def run_evaluation_cli(args: argparse.Namespace) -> int:
             dataset=getattr(args, "dataset", DEFAULT_DATASET),
             exact_cwe=getattr(args, "exact_cwe", False),
             json_out=getattr(args, "json_out", None),
+            cwe_scope=getattr(args, "cwe_scope", "core10"),
             detailed=getattr(args, "detailed", False),
             print_output=True,
         )

@@ -1367,7 +1367,7 @@ class PromptManager:
     - Apply Taint Reasoning & Clean Control Principles (Optimized for cmc/reflection/beam:free & Benchmark Evaluation):
       * Khi kiểm tra các đoạn mã chuẩn hoặc clean control code (ví dụ: đã dùng hàm làm sạch hợp lệ `html.escape`, `os.path.basename`, câu truy vấn có tham số hóa parameterized SQL, hoặc sử dụng hằng số cố định), hướng dẫn mô hình phải dứt khoát xác nhận mã nguồn an toàn và trả về {{"vulnerabilities": []}} thay vì phỏng đoán suy diễn.
       * When analyzing clean control code or safe implementations with valid sanitizers (`html.escape`, `os.path.basename`, parameterized SQL queries, hardcoded constants), decisively confirm the code is safe and return {{"vulnerabilities": []}} without speculative guessing.
-      * Khi phát hiện luồng dữ liệu tainted đi thẳng từ nguồn ngoại vi vào điểm chìm nguy hiểm mà không qua hàm làm sạch tương ứng, lập tức xác nhận lỗ hổng với phân loại chuẩn xác theo 11 nhóm CWE của benchmark: CWE-22 (PATHTRAVER), CWE-78 (CMDI), CWE-79 (XSS), CWE-89 (SQLI), CWE-94 (CODEINJ), CWE-328 (HASH), CWE-330 (WEAKRAND), CWE-502 (DESERIALIZATION), CWE-601 (REDIRECT), CWE-611 (XXE), CWE-643 (XPATHI).
+      * Khi phát hiện luồng dữ liệu tainted đi thẳng từ nguồn ngoại vi vào điểm chìm nguy hiểm mà không qua hàm làm sạch tương ứng, lập tức xác nhận lỗ hổng với phân loại chuẩn xác theo 10 nhóm CWE trong phạm vi thực nghiệm: CWE-22 (PATHTRAVER), CWE-78 (CMDI), CWE-79 (XSS), CWE-89 (SQLI), CWE-94 (CODEINJ), CWE-328 (HASH), CWE-330 (WEAKRAND), CWE-502 (DESERIALIZATION), CWE-611 (XXE), CWE-643 (XPATHI).
     - Validate user input sources and check data sanitization flows against canonical defenses
     - Verify proper authz checks
     - Confirm secure defaults

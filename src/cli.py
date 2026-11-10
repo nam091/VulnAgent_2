@@ -112,6 +112,13 @@ def _add_scan_options(parser: argparse.ArgumentParser) -> None:
         help="Disable intra-procedural backward AST slicing for LLM prompts"
     )
     parser.add_argument(
+        "--cwe-scope", choices=("core10", "full"), default="core10",
+        help=(
+            "Scanning scope (default: core10). 'core10' keeps only CWE "
+            "22/78/79/89/94/328/330/502/611/643; 'full' reports every CWE."
+        )
+    )
+    parser.add_argument(
         "--rules", default=None,
         help="Semgrep rule configs (file, directory, or registry packs e.g. p/python, p/security-audit, p/owasp-top-ten)"
     )
@@ -347,6 +354,7 @@ def _options_from(args: argparse.Namespace) -> ScanOptions:
         verify_turns=getattr(args, "verify_turns", 6),
         semgrep_configs=semgrep_configs,
         use_ast_slicer=not getattr(args, "no_ast_slicer", False),
+        cwe_scope=getattr(args, "cwe_scope", "core10"),
         suppress_unconfirmed_rules=suppress_unconfirmed_rules,
         min_confidence=getattr(args, "min_confidence", None),
         offline=offline,

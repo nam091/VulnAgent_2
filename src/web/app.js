@@ -2660,6 +2660,13 @@ function renderBenchmarkTabContent(job) {
             Dataset: <b>${esc(bench.dataset_name)}</b> (<code>${esc(bench.dataset_key)}</code>) ·
             Ground-Truth Labels: <b>${totalGroundTruth}</b> · Evaluated via bipartite sink-matching (&plusmn;3 lines tolerance, CWE equivalence classes).
           </p>
+          ${bench.cwe_scope ? `
+          <p class="muted" style="margin:6px 0 0">
+            Scope: <b>${esc(bench.cwe_scope.scope_label)}</b>
+            (${esc(bench.cwe_scope.coverage)} CWEs: ${bench.cwe_scope.declared_cwes.map(c => 'CWE-' + c).join(', ')}) ·
+            Excluded: ${Object.keys(bench.cwe_scope.excluded_cwes || {}).map(c => 'CWE-' + c).join(', ')}
+            ${(bench.cwe_scope.absent_cwes || []).length ? `<br><b>Note:</b> this dataset ships no test case for ${bench.cwe_scope.absent_cwes.map(c => 'CWE-' + c).join(', ')}, so ${esc(bench.cwe_scope.coverage)} declared CWEs are exercised.` : ''}
+          </p>` : ''}
         </div>
         <div class="row" style="gap:8px">
           <button type="button" class="btn ghost sm" onclick="copyBenchmarkMarkdown('${esc(job.id)}')">

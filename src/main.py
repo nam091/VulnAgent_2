@@ -1216,7 +1216,7 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
     job_id = getattr(job, "id", "")
     job_result = getattr(job, "result", None) or {}
     findings_count = len(job_result.get("findings", []))
-    cache_key = f"{job_id}_{findings_count}"
+    cache_key = f"{job_id}_{findings_count}_core10_v1"
     if cache_key in _BENCHMARK_EVAL_CACHE:
         return _BENCHMARK_EVAL_CACHE[cache_key]
 
@@ -1268,20 +1268,34 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
         }
 
     try:
+        from eval.cwe_scope import (
+            filter_clean_files,
+            filter_detections,
+            filter_labels,
+            scope_coverage,
+        )
+
         dataset_name = "benchmark100" if dataset_key == "benchmark100" else "benchmark"
         dataset_dir = resolve_dataset_dir(dataset_name)
-        labels, dataset_meta = load_dataset(dataset_dir)
+        labels_all, dataset_meta = load_dataset(dataset_dir)
         findings_raw = extract_findings_from_payload(job_result)
+
+        # Scoring is restricted to the declared 10-CWE scope. This is a
+        # scoring-time filter: stored findings are untouched, so historical
+        # jobs are re-scored without re-running any scan.
+        labels = filter_labels(labels_all)
+        coverage = scope_coverage(labels)
         label_files = {l.file for l in labels}
         detections = []
         for f in findings_raw:
             det = finding_to_detection(f, dataset_dir, label_files=label_files)
             if det:
                 detections.append(det)
+        detections = filter_detections(detections)
 
         match_mode = dataset_meta.get("match_mode", "line")
         partial_labels = dataset_meta.get("partial_labels", False)
-        clean_files = dataset_meta.get("clean_files", [])
+        clean_files = filter_clean_files(dataset_meta)
 
         metrics = match(
             detections=detections,
@@ -1307,8 +1321,11 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             "supported": True,
             "dataset_key": dataset_key,
             "dataset_name": dataset_meta.get("name", "OWASP Benchmark"),
+            "cwe_scope": coverage,
             "total_ground_truth": len(labels),
+            "total_ground_truth_full": len(labels_all),
             "findings_count": len(findings_raw),
+            "findings_in_scope": len(detections),
             "detections_count": len(detections),
             "metrics": {
                 "tp": metrics.true_positives,

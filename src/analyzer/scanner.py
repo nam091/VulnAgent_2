@@ -64,6 +64,7 @@ class ScanOptions:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         verify_model: Optional[str] = None,
+        cwe_scope: str = "core10",
     ) -> None:
         self.target = target
         self.use_llm = use_llm
@@ -86,6 +87,10 @@ class ScanOptions:
         self.base_url = base_url
         self.api_key = api_key
         self.verify_model = verify_model
+        # Scoring and scanning both honour a declared CWE scope. "core10"
+        # restricts findings to the 10 CWEs the thesis commits to; "full"
+        # keeps every CWE the engines can report.
+        self.cwe_scope = (cwe_scope or "core10").strip().lower()
 
         if suppress_unconfirmed_rules is None:
             self.suppress_unconfirmed_rules = True if verify else False
@@ -292,6 +297,8 @@ class Scanner:
 
     def __init__(self, options: ScanOptions) -> None:
         self.options = options
+        # Mirrored from options so fusion, CLI and API all read one switch.
+        self.cwe_scope = str(getattr(options, "cwe_scope", "core10") or "core10").strip().lower()
         self.analyzer = CodeAnalyzer(
             use_semgrep=False,
             use_llm=options.use_llm,
@@ -1121,6 +1128,11 @@ class Scanner:
             relative = item.relative
             rule_findings = rule_by_file.get(relative, [])
             llm_findings = llm_by_file.get(relative, [])
+
+            if self.cwe_scope == "core10":
+                from eval.cwe_scope import in_scope
+                rule_findings = [v for v in rule_findings if in_scope(v.cwe_id)]
+                llm_findings = [v for v in llm_findings if in_scope(v.cwe_id)]
 
             # Semgrep status for this specific file
             semgrep_reason = ""

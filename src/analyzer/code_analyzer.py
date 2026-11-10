@@ -72,6 +72,9 @@ class CodeAnalyzer:
         self.use_ast_slicer = use_ast_slicer
         self.ast_slicer = ASTSlicer()
         self.prompt_manager = PromptManager()
+        # Findings outside the declared scope are dropped before they can
+        # reach fusion, chain building or the report. "full" disables it.
+        self.cwe_scope = str(getattr(options, "cwe_scope", "core10") or "core10").strip().lower()
 
         self.ai_client = AIClient(disabled=not use_llm)
         self.code_parser = CodeParser()
@@ -864,6 +867,17 @@ class CodeAnalyzer:
                 "Summary of unprocessed vulnerability types:\n" +
                 "\n".join(f"- {t}" for t in sorted(unprocessed_types))
             )
+
+        if self.cwe_scope == "core10":
+            from eval.cwe_scope import in_scope
+            kept = [v for v in vulnerabilities if in_scope(v.cwe_id)]
+            dropped = len(vulnerabilities) - len(kept)
+            if dropped:
+                logging.debug(
+                    "CWE scope: dropped %d out-of-scope finding(s) for %s",
+                    dropped, filename or "snippet",
+                )
+            return kept
 
         return vulnerabilities
 
