@@ -157,8 +157,11 @@ def test_normalize_finding_file(temp_benchmark_dataset: Path):
     full_path = (temp_benchmark_dataset / "samples" / "vuln_sql.py").resolve().as_posix()
     assert normalize_finding_file(full_path, temp_benchmark_dataset, labels) == "vuln_sql.py"
 
-    # Arbitrary prefix ending in valid label
-    assert normalize_finding_file("build/sources/vuln_traversal.py", temp_benchmark_dataset, labels) == "vuln_traversal.py"
+    # An unrelated path with the same basename must not be guessed as a benchmark sample (false TP).
+    assert normalize_finding_file("build/sources/vuln_traversal.py", temp_benchmark_dataset, labels) == ""
+    outside = temp_benchmark_dataset.parent / "vuln_traversal.py"
+    outside.write_text("open(user_path).read()\n", encoding="utf-8")
+    assert normalize_finding_file(outside.as_posix(), temp_benchmark_dataset, labels) == ""
 
 
 def test_normalize_cwe_string():
@@ -277,6 +280,7 @@ def test_evaluate_single_scan_exact_vs_equivalent(temp_benchmark_dataset: Path, 
         labels=labels,
         dataset_meta=labels_data,
         exact_cwe=False,
+        cwe_scope="full",  # Equivalence requires the out-of-core10 CWE-798 label.
     )
     assert res_default["metrics"]["tp"] == 1
     assert res_default["per_cwe"]["CWE-798"]["tp"] == 1
@@ -288,9 +292,33 @@ def test_evaluate_single_scan_exact_vs_equivalent(temp_benchmark_dataset: Path, 
         labels=labels,
         dataset_meta=labels_data,
         exact_cwe=True,
+        cwe_scope="full",
     )
     assert res_exact["metrics"]["tp"] == 0
     assert res_exact["per_cwe"]["CWE-798"]["tp"] == 0
+
+
+def test_core10_scope_filters_cwe798(temp_benchmark_dataset: Path, tmp_path: Path):
+    """The default core10 excludes hardcoded credentials, while full preserves them."""
+    scan_file = tmp_path / "credential_scan.json"
+    scan_file.write_text(
+        json.dumps({"findings": [{"file": "vuln_auth.py", "start_line": 1, "cwe": "CWE-798"}]}),
+        encoding="utf-8",
+    )
+    labels_data = json.loads((temp_benchmark_dataset / "labels.json").read_text(encoding="utf-8"))
+    labels = [Label(file=l["file"], line=l["line"], cwe=l["cwe"], type=l["type"])
+              for l in labels_data["labels"]]
+
+    core = evaluate_single_scan(scan_file, temp_benchmark_dataset, labels, labels_data)
+    full = evaluate_single_scan(scan_file, temp_benchmark_dataset, labels, labels_data, cwe_scope="full")
+    assert "CWE-798" not in core["per_cwe"]
+    assert core["metrics"]["tp"] == 0
+    assert core["metrics"]["fn"] == 2
+    assert core["detections_count"] == 0
+    assert full["per_cwe"]["CWE-798"]["tp"] == 1
+    assert full["metrics"]["tp"] == 1
+    assert full["metrics"]["fn"] == 2
+    assert full["detections_count"] == 1
 
 
 def test_evaluate_scans_end_to_end(temp_benchmark_dataset: Path, tmp_path: Path):
@@ -323,6 +351,7 @@ def test_evaluate_scans_end_to_end(temp_benchmark_dataset: Path, tmp_path: Path)
         scan_paths=[scan1_path, scan2_path],
         dataset=temp_benchmark_dataset,
         exact_cwe=False,
+        cwe_scope="full",  # Preserve the CWE-798 miss when testing end-to-end metrics.
         json_out=json_export,
         detailed=True,
         print_output=True,
@@ -353,6 +382,19 @@ def test_evaluate_scans_end_to_end(temp_benchmark_dataset: Path, tmp_path: Path)
     exported = json.loads(json_export.read_text(encoding="utf-8"))
     assert exported["dataset"] == "Mock Benchmark Dataset"
     assert len(exported["scans"]) == 2
+
+    # Under the default core10 scope, the CWE-798 miss is intentionally excluded.
+    core = evaluate_scans(
+        scan_paths=[scan1_path, scan2_path],
+        dataset=temp_benchmark_dataset,
+        print_output=False,
+    )
+    assert core["total_ground_truth"] == 2
+    assert core["total_ground_truth_full"] == 3
+    assert core["scans"][0]["metrics"]["tp"] == 2
+    assert core["scans"][0]["metrics"]["fn"] == 0
+    assert core["scans"][1]["metrics"]["tp"] == 1
+    assert core["scans"][1]["metrics"]["fn"] == 1
 
 
 def test_resolve_dataset_dir(temp_benchmark_dataset: Path):
@@ -437,6 +479,17 @@ def test_cli_integration_via_src_cli(temp_benchmark_dataset: Path, tmp_path: Pat
     assert json_out.is_file()
     data = json.loads(json_out.read_text(encoding="utf-8"))
     assert data["metrics"]["tp"] == 1
+    assert data["total_ground_truth"] == 2  # Default core10 omits CWE-798.
+
+    # The benchmark score subparser must forward the explicit scope to evaluation.
+    full_out = tmp_path / "cli_full.json"
+    full_argv = argv + ["--cwe-scope", "full"]
+    full_argv[full_argv.index(str(json_out))] = str(full_out)
+    assert cli_main(full_argv) == EXIT_CLEAN
+    full_data = json.loads(full_out.read_text(encoding="utf-8"))
+    assert full_data["total_ground_truth"] == 3
+    assert full_data["metrics"]["fn"] == 2
+    assert data["metrics"]["fn"] == 1
 
 
 def test_error_handling_non_existent_scan():

@@ -271,6 +271,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Require exact CWE matching without equivalence classes",
     )
     score_cmd.add_argument(
+        "--cwe-scope", choices=("core10", "full"), default="core10",
+        help=(
+            "Scoring scope (default: core10). 'core10' scores only CWE "
+            "22/78/79/89/94/328/330/502/611/643; 'full' scores every CWE."
+        ),
+    )
+    score_cmd.add_argument(
         "--json",
         dest="json_out",
         default=None,

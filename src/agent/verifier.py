@@ -743,24 +743,28 @@ class VerificationAgent:
                     fs_entry["actual_line"] = sread.get("start_line", 1) + line_off - 1
                     imported_sanitizers.append(fs_entry)
 
-        # Respect refutation when mitigating control / sanitizer is detected from imported file
-        if imported_sanitizers:
+        # Imported sanitizers may only complete a refutation the model already
+        # reached - never create one. An earlier revision promoted an
+        # "uncertain" verdict to "refuted" as soon as any read_imported_symbol
+        # page happened to contain a matching sanitizer (html.escape, shlex.quote,
+        # a parameterised-query helper...). That read carries no evidence that
+        # the sanitizer sits on the data path between the attacker-controlled
+        # source and the sink: a helper defined in an unrelated function of the
+        # same module was enough to refute a real CWE-79. Turning the model's
+        # "I do not know" into "safe" drops a possible true positive on
+        # evidence nobody verified, which is the wrong direction for a scanner
+        # whose rule is fail-closed (a surviving false positive is cheaper than
+        # a silently deleted vulnerability). If the model genuinely believes a
+        # sanitizer protects the sink it must say "refuted" and cite it; the
+        # citation is then validated below against a read it actually made.
+        if imported_sanitizers and verdict.refuted:
             best_sanitizer = imported_sanitizers[0]
-            if verdict.refuted:
-                if not verdict.mitigating_control.strip():
-                    verdict.mitigating_control = best_sanitizer["description"]
-                if not verdict.evidence_file.strip():
-                    verdict.evidence_file = best_sanitizer["read"]["path"]
-                    verdict.evidence_line = best_sanitizer["actual_line"]
-            elif verdict.verdict == "uncertain":
-                verdict.verdict = "refuted"
+            # Metadata top-up only: the verdict stays whatever the model said.
+            if not verdict.mitigating_control.strip():
                 verdict.mitigating_control = best_sanitizer["description"]
+            if not verdict.evidence_file.strip():
                 verdict.evidence_file = best_sanitizer["read"]["path"]
                 verdict.evidence_line = best_sanitizer["actual_line"]
-                verdict.reason = (
-                    f"Refuted by imported mitigating control: {best_sanitizer['description']} "
-                    f"in {best_sanitizer['read']['path']}"
-                )
 
         # Refutation decision policy (B02 / G2)
         if verdict.refuted:
@@ -806,30 +810,17 @@ class VerificationAgent:
             if verdict.refuted and verdict.evidence_file:
                 try:
                     resolved = (self.root / verdict.evidence_file.lstrip("/\\")).resolve()
-                    # Resilient helper resolution: if evidence_file is not found directly,
-                    # search sibling helpers or subdirectories (e.g. helpers/utils.py)
-                    if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
-                        cand_name = Path(verdict.evidence_file).name
-                        for c_dir in [self.root, self.root.parent, self.root / "helpers", self.root.parent / "helpers"]:
-                            if c_dir.is_dir():
-                                for f_cand in c_dir.glob("*.py"):
-                                    if f_cand.name == cand_name:
-                                        resolved = f_cand.resolve()
-                                        verdict.evidence_file = str(f_cand.relative_to(self.root) if self.root in f_cand.parents else f_cand.name)
-                                        break
-                                if resolved.is_file():
-                                    break
-
-                    if (resolved != self.root and self.root not in resolved.parents) or not resolved.is_file():
-                        # Try to match filename against successful reads (including imported symbol reads)
+                    original_exists = (resolved != self.root and self.root in resolved.parents and resolved.is_file())
+                    if not original_exists:
+                        # Only an exact in-scope path may be associated with a previous read.
                         for sread in verdict.successful_reads:
                             rpath = sread.get("path", "")
-                            if rpath and Path(verdict.evidence_file).name == Path(rpath).name:
-                                cand = (self.root / rpath.lstrip("/\\")).resolve()
-                                if cand.is_file():
-                                    verdict.evidence_file = rpath
-                                    resolved = cand
-                                    break
+                            if not rpath:
+                                continue
+                            cand = (self.root / rpath.lstrip("/\\")).resolve()
+                            if cand == resolved and self.root in cand.parents and cand.is_file():
+                                resolved = cand
+                                break
                         if ((resolved != self.root and self.root not in resolved.parents) or not resolved.is_file()) and imported_sanitizers:
                             verdict.evidence_file = imported_sanitizers[0]["read"]["path"]
                             verdict.evidence_line = imported_sanitizers[0]["actual_line"]
@@ -873,20 +864,22 @@ class VerificationAgent:
                                         break
 
                             # If not matched directly, check if an imported sanitizer read holds the control
-                            if not matched_read and imported_sanitizers:
+                            if not matched_read and not original_exists and imported_sanitizers:
                                 matched_read = imported_sanitizers[0]["read"]
                                 verdict.evidence_file = matched_read["path"]
                                 verdict.evidence_line = imported_sanitizers[0]["actual_line"]
 
-                            # Fallback: if model read the same file during investigation, bind to that read
-                            if not matched_read:
+                            # A missing line may bind to a read of the identical file; an explicit
+                            # out-of-range citation must never be rewritten to a different line.
+                            if not matched_read and not verdict.evidence_line:
                                 for sread in verdict.successful_reads:
                                     rpath = sread.get("path", "")
-                                    if rpath and Path(rpath).name == Path(verdict.evidence_file).name:
+                                    if not rpath:
+                                        continue
+                                    r_resolved = (self.root / rpath.lstrip("/\\")).resolve()
+                                    if r_resolved == resolved and self.root in r_resolved.parents:
                                         matched_read = sread
-                                        verdict.evidence_file = rpath
-                                        if verdict.evidence_line == 0 or verdict.evidence_line < sread.get("start_line", 1) or verdict.evidence_line > sread.get("end_line", 1):
-                                            verdict.evidence_line = sread.get("start_line", vuln.location.start_line)
+                                        verdict.evidence_line = sread.get("start_line", vuln.location.start_line)
                                         break
 
                             if not matched_read:

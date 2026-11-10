@@ -13,17 +13,33 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Fallback model, pinned here so the provenance stamp written onto a response
+# and the request itself cannot drift apart.
+ANTHROPIC_MODEL = "claude-3-sonnet-20240229"
+
+
+def _primary_provider_name() -> str:
+    """
+    Name the provider the OpenAI-compatible tier is configured against.
+
+    Returns:
+        str: Provider label used for cache provenance
+    """
+
+    return (os.getenv("AI_PROVIDER", "openai") or "openai").strip().lower()
+
 
 class AIAnalysisError(RuntimeError):
     """Raised when no AI backend produced a usable analysis."""
 
 
 class AIClient:
-    def __init__(self, disabled: bool = False) -> None:
+    def __init__(self, disabled: bool = False, cwe_scope: str = "core10") -> None:
         """
         Initialize AI client wrapper with lazy provider instantiation.
         """
         self.disabled = disabled
+        self.cwe_scope = (cwe_scope or "core10").strip().lower()
         self._openai_client = None
         self._anthropic_client = None
         self.openai_default_model = os.getenv("OPENAI_MODEL", "o1-mini-2024-09-12")
@@ -59,13 +75,16 @@ class AIClient:
                 self._anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
         return self._anthropic_client
 
-    async def analyze_security(self, prompt: str, model: Optional[str] = None) -> Dict[str, Any]:
+    async def analyze_security(
+        self, prompt: str, model: Optional[str] = None, cwe_scope: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Analyze code for security vulnerabilities using AI models
 
         Args:
             prompt: The prompt to analyze
             model: The model to use for analysis (OpenAI)
+            cwe_scope: Reporting scope; defaults to this client's configured scope
 
         Returns:
             Dict[str, Any]: The analysis result
@@ -75,23 +94,33 @@ class AIClient:
         # response = await self._analyze_with_ollama(prompt)
 
         selected_model = model or self.openai_default_model
+        cwe_scope = self.cwe_scope if cwe_scope is None else cwe_scope
         errors = []
 
         try:
-            response = await self._analyze_with_openai(self.openai_client, prompt, selected_model)
+            response = await self._analyze_with_openai(self.openai_client, prompt, selected_model, cwe_scope=cwe_scope)
             if self._validate_response(response):
-                return response
+                return self._stamp_served_by(response, _primary_provider_name(), selected_model)
             errors.append(f"{selected_model}: response failed schema validation")
         except Exception as e:
             errors.append(f"{selected_model}: {e}")
             logging.warning(f"OpenAI-compatible tier failed: {e}")
 
-        # Fallback to Anthropic if configured
+        # Fallback to Anthropic if configured. The response is stamped with the
+        # backend that actually served it: returning it bare made the caller
+        # cache an Anthropic analysis under the key of the configured OpenAI
+        # model, so the next run reported it as that model's work. Every
+        # comparison between models - and every accuracy metric - was then
+        # measuring the wrong backend.
         if self.anthropic_client is not None:
             try:
-                response = await self._analyze_with_anthropic(prompt)
+                response = await self._analyze_with_anthropic(prompt, cwe_scope=cwe_scope)
                 if self._validate_response(response):
-                    return response
+                    logging.warning(
+                        "Analysis for %s served by fallback backend anthropic/%s",
+                        selected_model, ANTHROPIC_MODEL,
+                    )
+                    return self._stamp_served_by(response, "anthropic", ANTHROPIC_MODEL)
                 errors.append("anthropic: response failed schema validation")
             except Exception as e:
                 errors.append(f"anthropic: {e}")
@@ -102,6 +131,28 @@ class AIClient:
         # blew up" must not look identical - swallowing the error here also
         # made the caller's retry loop unreachable.
         raise AIAnalysisError("; ".join(errors) or "no AI backend produced a valid analysis")
+
+    @staticmethod
+    def _stamp_served_by(response: Dict[str, Any], provider: str, model: str) -> Dict[str, Any]:
+        """
+        Record which backend actually produced an analysis.
+
+        The scan cache keys on the configured model. Without this stamp a
+        fallback answer is indistinguishable from the primary model's answer,
+        so it gets cached (and later scored) as if the primary had written it.
+
+        Args:
+            response: Parsed analysis dictionary, modified in place
+            provider: Backend that served it
+            model: Model identifier the backend used
+
+        Returns:
+            Dict[str, Any]: The same dictionary, stamped
+        """
+
+        if isinstance(response, dict):
+            response["_served_by"] = {"provider": provider, "model": model}
+        return response
 
     async def _analyze_with_ollama(self, prompt: str) -> Dict[str, Any]:
         """
@@ -130,7 +181,9 @@ class AIClient:
             response.raise_for_status()
             return self._parse_ollama_response(response.json())
 
-    async def _analyze_with_openai(self, client: openai.Client, prompt: str, model: str) -> Dict[str, Any]:
+    async def _analyze_with_openai(
+        self, client: openai.Client, prompt: str, model: str, cwe_scope: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Analyze code using OpenAI models
 
@@ -144,7 +197,7 @@ class AIClient:
         """
 
         messages = [
-            {"role": "system", "content": self._get_system_prompt()},
+            {"role": "system", "content": self._get_system_prompt(cwe_scope=cwe_scope)},
             {"role": "user", "content": prompt}
         ]
 
@@ -199,7 +252,7 @@ class AIClient:
         name = (model or "").lower()
         return name.startswith(("o1", "o3", "o4")) or "-thinking" in name
 
-    async def _analyze_with_anthropic(self, prompt: str) -> Dict[str, Any]:
+    async def _analyze_with_anthropic(self, prompt: str, cwe_scope: Optional[str] = None) -> Dict[str, Any]:
         """
         Analyze code using Anthropic Claude
 
@@ -210,11 +263,11 @@ class AIClient:
             Dict[str, Any]: The analysis result
         """
 
-        system_prompt = self._get_system_prompt()
+        system_prompt = self._get_system_prompt(cwe_scope=cwe_scope)
         full_prompt = f"{system_prompt}\n\nHuman: {prompt}\n\nAssistant:"
 
         response = await self.anthropic_client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model=ANTHROPIC_MODEL,
             max_tokens=4000,
             temperature=0.1,
             messages=[{"role": "user", "content": full_prompt}]
@@ -222,9 +275,12 @@ class AIClient:
 
         return self._parse_anthropic_response(response)
 
-    def _get_system_prompt(self) -> str:
+    def _get_system_prompt(self, cwe_scope: Optional[str] = None) -> str:
         """
         Get the system prompt for security analysis
+
+        Args:
+            cwe_scope: Reporting scope; defaults to this client's configured scope
 
         Returns:
             str: The system prompt
@@ -232,16 +288,24 @@ class AIClient:
 
         scope_note = ""
         try:
-            import os as _os
-            from eval.cwe_scope import CORE_CWE_SCOPE, CORE_CWE_TITLES
+            from models.cwe_scope import CORE_CWE_SCOPE, CORE_CWE_TITLES, CWE_EQUIVALENCE
 
-            if (_os.getenv("VULNAGENT_CWE_SCOPE", "core10") or "core10").strip().lower() != "full":
-                allowed = ", ".join(
-                    f"CWE-{c} ({CORE_CWE_TITLES[c]})" for c in CORE_CWE_SCOPE
-                )
+            if (self.cwe_scope if cwe_scope is None else cwe_scope).strip().lower() != "full":
+                allowed_entries = []
+                for c in CORE_CWE_SCOPE:
+                    equivalents = sorted(
+                        {member for group in CWE_EQUIVALENCE if c in group for member in group if member != c},
+                        key=int,
+                    )
+                    note = f"CWE-{c} ({CORE_CWE_TITLES[c]}"
+                    if equivalents:
+                        note += "; equivalent CWEs: " + ", ".join(f"CWE-{member}" for member in equivalents)
+                    allowed_entries.append(note + ")")
+                allowed = ", ".join(allowed_entries)
                 scope_note = (
-                    "REPORTING SCOPE: report ONLY defects in these 10 CWEs: "
+                    "REPORTING SCOPE: report ONLY defects in these 10 CWEs or their listed equivalents: "
                     f"{allowed}. "
+                    "Report weak hashes such as MD5/SHA-1 even when classified under an equivalent CWE. "
                     "If the code contains a different class of defect, do not report it: "
                     "an out-of-scope finding is discarded by the pipeline and costs tokens for nothing.\n\n"
                 )

@@ -76,7 +76,7 @@ class CodeAnalyzer:
         # reach fusion, chain building or the report. "full" disables it.
         self.cwe_scope = str(getattr(options, "cwe_scope", "core10") or "core10").strip().lower()
 
-        self.ai_client = AIClient(disabled=not use_llm)
+        self.ai_client = AIClient(disabled=not use_llm, cwe_scope=self.cwe_scope)
         self.code_parser = CodeParser()
         self._repo_cache: Dict[str, str] = {}
         self.semgrep = SemgrepRunner() if use_semgrep else None
@@ -157,7 +157,7 @@ class CodeAnalyzer:
 
         llm_vulnerabilities: List[Vulnerability] = []
         try:
-            analysis_result = await self._get_analysis_with_retry(analysis_prompt)
+            analysis_result = await self._get_analysis_with_retry(analysis_prompt, cwe_scope=self.cwe_scope)
             llm_vulnerabilities = self._process_ai_response(analysis_result, filename, code_content=code_content)
             tiers["llm"] = "ok"
         except Exception as e:
@@ -177,6 +177,17 @@ class CodeAnalyzer:
 
         if tiers["llm"] != "ok" and not rule_vulnerabilities and tiers["semgrep"] != "ok":
             raise RuntimeError(f"Security analysis failed: no tier completed ({tiers})")
+
+        # Filter both tiers before fusion so out-of-scope rules cannot enter
+        # the public report or influence agreement and chain building.
+        if self.cwe_scope != "full":
+            from models.cwe_scope import eligible
+            rule_vulnerabilities = [
+                v for v in rule_vulnerabilities if eligible(v.cwe_id, scope=self.cwe_scope, exact_cwe=False)
+            ]
+            llm_vulnerabilities = [
+                v for v in llm_vulnerabilities if eligible(v.cwe_id, scope=self.cwe_scope, exact_cwe=False)
+            ]
 
         # Merge the two tiers and label each finding with its provenance
         fused = fusion.fuse(rule_vulnerabilities, llm_vulnerabilities)
@@ -249,7 +260,9 @@ class CodeAnalyzer:
             except OSError:
                 logging.debug(f"Could not clean temp dir {tmp_dir}")
 
-    async def _get_analysis_with_retry(self, prompt: str, max_retries: int = 3) -> Dict[str, Any]:
+    async def _get_analysis_with_retry(
+        self, prompt: str, max_retries: int = 3, cwe_scope: str = "core10"
+    ) -> Dict[str, Any]:
         """
         Get AI analysis with retry logic
 
@@ -261,6 +274,7 @@ class CodeAnalyzer:
         Args:
             prompt: The analysis prompt
             max_retries: Maximum number of retry attempts
+            cwe_scope: Reporting scope forwarded to the AI backend
 
         Returns:
             Dict[str, Any]: The analysis result
@@ -271,7 +285,7 @@ class CodeAnalyzer:
 
         for attempt in range(max_retries):
             try:
-                return await self.ai_client.analyze_security(prompt)
+                return await self.ai_client.analyze_security(prompt, cwe_scope=cwe_scope)
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(f"Failed to get AI analysis after {max_retries} attempts: {str(e)}")
@@ -868,18 +882,18 @@ class CodeAnalyzer:
                 "\n".join(f"- {t}" for t in sorted(unprocessed_types))
             )
 
-        if self.cwe_scope == "core10":
-            from eval.cwe_scope import in_scope
-            kept = [v for v in vulnerabilities if in_scope(v.cwe_id)]
-            dropped = len(vulnerabilities) - len(kept)
-            if dropped:
-                logging.debug(
-                    "CWE scope: dropped %d out-of-scope finding(s) for %s",
-                    dropped, filename or "snippet",
-                )
-            return kept
+        if self.cwe_scope == "full":
+            return vulnerabilities
 
-        return vulnerabilities
+        from models.cwe_scope import eligible
+        kept = [v for v in vulnerabilities if eligible(v.cwe_id, scope=self.cwe_scope, exact_cwe=False)]
+        dropped = len(vulnerabilities) - len(kept)
+        if dropped:
+            logging.debug(
+                "CWE scope: dropped %d out-of-scope finding(s) for %s",
+                dropped, filename or "snippet",
+            )
+        return kept
 
     def _find_related_vulnerabilities(
         self,

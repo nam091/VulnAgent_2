@@ -154,6 +154,14 @@ class ToolCallingAgent:
                 run.tool_calls += 1
                 run.transcript.append({"tool": name, "args": arguments})
 
+                # For other tools, bound content before extracting evidence from the
+                # result. read_lines truncates by complete numbered lines inside
+                # _process_tool_result_and_reads so a partial line is never evidence.
+                if name != "read_lines" and isinstance(result, dict) and isinstance(result.get("content"), str):
+                    if len(result["content"]) > MAX_TOOL_RESULT_CHARS:
+                        result["content"] = result["content"][:MAX_TOOL_RESULT_CHARS] + "\n... [truncated]"
+                        result["truncated"] = True
+
                 reads = self._process_tool_result_and_reads(name, arguments, result)
 
                 # Remove internal raw_lines helper before serializing to model payload
@@ -163,12 +171,6 @@ class ToolCallingAgent:
                         for d in result["definitions"]:
                             if isinstance(d, dict):
                                 d.pop("raw_lines", None)
-
-                # Ensure result is safely truncated without breaking JSON structure
-                if isinstance(result, dict) and "content" in result and isinstance(result["content"], str):
-                    if len(result["content"]) > MAX_TOOL_RESULT_CHARS:
-                        result["content"] = result["content"][:MAX_TOOL_RESULT_CHARS] + "\n... [truncated]"
-                        result["truncated"] = True
 
                 payload = json.dumps(result, ensure_ascii=False, default=str)
                 if len(payload) > MAX_TOOL_RESULT_CHARS + 500:

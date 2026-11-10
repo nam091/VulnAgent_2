@@ -1,8 +1,9 @@
 import logging
+import ntpath
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 MAX_READ_LINES = 200
 MAX_MATCHES = 40
@@ -170,6 +171,10 @@ def read_code_snippet(
         fallback_content: Optional source code content string if file is not on disk
         safe_reader: Optional SafeReader instance
 
+    The requested path is the only path read. When it does not exist under the
+    root, this returns an empty string instead of resolving a same-named file
+    elsewhere, so a snippet can never be attributed to the wrong file.
+
     Returns:
         str: Formatted code snippet with line numbers and '>' marker at line_number,
              or empty string if file cannot be read or line is invalid.
@@ -185,40 +190,37 @@ def read_code_snippet(
 
     lines: Optional[List[str]] = None
 
-    # Try resolving and reading file from disk
+    # Try resolving and reading file from disk.
+    # Contract: only the path actually requested may be read. Guessing a file by
+    # its basename inside the root or across datasets would attach the source of
+    # a different file to a finding, so a wrong path must fail closed here and
+    # let the caller fall back to fallback_content / successful_reads.
     if file_path:
         f_str = str(file_path).strip()
         candidates: List[Path] = []
-        if root_dir:
-            r_path = Path(root_dir)
-            cleaned = f_str.lstrip("/\\")
-            candidates.append(r_path / cleaned)
-            candidates.append(r_path / Path(f_str).name)
         p = Path(f_str)
-        if p.is_absolute():
-            candidates.append(p)
-        else:
-            candidates.append(p)
-            candidates.append(Path.cwd() / f_str)
+        if root_dir is not None:
+            r_path = Path(root_dir).resolve()
+            candidates.append(r_path / f_str.lstrip("/\\"))
+            if p.is_absolute():
+                candidates.append(p)
+        elif not p.is_absolute() and not ntpath.isabs(f_str):
+            # Without a scan root, only allow relative paths beneath the CWD.
+            candidates.append(Path.cwd() / p)
 
-        # Check eval datasets directory if available
-        datasets_dir = Path.cwd() / "eval" / "datasets"
-        if datasets_dir.is_dir():
-            try:
-                for d in datasets_dir.iterdir():
-                    if d.is_dir():
-                        candidates.append(d / "samples" / p.name)
-                        candidates.append(d / "samples" / f_str)
-            except Exception:
-                pass
-
+        boundary = Path(root_dir).resolve() if root_dir is not None else Path.cwd().resolve()
+        real_boundary = Path(os.path.realpath(boundary))
         for cand in candidates:
             try:
-                if cand.is_file():
-                    content = cand.read_text(encoding="utf-8", errors="replace")
+                resolved = cand.resolve()
+                real_candidate = Path(os.path.realpath(cand))
+                if not resolved.is_relative_to(boundary) or not real_candidate.is_relative_to(real_boundary):
+                    continue
+                if resolved.is_file():
+                    content = resolved.read_text(encoding="utf-8", errors="replace")
                     lines = content.splitlines()
                     break
-            except Exception:
+            except (OSError, ValueError):
                 continue
 
     # Fall back to provided fallback_content if disk read failed

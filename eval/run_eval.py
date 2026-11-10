@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -34,69 +34,24 @@ load_dotenv()
 from models.vulnerability import FindingSource, Vulnerability  # noqa: E402
 from analyzer.scanner import ScanOptions, Scanner  # noqa: E402
 
+# This module is executed both as `python eval/run_eval.py` (where sys.path[0]
+# is eval/, so the repository root is not importable) and as
+# `python -m eval.run_eval`. Resolve the shared scope policy either way.
+try:  # pragma: no cover - import path depends on how the script is launched
+    from eval.cwe_scope import (  # noqa: E402
+        CWE_EQUIVALENCE, cwe_matches, filter_labels, filter_clean_files, filter_detections,
+    )
+except ModuleNotFoundError:  # pragma: no cover
+    from cwe_scope import (  # noqa: E402
+        CWE_EQUIVALENCE, cwe_matches, filter_labels, filter_clean_files, filter_detections,
+    )
+
 DEFAULT_DATASET = Path(__file__).resolve().parent / "dataset"
 
 # A detection counts as a hit when it lands within this many lines of the
 # labelled location. Static analysers anchor on the sink, humans sometimes
 # label the tainted assignment a line or two above.
 LINE_TOLERANCE = 3
-
-# Different engines pick different, equally defensible CWEs for the same
-# defect: Bandit calls a literal password CWE-259, VulnAgent calls it CWE-798;
-# Semgrep files md5-for-passwords under CWE-327, this dataset under CWE-328.
-# Requiring exact equality would score a correct detection as a false positive
-# *and* a false negative at once, which quietly flatters whichever engine the
-# labels were written against. Equivalence classes remove that bias.
-CWE_EQUIVALENCE: Tuple[Set[str], ...] = (
-    {"798", "259", "260", "321", "1168"},            # hard-coded credentials / secret keys
-    {"326", "327", "328", "916"},                   # weak crypto / hashing
-    {"330", "335", "338"},                          # insecure randomness
-    {"16", "605", "668", "489", "1188"},            # misconfiguration / exposure
-    {"22", "23", "35", "36", "73"},                 # path traversal
-    {"79", "80", "116", "83"},                      # cross-site scripting
-    {"77", "78", "88"},                             # command injection
-    {"94", "95", "96"},                             # code injection
-    {"611", "827"},                                 # XML external entity (XXE)
-    {"776", "400"},                                 # XML entity expansion / DoS
-    {"502", "915"},                                 # deserialization
-    {"89", "564", "943"},                           # SQL injection
-    {"918", "441"},                                 # SSRF
-    {"287", "306", "521", "307"},                   # broken authentication
-    {"284", "862", "863", "639", "285"},            # access control / IDOR
-    {"200", "209", "532", "213", "359"},            # information exposure
-    {"208", "385", "203"},                          # timing attack / observable timing discrepancy
-    {"20", "1287", "1288"},                         # improper input validation
-    {"90"},                                         # LDAP injection
-)
-
-
-def cwe_matches(detected: str, labelled: str, exact: bool = False) -> bool:
-    """
-    Decide whether two CWE identifiers denote the same defect.
-
-    Args:
-        detected: CWE number reported by an engine
-        labelled: CWE number recorded in the dataset
-        exact: Require exact numerical match without equivalence class
-
-    Returns:
-        bool: True on match, False on mismatch or missing CWE
-    """
-
-    det = (detected or "").strip().upper().replace("CWE-", "")
-    lab = (labelled or "").strip().upper().replace("CWE-", "")
-
-    if not det or not lab:
-        return False  # missing CWE cannot claim a match
-    if det == lab:
-        return True
-    if exact:
-        return False
-    return any(
-        det in group and lab in group
-        for group in CWE_EQUIVALENCE
-    )
-
 
 @dataclass
 class Label:
@@ -578,6 +533,7 @@ async def run_vulnagent(
     Run one VulnAgent configuration over the dataset, returning a structured RunRecord.
     """
     min_risk = kwargs.pop("min_risk", 0)
+    cwe_scope = kwargs.pop("cwe_scope", "core10")
     options = ScanOptions(
         target=str(samples_dir),
         use_llm=use_llm,
@@ -590,6 +546,7 @@ async def run_vulnagent(
         use_ast_slicer=use_ast_slicer,
         suppress_unconfirmed_rules=suppress_unconfirmed_rules,
         min_risk=min_risk,
+        cwe_scope=cwe_scope,
         **kwargs,
     )
     started = time.perf_counter()
@@ -867,6 +824,8 @@ async def main() -> int:
     parser.add_argument("--no-bandit", action="store_true", help="Skip the Bandit baseline")
     parser.add_argument("--rules", default=None, help="Semgrep rules configuration (file, dir, or pack, comma-separated)")
     parser.add_argument("--exact-cwe", action="store_true", help="Require exact CWE number match (no equivalence classes)")
+    parser.add_argument("--cwe-scope", choices=("core10", "full"), default="core10",
+                        help="CWE scope for scanning and scoring labels, clean controls and detections (default: core10)")
     parser.add_argument("-j", "--concurrency", type=int, default=5, help="Concurrent LLM calls")
     parser.add_argument("--model", default=None, help="LLM model identifier to use (overrides OPENAI_MODEL)")
     parser.add_argument("--no-cache", action="store_true", help="Disable analyzer caching to measure cold latency and model variance")
@@ -921,12 +880,18 @@ async def main() -> int:
     initial_samples_hash = _compute_dir_hash(samples_dir)
 
     labels, meta = load_dataset(dataset_dir)
+    labels_full_count = len(labels)
+    clean_full = meta.get("clean_files") or []
+    clean = filter_clean_files(meta) if args.cwe_scope == "core10" else clean_full
+    if args.cwe_scope == "core10":
+        labels = filter_labels(labels)
     files = sorted({l.file for l in labels})
 
     print(f"Dataset : {meta['name']}")
     if meta.get("source"):
         print(f"Source  : {meta['source']}")
-    clean = meta.get("clean_files") or []
+    print(f"Scope   : {args.cwe_scope} ({len(labels)}/{labels_full_count} labels, "
+          f"{len(clean)}/{len(clean_full)} clean files)")
     print(f"Labels  : {len(labels)} vulnerability(ies) across {len(files)} file(s)")
     if clean:
         print(f"          plus {len(clean)} file(s) known to be clean, where any")
@@ -958,6 +923,7 @@ async def main() -> int:
             configuration_name=name,
             use_cache=use_cache,
             semgrep_configs=effective_configs,
+            cwe_scope=args.cwe_scope,
             **kwargs,
         )
         metrics = match(
@@ -980,6 +946,9 @@ async def main() -> int:
     if not args.no_bandit and (not args.only or "bandit" in selected):
         print("running Bandit...")
         record = run_bandit(samples_dir)
+        before_scope = len(record.detections)
+        record.detections = filter_detections(record.detections, scope=args.cwe_scope, exact_cwe=args.exact_cwe)
+        print(f"Bandit detections in scope: {len(record.detections)}/{before_scope}")
         metrics = match(
             record.detections,
             labels,
@@ -1163,6 +1132,14 @@ async def main() -> int:
                     "semgrep": _get_tool_version(["semgrep", "--version"]),
                     "bandit": _get_tool_version(["bandit", "--version"]),
                 },
+            },
+            "scope": {
+                "cwe_scope": args.cwe_scope,
+                "labels_full": labels_full_count,
+                "labels_in_scope": len(labels),
+                "clean_files_full": len(clean_full),
+                "clean_files_in_scope": len(clean),
+                "exact_cwe": args.exact_cwe,
             },
             "dataset": {
                 "name": meta["name"],

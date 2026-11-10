@@ -853,10 +853,10 @@ class TestCrossFileVerification:
     @pytest.mark.asyncio
     async def test_cross_file_sanitizer_auto_detection_when_model_is_uncertain(self, tmp_path: Path):
         """
-        Scenario 7: Post-processing detects mitigating control from imported symbol
-        even if model returned uncertain or omitted mitigating_control.
-        Module A calls escape_text() -> Module B uses escape_for_html().
-        Verifier recognizes CWE-79 sanitizer and respects refuted status with mitigating_control.
+        Scenario 7: An imported sanitizer must not upgrade an "uncertain" verdict.
+        Module A calls escape_text() -> Module B uses html.escape(). The read proves
+        the sanitizer exists in that module, not that it sits between the source and
+        the sink, so the verdict stays "uncertain" for the next stage to decide.
         """
         app_code = (
             "from security.escaper import escape_text\n"
@@ -931,11 +931,12 @@ class TestCrossFileVerification:
 
         verdict = await verifier.verify(vuln)
 
-        # Verifier post-processing detects html.escape in imported symbol and respects refutation
-        assert verdict.verdict == "refuted"
-        assert verdict.refuted is True
-        assert "html.escape" in verdict.mitigating_control or "escape" in verdict.mitigating_control
-        assert verdict.evidence_file == "security/escaper.py"
+        # The imported sanitizer is detected, but detection is not proof of a
+        # data path. Promoting "uncertain" to "refuted" here deleted a real
+        # CWE-79 whenever any imported module happened to contain a sanitizer,
+        # so the model's own verdict is preserved (fail-closed direction).
+        assert verdict.verdict == "uncertain"
+        assert verdict.refuted is False
 
     @pytest.mark.asyncio
     async def test_cross_file_sanitizer_refutation_whitelist_check(self, tmp_path: Path):

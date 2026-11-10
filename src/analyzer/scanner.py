@@ -30,7 +30,226 @@ from models.vulnerability import (
 )
 
 CACHE_DIRNAME = ".vulnagent-cache"
-CACHE_VERSION = "v2"
+CACHE_VERSION = "v3"
+
+# Sink identity is decided by fusion.is_same_sink, which the intra-tier
+# collapse uses as well: one implementation, so the two stages cannot drift.
+# The same holds for conclusion conflicts: fusion.verdicts_conflict is the only
+# definition, reached here through _verdicts_conflict.
+
+
+def _sink_rank(v: Vulnerability) -> Tuple[int, int, float, int, int, str]:
+    """
+    Order findings by how much evidence stands behind them, best first.
+
+    When two findings describe the same sink the survivor must be the one a
+    reviewer can defend, so the sort keys mirror that argument in order:
+    the verifier upheld it, a second engine corroborated it, it is more
+    confident, it sits earlier in the file (deterministic tie-break), and
+    finally it is more severe.
+
+    Args:
+        v: Candidate finding
+
+    Returns:
+        tuple: Sort key, ascending = strongest first
+    """
+
+    return (
+        0 if getattr(v, "assessment_status", None) == "supported" else 1,
+        0 if getattr(v, "corroborated", False) else 1,
+        -float(getattr(v, "confidence", 0.5) or 0.0),
+        int(v.location.start_line or 1),
+        fusion.SEVERITY_RANK.get(v.severity, 2),
+        str(v.id or ""),
+    )
+
+
+def _finding_verdict(v: Vulnerability) -> str:
+    """
+    Read a finding's verification verdict without trusting its shape.
+
+    Args:
+        v: Candidate finding
+
+    Returns:
+        str: Lower-cased verdict, or "" when the finding was never verified
+    """
+
+    record = getattr(v, "verification", None)
+    if not isinstance(record, dict):
+        return ""
+    return str(record.get("verdict") or "").strip().lower()
+
+
+def _assessment_status(v: Vulnerability) -> str:
+    """
+    Read a finding's assessment status without trusting its shape.
+
+    Args:
+        v: Candidate finding
+
+    Returns:
+        str: Lower-cased status, or "" when the finding carries none
+    """
+
+    return str(getattr(v, "assessment_status", None) or "").strip().lower()
+
+
+def _verdicts_conflict(a: Vulnerability, b: Vulnerability) -> bool:
+    """
+    Test whether two findings hold mutually exclusive conclusions about a sink.
+
+    Delegated to fusion.verdicts_conflict, which is also applied by fusion's
+    intra-tier collapse, its cross-tier match and _absorb_into. This pass runs
+    later and over findings the verifier has already judged, so it must reach
+    the same answer on the same pair; keeping a second copy of the logic here is
+    what let the two modules drift, and the drift is what folded a 'refuted'
+    finding into a CONFIRMED one whose verification record was missing.
+
+    'confirmed' and 'refuted' cannot both be true of one sink, so such a pair is
+    not a duplicate to collapse: one would be chosen by a sort order that holds
+    no evidence for either, and the loser's evidence ids would be attached to
+    the winner's opposite verdict.
+
+    Args:
+        a: First finding
+        b: Second finding
+
+    Returns:
+        bool: True when folding the pair would merge two exclusive conclusions
+    """
+
+    return fusion.verdicts_conflict(a, b)
+
+
+def _absorb_duplicate(anchor: Vulnerability, duplicate: Vulnerability) -> None:
+    """
+    Fold a duplicate finding's evidence into the survivor.
+
+    The survivor's location, type and verdict are authoritative; everything
+    else is copied over only where the survivor has nothing, so a merge never
+    throws away an enrichment (corroboration, engine sources) that only the
+    dropped finding carried. Traced flows are the exception, together with the
+    evidence ids: a flow is evidence, so both sides' flows are unioned rather
+    than one being chosen - that way a survivor that traced its own flow keeps
+    the duplicate's distinct flows as alternates instead of discarding them.
+    Evidence ids are unioned for the same reason: each id names a stored
+    artifact that still exists and dropping the loser's ids would orphan
+    evidence a reviewer can no longer find from the report. Severity escalates
+    to the worse of the two: under-reporting a surviving sink is the unsafe
+    direction.
+
+    Args:
+        anchor: The finding being kept, modified in place
+        duplicate: The finding being dropped
+    """
+
+    if not anchor.taint_path and duplicate.taint_path:
+        anchor.taint_path = list(duplicate.taint_path)
+    # A trace is evidence, so the fold unions every flow instead of picking one:
+    # a survivor that traced its own flow used to end up with only that flow,
+    # and a survivor that already held alternates lost them to the duplicate's.
+    anchor.taint_path, anchor.alternate_taint_paths = fusion.merge_taint_paths(
+        anchor.taint_path,
+        anchor.alternate_taint_paths or [],
+        [duplicate.taint_path, *(duplicate.alternate_taint_paths or [])],
+    )
+    if duplicate.corroborated and not anchor.corroborated:
+        anchor.corroborated = True
+    if anchor.verification is None and duplicate.verification is not None:
+        anchor.verification = duplicate.verification
+    for evidence_id in list(duplicate.evidence_ids or []):
+        if evidence_id not in anchor.evidence_ids:
+            anchor.evidence_ids.append(evidence_id)
+    if not anchor.file_hash and duplicate.file_hash:
+        anchor.file_hash = duplicate.file_hash
+    if not anchor.rule_id and duplicate.rule_id:
+        anchor.rule_id = duplicate.rule_id
+    for key in list(duplicate.engine_sources or []):
+        if key not in anchor.engine_sources:
+            anchor.engine_sources.append(key)
+    for rule in list(duplicate.merged_rule_ids or []):
+        if rule not in anchor.merged_rule_ids:
+            anchor.merged_rule_ids.append(rule)
+    if fusion.SEVERITY_RANK.get(duplicate.severity, 2) < fusion.SEVERITY_RANK.get(anchor.severity, 2):
+        anchor.severity = duplicate.severity
+
+
+def merge_duplicate_sinks(findings: List[Vulnerability]) -> List[Vulnerability]:
+    """
+    Collapse findings that report the same sink into one.
+
+    Identity is decided by fusion.is_same_sink, the same predicate the
+    intra-tier collapse uses: same file, compatible type, and either an
+    identical traced sink point (file, line) with an identical flow, or - when
+    only one side traced a flow - that side's sink step equal to the other
+    side's reported start line, or an identical start line when neither traced
+    anything. Proximity is not used as a merge condition: two real sinks seven
+    lines apart are two defects, and merging them cost a true positive plus the
+    loser's taint path and evidence ids. When the same sink is genuinely
+    reported twice, merging is still the right answer - one sink reported twice
+    scores as a true positive plus a false positive, which is a precision
+    defect in the report rather than in the code. The survivor is chosen by
+    _sink_rank and enrichment that only the loser carried is folded into it.
+
+    Grouping is transitive through the survivor: a finding joins the earliest
+    kept finding it matches, so a cluster of identical reports yields
+    exactly one entry instead of one per pair.
+
+    A pair whose conclusions contradict each other ('confirmed' vs 'refuted', or
+    a 'supported' assessment against a 'refuted' one, including the mixed case
+    where only one side wrote a `verification` record) is not a duplicate and is
+    never folded: this pass runs after verification, so folding that pair would
+    attach one finding's evidence to the opposite conclusion, and the sort order
+    that picks the survivor carries no evidence for either conclusion. Both
+    findings are kept for review.
+
+    Args:
+        findings: Candidate findings for one report
+
+    Returns:
+        List[Vulnerability]: Deduplicated findings, strongest first
+    """
+
+    if len(findings) < 2:
+        return list(findings)
+
+    kept: List[Vulnerability] = []
+    for candidate in sorted(findings, key=_sink_rank):
+        line_candidate = candidate.location.start_line or 1
+        anchor = None
+        for existing in kept:
+            if not fusion.is_same_sink(existing, candidate):
+                continue
+            if _verdicts_conflict(existing, candidate):
+                logging.warning(
+                    "Refused to merge contradicting verification verdicts or "
+                    "assessment status at "
+                    "%s:%d: %s (status=%s, verdict=%s) vs %s "
+                    "(status=%s, verdict=%s)",
+                    candidate.location.file_path, line_candidate,
+                    existing.id,
+                    _assessment_status(existing) or "none",
+                    _finding_verdict(existing) or "none",
+                    candidate.id,
+                    _assessment_status(candidate) or "none",
+                    _finding_verdict(candidate) or "none",
+                )
+                continue
+            anchor = existing
+            break
+        if anchor is None:
+            kept.append(candidate)
+            continue
+        logging.info(
+            "Merged duplicate sink report %s at %s:%d into %s at %s:%d",
+            candidate.id, candidate.location.file_path, line_candidate,
+            anchor.id, anchor.location.file_path, anchor.location.start_line,
+        )
+        _absorb_duplicate(anchor, candidate)
+
+    return kept
 
 
 class ScanOptions:
@@ -327,6 +546,7 @@ class Scanner:
             semgrep_kw["offline"] = True
         self.semgrep = SemgrepRunner(**semgrep_kw) if options.use_semgrep else None
         self._cache_dir: Optional[Path] = None
+        self._prompt_hash: Optional[str] = None
         # Set when the rule tier fails, so a hung or missing engine is
         # reported as a degraded scan rather than as a clean one.
         self._rule_error: str = ""
@@ -743,7 +963,7 @@ class Scanner:
                     tick(relative, outcome="read_error", count=0, elapsed_file=round(time.perf_counter() - t_file, 2))
                     return
 
-                cached = self._cache_get(content)
+                cached = self._cache_get(content, relative)
                 if cached is not None:
                     self._cache_hits += 1
                     vulns = self.analyzer._process_ai_response(cached, relative)
@@ -756,14 +976,14 @@ class Scanner:
                 parsed = self.analyzer.code_parser.parse(content, relative)
                 prompt = self.analyzer._generate_security_prompt(parsed, relative)
                 try:
-                    raw = await self.analyzer._get_analysis_with_retry(prompt)
+                    raw = await self.analyzer._get_analysis_with_retry(prompt, cwe_scope=self.cwe_scope)
                 except Exception as e:
                     logging.error(f"LLM tier failed for {relative}: {e}")
                     status[relative] = f"failed: {e}"
                     tick(relative, outcome=f"API_FAILED ({e})", count=0, elapsed_file=round(time.perf_counter() - t_file, 2))
                     return
 
-                self._cache_put(content, raw)
+                self._cache_put(content, raw, relative)
                 vulns = self.analyzer._process_ai_response(raw, relative)
                 results[relative] = vulns
                 status[relative] = "ok"
@@ -773,6 +993,7 @@ class Scanner:
                 tokens_meta = trace_meta.get("usage") or {}
                 thinking_text = trace_meta.get("thinking") or ""
                 raw_text = trace_meta.get("raw_content") or ""
+                served_by = (raw.get("_served_by") if isinstance(raw, dict) else None) or {}
 
                 trace_item = {
                     "id": f"trace_scan_{relative.replace('/', '_').replace('\\', '_')}",
@@ -780,7 +1001,15 @@ class Scanner:
                     "type": "llm_scan",
                     "phase": "llm",
                     "target": relative,
-                    "model": self.options.model or getattr(self.analyzer.ai_client, "openai_default_model", "default"),
+                    "model": served_by.get("model")
+                    or self.options.model
+                    or getattr(self.analyzer.ai_client, "openai_default_model", "default"),
+                    "provider": served_by.get("provider"),
+                    "served_by_fallback": bool(
+                        served_by.get("provider")
+                        and str(served_by.get("provider")).strip().lower()
+                        != os.getenv("AI_PROVIDER", "openai").strip().lower()
+                    ),
                     "status": "SUCCESS",
                     "elapsed_seconds": elapsed_req,
                     "tokens": {
@@ -843,7 +1072,13 @@ class Scanner:
 
         semaphore = asyncio.Semaphore(self.options.concurrency)
         counters = {"confirmed": 0, "refuted": 0, "uncertain": 0, "tool_calls": 0}
-        refuted_ids: set = set()
+        # The findings the verifier refuted, tracked by object identity. A
+        # fingerprint (vuln.id) is not identity: it hashes file, type and the
+        # reported line, so two findings on one line with different traces - a
+        # proven flow and a mitigated one - share an id. Collecting ids made the
+        # filter below delete the CONFIRMED finding because a different object
+        # that happened to collide with it was refuted.
+        refuted_objects: List[Vulnerability] = []
         done = {"n": 0}
         total = len(candidates)
         self._emit("verify", f"Verifying {total} candidate finding(s)", 75, total=total, current=0)
@@ -854,7 +1089,21 @@ class Scanner:
                 done["n"] += 1
 
                 if verdict.confirmed:
-                    vuln.taint_path = verdict.taint_path
+                    # Only replace a known dataflow when the verifier actually
+                    # traced one; an empty verdict path must not erase the
+                    # slice the AST tier already produced. A traced verdict path
+                    # must not erase it either: the two traces are two pieces of
+                    # evidence about one sink, and the AST flow the static tier
+                    # proved does not stop being true because the verifier
+                    # followed the data from a different origin. The verdict's
+                    # flow stays primary (it is the conclusion just reached),
+                    # every other flow is kept as an alternate.
+                    if verdict.taint_path:
+                        vuln.taint_path, vuln.alternate_taint_paths = fusion.merge_taint_paths(
+                            verdict.taint_path,
+                            [vuln.taint_path] if vuln.taint_path else [],
+                            vuln.alternate_taint_paths or [],
+                        )
                     vuln.assessment_status = "supported"
                     vuln.confidence = 0.98
                     vuln.corroborated = True
@@ -884,7 +1133,7 @@ class Scanner:
                         vuln.assessment_status = "uncertain"
                     else:
                         vuln.assessment_status = "refuted"
-                        refuted_ids.add(vuln.id)
+                        refuted_objects.append(vuln)
                 else:
                     vuln.assessment_status = "uncertain"
 
@@ -932,8 +1181,13 @@ class Scanner:
         for report in reports:
             refuted_in_report = []
             for v in report.vulnerabilities:
-                if v.id in refuted_ids or getattr(v, "assessment_status", None) == "refuted":
-                    # Final safety check: protect AST-corroborated findings without mitigating control
+                if any(v is r for r in refuted_objects) or getattr(v, "assessment_status", None) == "refuted":
+                    # Final safety barrier, reached only for findings already
+                    # marked refuted (in the loop above or by an earlier pass).
+                    # It mirrors the in-loop rule so a refuted finding that is
+                    # AST-corroborated and lacks a real mitigating control is
+                    # still preserved instead of being moved to the refuted
+                    # bucket. Keep both checks in sync when editing either.
                     has_ast = getattr(v, "corroborated", False) or bool(getattr(v, "taint_path", None))
                     v_dict = getattr(v, "verification", None) or {}
                     ctrl = v_dict.get("mitigating_control", "").strip() if isinstance(v_dict, dict) else ""
@@ -949,49 +1203,95 @@ class Scanner:
                     refuted_in_report.append(v)
 
             if refuted_in_report:
-                refuted_in_report_ids = {v.id for v in refuted_in_report}
-                existing_refuted_ids = {v.id for v in report.refuted_vulnerabilities}
+                existing_refuted = report.refuted_vulnerabilities
                 for v in refuted_in_report:
-                    if v.id not in existing_refuted_ids:
-                        report.refuted_vulnerabilities.append(v)
-                        existing_refuted_ids.add(v.id)
-                report.vulnerabilities = [
-                    v for v in report.vulnerabilities if v.id not in refuted_in_report_ids
-                ]
-                dropped += len(refuted_in_report)
-                if hasattr(self.analyzer, "_chain_vulnerabilities"):
-                    report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
-                        report.vulnerabilities
+                    if any(v is r for r in existing_refuted):
+                        continue
+                    # The removal below stays keyed on object identity: a
+                    # refuted finding must take only itself out of the report.
+                    # The refuted list is a second question - how many distinct
+                    # refuted defects the report holds - and it is answered by
+                    # identity of the sink, plus the agreement of both
+                    # conclusions. Two findings refuted at one sink are one
+                    # refuted defect; keeping both counted one defect twice in
+                    # calculate_summary and inflated the refuted tally.
+                    verdict_v = (
+                        v.verification.get("verdict")
+                        if isinstance(v.verification, dict) else None
                     )
+                    duplicate = next(
+                        (
+                            r for r in existing_refuted
+                            if fusion.is_same_sink(r, v)
+                            and (
+                                r.verification.get("verdict")
+                                if isinstance(r.verification, dict) else None
+                            ) == verdict_v
+                        ),
+                        None,
+                    )
+                    if duplicate is not None:
+                        # The duplicate's evidence is folded into the survivor
+                        # before it is dropped, so nothing it proved is lost.
+                        _absorb_duplicate(duplicate, v)
+                        continue
+                    existing_refuted.append(v)
+                # Removal is by identity for the same reason the refuted set is:
+                # a refuted finding must take only itself out of the report, not
+                # every finding that happens to share its fingerprint. The count
+                # is taken from what was actually removed rather than from the
+                # length of the refuted list, because the two now differ by the
+                # deduplicated entries: verify_dropped reports findings lost to
+                # the report, not distinct refuted defects.
+                before_removal = len(report.vulnerabilities)
+                report.vulnerabilities = [
+                    v for v in report.vulnerabilities
+                    if not any(v is r for r in refuted_in_report)
+                ]
+                dropped += before_removal - len(report.vulnerabilities)
 
-                # Post-verification sink-level deduplication clustering:
-                # If multiple surviving findings in the same file share the same CWE category within 12 lines,
-                # keep the most authoritative finding (confirmed by both tiers or higher confidence)
-                # to prevent duplicate sink penalties.
-                if len(report.vulnerabilities) > 1:
-                    deduped_vulns: List[Vulnerability] = []
-                    for v in sorted(
-                        report.vulnerabilities,
-                        key=lambda x: (
-                            0 if getattr(x, "corroborated", False) else 1,
-                            0 if getattr(x, "source", None) == FindingSource.CONFIRMED else 1,
-                            -getattr(x, "confidence", 0.5),
-                            fusion.SEVERITY_RANK.get(x.severity, 2),
-                        )
-                    ):
-                        l_v = v.location.start_line or 1
-                        is_dup = False
-                        for ex in deduped_vulns:
-                            l_ex = ex.location.start_line or 1
-                            if fusion._same_file(ex, v) and fusion._types_agree(ex, v) and abs(l_v - l_ex) <= 12:
-                                is_dup = True
-                                break
-                        if not is_dup:
-                            deduped_vulns.append(v)
-                    report.vulnerabilities = deduped_vulns
+            # Post-verification sink-level deduplication clustering, for EVERY
+            # report - not only for the ones that lost a finding to refutation.
+            # A report with nothing refuted still routinely holds the same sink
+            # twice, so gating the merge on refutation left duplicate sinks in
+            # place and scored one sink as a true positive plus a false
+            # positive.
+            #
+            # If multiple surviving findings in the same file are proven to be
+            # the same sink (identical traced sink point and flow, or identical
+            # start line when no flow pins the sink down), keep the most
+            # authoritative finding (confirmed by both tiers or higher
+            # confidence) to prevent duplicate sink penalties. Proximity alone
+            # never merges two findings.
+            #
+            # The verifier's own outcomes ("supported" / "uncertain") are not a
+            # reason to skip the comparison: a sink reported twice and upheld
+            # twice still scores as one true positive plus one false positive,
+            # which corrupts precision for a defect that is not in the code.
+            # Verified findings therefore take part in the cluster and, because
+            # merge_duplicate_sinks ranks "supported" first, they win it - the
+            # duplicate is folded into them, never the other way round.
+            before_merge = len(report.vulnerabilities)
+            if before_merge > 1:
+                report.vulnerabilities = merge_duplicate_sinks(report.vulnerabilities)
+            membership_changed = bool(refuted_in_report) or len(report.vulnerabilities) != before_merge
 
-                report.calculate_summary()
-                report.calculate_risk_score()
+            # Chains are a derived structure that names finding ids, so they
+            # are rebuilt whenever the finding list changed: a chain still
+            # pointing at a refuted or folded finding describes a report that
+            # no longer exists. Rebuilding is skipped when nothing changed,
+            # where the chains proposed during analysis already describe this
+            # exact list.
+            if membership_changed and hasattr(self.analyzer, "_chain_vulnerabilities"):
+                report.chained_vulnerabilities = self.analyzer._chain_vulnerabilities(
+                    report.vulnerabilities
+                )
+
+            # Summary and risk score are pure functions of the final lists, so
+            # they are recomputed unconditionally after this pass. Leaving them
+            # stale is what let a deduplicated report still claim two findings.
+            report.calculate_summary()
+            report.calculate_risk_score()
 
         logging.info(
             "Verification: %d candidate(s) -> %d confirmed, %d refuted, %d uncertain",
@@ -1129,10 +1429,14 @@ class Scanner:
             rule_findings = rule_by_file.get(relative, [])
             llm_findings = llm_by_file.get(relative, [])
 
-            if self.cwe_scope == "core10":
-                from eval.cwe_scope import in_scope
-                rule_findings = [v for v in rule_findings if in_scope(v.cwe_id)]
-                llm_findings = [v for v in llm_findings if in_scope(v.cwe_id)]
+            if self.cwe_scope != "full":
+                from models.cwe_scope import eligible
+                rule_findings = [
+                    v for v in rule_findings if eligible(v.cwe_id, scope=self.cwe_scope, exact_cwe=False)
+                ]
+                llm_findings = [
+                    v for v in llm_findings if eligible(v.cwe_id, scope=self.cwe_scope, exact_cwe=False)
+                ]
 
             # Semgrep status for this specific file
             semgrep_reason = ""
@@ -1278,17 +1582,66 @@ class Scanner:
 
     # ---- content-hash cache -------------------------------------------------
 
-    def _cache_key(self, content: str) -> str:
+    def _cache_key(
+        self,
+        content: str,
+        file_path: Optional[str] = None,
+        served_by: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
-        Derive the cache key for a file's LLM analysis.
-        Includes pipeline version, provider, model, endpoint, prompt version, and content hash.
+        Identify the effective LLM configuration, prompt, file and content.
+
+        A response produced by the fallback backend is not the configured
+        model's output, so it must not share a key with one. When the caller
+        knows a response was served by a different backend (the `_served_by`
+        stamp added in AIClient.analyze_security), that divergence is folded
+        into the key; keys for primary-backend responses stay byte-identical
+        to earlier releases, so upgrading does not invalidate the cache.
+
+        Args:
+            content: File contents
+            file_path: File the analysis belongs to
+            served_by: Optional provenance of a specific response
+
+        Returns:
+            str: Hex cache key
         """
-        model = os.getenv("OPENAI_MODEL", "default")
+
+        client = self.analyzer.ai_client
+        model = (getattr(self.options, "model", None)
+                 or getattr(client, "openai_default_model", None)
+                 or os.getenv("OPENAI_MODEL", "default"))
+        endpoint = (getattr(self.options, "base_url", None)
+                    or os.getenv("OPENAI_BASE_URL")
+                    or os.getenv("AI_ENDPOINT", "default_endpoint"))
         provider = os.getenv("AI_PROVIDER", "openai")
-        endpoint = os.getenv("OPENAI_BASE_URL", os.getenv("AI_ENDPOINT", "default_endpoint"))
-        prompt_version = "prompt_v2_structured"
-        slicer_flag = getattr(self.options, "use_ast_slicer", True)
-        payload = f"{CACHE_VERSION}|{provider}|{model}|{endpoint}|{prompt_version}|slicer={slicer_flag}|{content}"
+        if self._prompt_hash is None:
+            prompt = client._get_system_prompt(cwe_scope=self.cwe_scope)
+            self._prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
+        relative = ""
+        if file_path:
+            root = Path(self.options.target).resolve()
+            if not root.is_dir():
+                root = root.parent
+            path = Path(file_path)
+            if path.is_absolute():
+                relative = self._relativise(str(path), root)
+            else:
+                relative = path.as_posix()
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        payload_fields: List[Any] = [
+            CACHE_VERSION, provider, model, endpoint, self.cwe_scope,
+            relative, self._prompt_hash, getattr(self.options, "use_ast_slicer", True), content_hash,
+        ]
+        served_provider = str((served_by or {}).get("provider") or "").strip().lower()
+        served_model = str((served_by or {}).get("model") or "").strip()
+        if served_provider or served_model:
+            diverges = served_provider != str(provider).strip().lower() or (
+                served_model and served_model != str(model).strip()
+            )
+            if diverges:
+                payload_fields.append(f"served_by={served_provider}:{served_model}")
+        payload = json.dumps(payload_fields, ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _resolve_cache_dir(self) -> Optional[Path]:
@@ -1311,7 +1664,7 @@ class Scanner:
                 return None
         return self._cache_dir
 
-    def _cache_get(self, content: str) -> Optional[Dict[str, Any]]:
+    def _cache_get(self, content: str, file_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Look up a previously stored LLM analysis.
 
@@ -1326,18 +1679,39 @@ class Scanner:
         if cache_dir is None:
             return None
 
-        path = cache_dir / f"{self._cache_key(content)}.json"
+        path = cache_dir / f"{self._cache_key(content, file_path)}.json"
         if not path.is_file():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            entry = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
 
-    def _cache_put(self, content: str, analysis: Dict[str, Any]) -> None:
+        # Defence in depth: an entry written by a fallback backend must never
+        # be served as the configured model's analysis, even if the key logic
+        # above is ever changed in a way that lets the two collide.
+        served = entry.get("_served_by") if isinstance(entry, dict) else None
+        if isinstance(served, dict):
+            served_provider = str(served.get("provider") or "").strip().lower()
+            configured = os.getenv("AI_PROVIDER", "openai").strip().lower()
+            if served_provider and served_provider != configured:
+                logging.info(
+                    "Cache entry %s was served by %s, not the configured %s; treating as a miss",
+                    path.name, served_provider, configured,
+                )
+                return None
+        return entry
+
+    def _cache_put(self, content: str, analysis: Dict[str, Any], file_path: Optional[str] = None) -> None:
         """
         Store an LLM analysis for reuse using atomic write.
         Never caches failed, truncated, or invalid analysis.
+
+        A response served by the fallback backend is stored under the key that
+        encodes its provenance, not the configured model's key. It is therefore
+        kept for audit but never handed back as the configured model's answer:
+        the next run retries the primary backend, which is the correct
+        behaviour when the primary is the thing under measurement.
 
         Args:
             content: File contents
@@ -1351,7 +1725,7 @@ class Scanner:
         if cache_dir is None:
             return
 
-        path = cache_dir / f"{self._cache_key(content)}.json"
+        path = cache_dir / f"{self._cache_key(content, file_path, served_by=analysis.get('_served_by'))}.json"
         tmp_path = path.with_suffix(f".tmp_{os.getpid()}_{uuid.uuid4().hex[:8]}")
         try:
             tmp_path.write_text(json.dumps(analysis, ensure_ascii=False), encoding="utf-8")

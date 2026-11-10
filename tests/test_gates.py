@@ -384,7 +384,9 @@ async def test_e2e_verifier_rejects_file_modified_after_read(tmp_path: Path):
         "evidence_line": 1
     }))
 
-    async def mock_complete(messages, with_tools=True):
+    # The loop now passes its AgentRun to _complete; accept it so this test
+    # exercises stale-evidence detection instead of failing at the mock boundary.
+    async def mock_complete(messages, with_tools=True, run=None):
         if with_tools:
             return msg1
         else:
@@ -729,7 +731,8 @@ def test_scanner_cache_atomic_and_skip_error(tmp_path: Path):
     """
     from analyzer.scanner import Scanner, ScanOptions
 
-    opts = ScanOptions(target=str(tmp_path), use_llm=True, cache_dir=str(tmp_path / "cache"))
+    # Caching is opt-in; an explicit cache_dir alone does not enable it.
+    opts = ScanOptions(target=str(tmp_path), use_llm=True, use_cache=True, cache_dir=str(tmp_path / "cache"))
     scanner = Scanner(options=opts)
 
     # 1. Cache key check
@@ -1882,22 +1885,30 @@ def test_r12_cache_key_identity_and_concurrency(tmp_path: Path, monkeypatch):
     """
     from analyzer.scanner import ScanOptions, Scanner
 
-    options = ScanOptions(target=str(tmp_path), cache_dir=str(tmp_path / "cache"))
+    # Model selection is captured in ScanOptions; changing OPENAI_MODEL later
+    # must not invalidate a cache entry for this already-configured scanner.
+    options = ScanOptions(target=str(tmp_path), use_cache=True,
+                          cache_dir=str(tmp_path / "cache"), model="gpt-4o")
     scanner = Scanner(options)
 
     content = "print('hello')\n"
     monkeypatch.setenv("AI_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     k1 = scanner._cache_key(content)
 
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
     k2 = scanner._cache_key(content)
-    assert k1 != k2
+    assert k1 == k2
 
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://custom.endpoint/v1")
+    # Changing the effective model (rather than an unused environment value)
+    # and the effective endpoint must each isolate cached analyses.
+    options.model = "gpt-4o-mini"
     k3 = scanner._cache_key(content)
     assert k2 != k3
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://custom.endpoint/v1")
+    k4 = scanner._cache_key(content)
+    assert k3 != k4
 
     analysis = {"vulnerabilities": []}
     scanner._cache_put(content, analysis)
@@ -3666,30 +3677,36 @@ async def test_tier3_scanner_verification_confirmed_and_refuted_protection(tmp_p
     opts = ScanOptions(target=str(tmp_path), use_llm=False, use_semgrep=False, verify=True, verify_all=True)
     scanner = Scanner(options=opts)
 
+    # Each surviving finding sits at its own sink, i.e. more than
+    # scanner.fusion.LINE_WINDOW lines apart. Neighbouring line numbers would
+    # make them one sink reported three times, which the post-verification
+    # merge collapses into a single finding - that behaviour is covered by
+    # tests/test_sink_merge_and_cache_provenance.py, not here.
+    #
     # 1. Confirmed finding
     vuln_confirmed = make_vuln(file_path="app.py", start_line=1)
     vuln_confirmed.confidence = 0.5
     vuln_confirmed.source = FindingSource.LLM
 
     # 2. Refuted finding (normal LLM finding without AST corroboration)
-    vuln_refuted = make_vuln(file_path="app.py", start_line=2)
+    vuln_refuted = make_vuln(file_path="app.py", start_line=40)
     vuln_refuted.confidence = 0.6
     vuln_refuted.source = FindingSource.LLM
 
     # 3. AST-corroborated finding with NO mitigating control (should be protected)
-    vuln_ast_protected = make_vuln(file_path="app.py", start_line=3)
+    vuln_ast_protected = make_vuln(file_path="app.py", start_line=80)
     vuln_ast_protected.confidence = 0.7
     vuln_ast_protected.corroborated = True
     vuln_ast_protected.source = FindingSource.CONFIRMED
 
     # 4. AST finding with valid taint_path and NO mitigating control (should be protected)
-    vuln_taint_protected = make_vuln(file_path="app.py", start_line=4)
+    vuln_taint_protected = make_vuln(file_path="app.py", start_line=120)
     vuln_taint_protected.confidence = 0.7
-    vuln_taint_protected.taint_path = [{"step": "source", "file": "app.py", "line": 4, "kind": "source"}]
+    vuln_taint_protected.taint_path = [{"step": "source", "file": "app.py", "line": 120, "kind": "source"}]
     vuln_taint_protected.source = FindingSource.LLM
 
     # 5. AST finding WITH valid mitigating control (should be refuted normally)
-    vuln_ast_refuted = make_vuln(file_path="app.py", start_line=5)
+    vuln_ast_refuted = make_vuln(file_path="app.py", start_line=160)
     vuln_ast_refuted.confidence = 0.7
     vuln_ast_refuted.corroborated = True
     vuln_ast_refuted.source = FindingSource.CONFIRMED

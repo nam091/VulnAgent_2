@@ -9,6 +9,7 @@ can be refreshed, closed or reopened without losing one.
 """
 
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 import json
 import logging
@@ -16,7 +17,7 @@ import os
 import re
 import shutil
 import tempfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -33,7 +34,7 @@ from pydantic import BaseModel, Field
 
 from analyzer.fixer import classify_patch, unified_diff
 from analyzer.scanner import ScanOptions, Scanner, normalize_model_identifier
-from evidence.safe_reader import enrich_taint_path, read_code_snippet
+from evidence.safe_reader import enrich_taint_path
 from jobs import Job, JobStore, run_job
 from models.vulnerability import (
     FindingSource,
@@ -148,60 +149,68 @@ class RenameJobRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=200, description="New job label")
 
 
-def _resolve_file_on_disk(file_str: str, workspace: Optional[Path] = None) -> Optional[Path]:
-    """Find a source file on disk across workspace, repository, and standard benchmark datasets."""
-    if not file_str:
+def _file_workspace(job_id: Optional[str]) -> Optional[Path]:
+    """Use only the workspace attached to an existing job, when a job was supplied."""
+    if job_id is None:
         return None
-    p = Path(file_str)
-    if workspace:
-        w_cand = Path(workspace) / file_str
-        if w_cand.is_file():
-            return w_cand
-        w_name = Path(workspace) / p.name
-        if w_name.is_file():
-            return w_name
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No such job")
+    if not job.workspace:
+        raise HTTPException(status_code=400, detail="Job has no workspace")
+    return Path(job.workspace)
 
-    if p.is_file():
-        return p
-    if (PROJECT_ROOT / file_str).is_file():
-        return PROJECT_ROOT / file_str
 
-    datasets_dir = PROJECT_ROOT / "eval" / "datasets"
-    if datasets_dir.is_dir():
-        for d in datasets_dir.iterdir():
-            cand = d / "samples" / p.name
-            if cand.is_file():
-                return cand
+def _resolve_file_on_disk(file_str: str, workspace: Optional[Path] = None) -> Optional[Path]:
+    """Resolve a requested file only beneath its job root or explicit project roots."""
+    if not file_str or not file_str.strip():
+        return None
+    raw = file_str.strip()
+    p = Path(raw)
+    windows_path = PureWindowsPath(raw)
+    if workspace is not None:
+        roots = [(Path(workspace), p)]
+    else:
+        if p.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+            raise HTTPException(status_code=403, detail="Absolute file paths require a job workspace")
+        # Dataset paths must name their dataset; do not guess by basename.
+        normalized = raw.replace("\\", "/")
+        if normalized.startswith("eval/datasets/"):
+            roots = [(PROJECT_ROOT / "eval" / "datasets", Path(normalized[len("eval/datasets/"):]))]
+        elif normalized.startswith("source_test/"):
+            roots = [(PROJECT_ROOT / "source_test", Path(normalized[len("source_test/"):]))]
+        else:
+            roots = [(PROJECT_ROOT / "eval" / "datasets", Path(normalized))]
 
-    source_test_dir = PROJECT_ROOT / "source_test"
-    if source_test_dir.is_dir():
-        cand = source_test_dir / file_str
-        if cand.is_file():
-            return cand
-
+    for root, relative in roots:
+        boundary = root.resolve()
+        real_boundary = Path(os.path.realpath(root))
+        candidate = (root / relative).resolve()
+        real_candidate = Path(os.path.realpath(root / relative))
+        if not candidate.is_relative_to(boundary) or not real_candidate.is_relative_to(real_boundary):
+            raise HTTPException(status_code=403, detail="File path escapes allowed root")
+        if candidate.is_file():
+            return candidate
     return None
 
 
 def _read_code_snippet(file_str: str, line: int, workspace: Optional[Path] = None, context_lines: int = 2) -> Optional[str]:
-    """Extract code lines around target line with line numbering and current line marker."""
-    snippet = read_code_snippet(file_str, line, root_dir=workspace, context_lines=context_lines)
-    if snippet:
-        return snippet
+    """Extract code only after validating the requested file's root containment."""
     p = _resolve_file_on_disk(file_str, workspace=workspace)
-    if not p:
+    if p is None or line < 1:
         return None
+    context_lines = max(0, min(int(context_lines), 50))
     try:
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-        if not lines:
+        if line > len(lines):
             return None
         start = max(1, line - context_lines)
         end = min(len(lines), line + context_lines)
-        snippet_lines = []
-        for i in range(start, end + 1):
-            marker = ">" if i == line else " "
-            snippet_lines.append(f"{marker} {i:>4} | {lines[i-1]}")
-        return "\n".join(snippet_lines)
-    except Exception:
+        return "\n".join(
+            f"{'>' if i == line else ' '} {i:>4} | {lines[i - 1]}"
+            for i in range(start, end + 1)
+        )
+    except OSError:
         return None
 
 
@@ -1206,20 +1215,14 @@ async def get_job_debug(job_id: str) -> Dict[str, Any]:
 
 
 _BENCHMARK_EVAL_CACHE: Dict[str, Dict[str, Any]] = {}
+_SCORER_VERSION = 2
 
 
-def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
+def evaluate_job_benchmark_data(job: Any, exact_cwe: bool = False) -> Dict[str, Any]:
     """
     Automatically evaluate a job against benchmark ground truth.
     Strictly supports ONLY benchmark100 and benchmark1000 datasets.
     """
-    job_id = getattr(job, "id", "")
-    job_result = getattr(job, "result", None) or {}
-    findings_count = len(job_result.get("findings", []))
-    cache_key = f"{job_id}_{findings_count}_core10_v1"
-    if cache_key in _BENCHMARK_EVAL_CACHE:
-        return _BENCHMARK_EVAL_CACHE[cache_key]
-
     try:
         import math
         from eval.evaluate_scan import (
@@ -1238,28 +1241,23 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
         return {"supported": False, "reason": f"Evaluation engine unavailable: {e}"}
 
     job_options = getattr(job, "options", {}) or {}
-    job_label = getattr(job, "label", "") or ""
-    job_workspace = getattr(job, "workspace", "") or ""
     job_result = getattr(job, "result", None) or {}
+    source = str(job_options.get("source_name") or "").lower()
+    target = str(job_options.get("target") or "").replace("\\", "/").lower()
+    scope = str(job_options.get("cwe_scope") or "core10").strip().lower()
 
-    target = str(job_options.get("target", "")).lower()
-    label = str(job_label).lower()
-    workspace = str(job_workspace).lower()
-
-    files = job_result.get("files", [])
-    file_names = [f.get("file", "") if isinstance(f, dict) else str(f) for f in files]
-    has_benchmark_files = any("benchmarktest" in fn.lower() for fn in file_names)
-
+    # Prefer the explicit source; infer only from an unambiguous target path.
     dataset_key = None
-    # Strictly identify benchmark100 and benchmark1000 ONLY (check 1000 before 100 to avoid substring collision)
-    if "benchmark1000" in target or "benchmark1000" in label or "benchmark1230" in label or "1230" in label or "1,230" in label or "benchmark1000" in workspace:
+    if source in ("benchmark1000", "benchmark1230", "benchmark", "1230"):
         dataset_key = "benchmark1000"
-    elif "benchmark100" in target or "benchmark100" in label or "benchmark100" in workspace:
+    elif source == "benchmark100":
         dataset_key = "benchmark100"
-    elif has_benchmark_files:
-        dataset_key = "benchmark1000" if len(files) > 150 else "benchmark100"
-    elif "100 files" in label or "100 selected" in label:
-        dataset_key = "benchmark100"
+    elif not source:
+        parts = set(target.split("/"))
+        if parts & {"benchmark1000", "benchmark1230", "benchmark"}:
+            dataset_key = "benchmark1000"
+        elif "benchmark100" in parts:
+            dataset_key = "benchmark100"
 
     if not dataset_key:
         return {
@@ -1277,13 +1275,36 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
 
         dataset_name = "benchmark100" if dataset_key == "benchmark100" else "benchmark"
         dataset_dir = resolve_dataset_dir(dataset_name)
-        labels_all, dataset_meta = load_dataset(dataset_dir)
+        labels_file = dataset_dir / "labels.json"
+        # Read the labels on every lookup: a changed dataset must never reuse
+        # scores computed from earlier ground truth.
+        try:
+            labels_hash = hashlib.sha256(labels_file.read_bytes()).hexdigest()[:16]
+        except OSError:
+            labels_hash = None
         findings_raw = extract_findings_from_payload(job_result)
+        cache_key = None
+        if labels_hash:
+            try:
+                findings_hash = hashlib.sha256(
+                    json.dumps(findings_raw, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                ).hexdigest()[:16]
+                cache_key = json.dumps(
+                    [getattr(job, "id", ""), findings_hash, dataset_key, labels_hash,
+                     scope, exact_cwe, _SCORER_VERSION]
+                )
+            except (TypeError, ValueError):
+                pass  # Non-JSON findings cannot be keyed reliably.
+        if cache_key is not None and cache_key in _BENCHMARK_EVAL_CACHE:
+            return _BENCHMARK_EVAL_CACHE[cache_key]
 
-        # Scoring is restricted to the declared 10-CWE scope. This is a
-        # scoring-time filter: stored findings are untouched, so historical
-        # jobs are re-scored without re-running any scan.
-        labels = filter_labels(labels_all)
+        if labels_hash is None:
+            return {"supported": False, "reason": f"Dataset labels unavailable: {labels_file}"}
+        labels_all, dataset_meta = load_dataset(dataset_dir)
+
+        # Filter only for core10; full scope scores every dataset label.
+        # Stored findings are never modified.
+        labels = labels_all if scope == "full" else filter_labels(labels_all)
         coverage = scope_coverage(labels)
         label_files = {l.file for l in labels}
         detections = []
@@ -1291,11 +1312,12 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             det = finding_to_detection(f, dataset_dir, label_files=label_files)
             if det:
                 detections.append(det)
-        detections = filter_detections(detections)
+        if scope != "full":
+            detections = filter_detections(detections, exact_cwe=exact_cwe)
 
         match_mode = dataset_meta.get("match_mode", "line")
         partial_labels = dataset_meta.get("partial_labels", False)
-        clean_files = filter_clean_files(dataset_meta)
+        clean_files = dataset_meta.get("clean_files", []) if scope == "full" else filter_clean_files(dataset_meta)
 
         metrics = match(
             detections=detections,
@@ -1303,7 +1325,7 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             name=getattr(job, "id", "scan"),
             match_mode=match_mode,
             partial_labels=partial_labels,
-            exact_cwe=False,
+            exact_cwe=exact_cwe,
             clean_files=clean_files,
             raw_findings=findings_raw,
         )
@@ -1311,7 +1333,7 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             detections=detections,
             labels=labels,
             match_mode=match_mode,
-            exact_cwe=False,
+            exact_cwe=exact_cwe,
             tolerance=LINE_TOLERANCE,
         )
         claimed_label_indices = {l_idx for _, l_idx in matched_pairs}
@@ -1344,7 +1366,8 @@ def evaluate_job_benchmark_data(job: Any) -> Dict[str, Any]:
             "missed": (metrics.missed or [])[:50],
             "spurious": (metrics.spurious or [])[:50],
         }
-        _BENCHMARK_EVAL_CACHE[cache_key] = res
+        if cache_key is not None:
+            _BENCHMARK_EVAL_CACHE[cache_key] = res
         return res
     except Exception as e:
         return {"supported": False, "reason": f"Benchmark evaluation failed: {e}"}
@@ -1585,14 +1608,10 @@ async def get_file_context(
     """
     Fetch exact code lines around a target line for dataflow step inspection.
     """
-    ws = None
-    if job_id:
-        job = store.get(job_id)
-        if job and job.workspace:
-            ws = Path(job.workspace)
+    ws = _file_workspace(job_id)
     code = _read_code_snippet(file, line, workspace=ws, context_lines=context_lines)
     if not code:
-        return {"status": "error", "message": f"Could not locate {file} or line {line}", "code": ""}
+        raise HTTPException(status_code=404, detail=f"Could not locate {file} or line {line}")
     return {
         "status": "ok",
         "file": file,

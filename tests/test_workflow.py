@@ -459,7 +459,11 @@ class TestStreamParameterCompat:
         kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert "stream" in kwargs
         assert kwargs["stream"] is False
-        assert res == {"vulnerabilities": []}
+        # OpenAI-compatible responses now carry diagnostic metadata alongside findings.
+        assert set(res) == {"vulnerabilities", "_trace"}
+        assert res["vulnerabilities"] == []
+        assert res["_trace"]["raw_content"] == '{"vulnerabilities": []}'
+        assert set(res["_trace"]["usage"]) == {"prompt_tokens", "completion_tokens", "thinking_tokens", "total_tokens"}
 
     @pytest.mark.asyncio
     async def test_ai_client_analyze_with_openai_retry_preserves_stream_false(self):
@@ -489,7 +493,11 @@ class TestStreamParameterCompat:
         assert mock_client.chat.completions.create.call_count == 2
         for call in mock_client.chat.completions.create.call_args_list:
             assert call.kwargs.get("stream") is False
-        assert res == {"vulnerabilities": []}
+        # Retry also retains the successful response's diagnostic trace.
+        assert set(res) == {"vulnerabilities", "_trace"}
+        assert res["vulnerabilities"] == []
+        assert res["_trace"]["raw_content"] == '{"vulnerabilities": []}'
+        assert set(res["_trace"]["usage"]) == {"prompt_tokens", "completion_tokens", "thinking_tokens", "total_tokens"}
 
     @pytest.mark.asyncio
     async def test_tool_calling_agent_complete_passes_stream_false(self):

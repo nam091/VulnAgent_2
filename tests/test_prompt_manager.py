@@ -639,7 +639,12 @@ class TestPromptManager(unittest.TestCase):
         self.assertIn("hằng số cố định", general_prompt)
         self.assertIn('{"vulnerabilities": []}', general_prompt)
         self.assertIn("phỏng đoán suy diễn", general_prompt)
-        self.assertIn("11 nhóm CWE của benchmark", general_prompt)
+        # The general prompt's default core10 scope lists the ten scored groups;
+        # the sliced prompt above retains its separate eleven-group guidance.
+        self.assertIn("10 nhóm CWE trong phạm vi thực nghiệm", general_prompt)
+        for cwe in ["CWE-22", "CWE-78", "CWE-79", "CWE-89", "CWE-94",
+                    "CWE-328", "CWE-330", "CWE-502", "CWE-611", "CWE-643"]:
+            self.assertIn(cwe, general_prompt, f"Missing core10 CWE {cwe} in general prompt")
 
 
 

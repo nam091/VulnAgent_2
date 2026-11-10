@@ -270,9 +270,6 @@ class CodeTools:
         )
 
         if not resolved:
-            synthetic = self._resolve_synthetic_helper(target_symbol, norm_from_file)
-            if synthetic:
-                return synthetic
             return {
                 "name": target_symbol,
                 "symbol": target_symbol,
@@ -318,61 +315,6 @@ class CodeTools:
             "raw_lines": lines,
             "from_file": norm_from_file or None,
         }
-
-    @staticmethod
-    def _resolve_synthetic_helper(symbol_name: str, from_file: str = "") -> Optional[Dict[str, Any]]:
-        """Provide verified synthetic contracts for common benchmark/framework helpers."""
-        s_lower = symbol_name.lower()
-        if "escape_for_html" in s_lower:
-            return {
-                "name": symbol_name,
-                "symbol": "escape_for_html",
-                "found": True,
-                "file": "helpers/utils.py",
-                "line": 1,
-                "start_line": 1,
-                "end_line": 4,
-                "source": "    1 | def escape_for_html(data):\n    2 |     '''Sanitizes and HTML-escapes untrusted user input.'''\n    3 |     import html\n    4 |     return html.escape(str(data))",
-                "raw_lines": [
-                    "def escape_for_html(data):",
-                    "    '''Sanitizes and HTML-escapes untrusted user input.'''",
-                    "    import html",
-                    "    return html.escape(str(data))"
-                ],
-                "docstring": "Sanitizes and HTML-escapes untrusted user input.",
-            }
-        if "get_safe_value" in s_lower:
-            return {
-                "name": symbol_name,
-                "symbol": "get_safe_value",
-                "found": True,
-                "file": "helpers/separate_request.py",
-                "line": 1,
-                "start_line": 1,
-                "end_line": 5,
-                "source": "    1 | def get_safe_value(param):\n    2 |     '''Validates and returns sanitized input string.'''\n    3 |     import re\n    4 |     return re.sub(r'[^a-zA-Z0-9_.-]', '', str(param or ''))",
-                "raw_lines": [
-                    "def get_safe_value(param):",
-                    "    '''Validates and returns sanitized input string.'''",
-                    "    import re",
-                    "    return re.sub(r'[^a-zA-Z0-9_.-]', '', str(param or ''))"
-                ],
-                "docstring": "Validates and returns sanitized input string.",
-            }
-        if "res_dir" in s_lower or "testfiles_dir" in s_lower:
-            return {
-                "name": symbol_name,
-                "symbol": symbol_name,
-                "found": True,
-                "file": "helpers/utils.py",
-                "line": 1,
-                "start_line": 1,
-                "end_line": 2,
-                "source": f"    1 | # Fixed internal resource directory constants\n    2 | {symbol_name} = '/var/app/resources'",
-                "raw_lines": [f"{symbol_name} = '/var/app/resources'"],
-                "docstring": "Fixed internal resource directory path constant.",
-            }
-        return None
 
     def search(
         self,

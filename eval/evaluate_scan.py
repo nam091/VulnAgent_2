@@ -187,64 +187,32 @@ def normalize_cwe_string(raw: Any) -> str:
 
 
 def normalize_finding_file(raw_file: str, dataset_dir: Path, label_files: Optional[Set[str]] = None) -> str:
+    """Return a sample-relative file path, or '' for absent/outside files.
+
+    Relative paths are rooted at samples/ (an optional leading samples/ is
+    accepted). label_files is retained for API compatibility, never used to
+    guess a match from a filename or suffix. resolve() follows symlinks before
+    the containment check.
     """
-    Normalize finding file path to POSIX relative path matching ground-truth dataset labels.
-    """
-    if not raw_file:
+    if not raw_file or not isinstance(raw_file, str):
         return ""
 
-    raw_posix = Path(raw_file).as_posix()
-
-    # 1. Direct match with label files
-    if label_files and raw_posix in label_files:
-        return raw_posix
-
-    # 2. Stripping "samples/" prefix
-    if raw_posix.startswith("samples/"):
-        stripped = raw_posix[len("samples/"):]
-        if not label_files or stripped in label_files:
-            return stripped
-
-    # 3. Check relative to dataset_dir / "samples"
     samples_dir = (dataset_dir / "samples").resolve()
-    try:
-        p_res = Path(raw_file)
-        if not p_res.is_absolute():
-            p_res = (dataset_dir / raw_file).resolve()
-        rel_samples = p_res.relative_to(samples_dir).as_posix()
-        if not label_files or rel_samples in label_files:
-            return rel_samples
-    except Exception:
-        pass
+    path = Path(raw_file.replace("\\", "/"))
+    # Windows also has rooted-without-drive and drive-relative paths; neither
+    # names a portable absolute sample or an ordinary sample-relative file.
+    if not path.is_absolute() and path.anchor:
+        return ""
+    if not path.is_absolute():
+        parts = path.parts
+        if parts and parts[0] == "samples":
+            path = Path(*parts[1:])
+        path = samples_dir / path
 
-    # 4. Check relative to dataset_dir
-    try:
-        p_res = Path(raw_file)
-        if not p_res.is_absolute():
-            p_res = (dataset_dir / raw_file).resolve()
-        rel_dir = p_res.relative_to(dataset_dir.resolve()).as_posix()
-        if rel_dir.startswith("samples/"):
-            rel_dir = rel_dir[len("samples/"):]
-        if not label_files or rel_dir in label_files:
-            return rel_dir
-    except Exception:
-        pass
-
-    # 5. Suffix match against label files (for multi-tier repos or full paths)
-    if label_files:
-        filename = Path(raw_posix).name
-        if filename in label_files:
-            return filename
-        parts = Path(raw_posix).parts
-        for i in range(len(parts)):
-            subpath = "/".join(parts[i:])
-            if subpath in label_files:
-                return subpath
-
-    # Fallback: strip leading samples/ if present
-    if raw_posix.startswith("samples/"):
-        return raw_posix[len("samples/"):]
-    return raw_posix
+    resolved = path.resolve()
+    if not resolved.is_relative_to(samples_dir) or not resolved.is_file():
+        return ""
+    return resolved.relative_to(samples_dir).as_posix()
 
 
 def finding_to_detection(
@@ -406,9 +374,22 @@ def evaluate_single_scan(
     exact_cwe: bool = False,
     cwe_scope: str = "core10",
 ) -> Dict[str, Any]:
+    """Evaluate a scan with *unfiltered* labels and dataset metadata.
+
+    This function alone applies core10 to labels, clean controls and detections;
+    full leaves all three untouched. Rejected paths remain detections with an
+    empty, unmatchable file; rejected_paths counts them after scope selection.
     """
-    Evaluate one scan output file against benchmark ground truth.
-    """
+    if cwe_scope not in ("core10", "full"):
+        raise ValueError(f"Unknown CWE scope: {cwe_scope}")
+
+    if cwe_scope == "core10":
+        from eval.cwe_scope import filter_clean_files, filter_labels
+        labels = filter_labels(labels)
+        clean_files = filter_clean_files(dataset_meta)
+    else:
+        clean_files = dataset_meta.get("clean_files", [])
+
     scan_file = Path(scan_path).resolve()
     if not scan_file.is_file():
         raise FileNotFoundError(f"Scan file not found: {scan_file}")
@@ -427,12 +408,12 @@ def evaluate_single_scan(
 
     if cwe_scope == "core10":
         from eval.cwe_scope import filter_detections
-        detections = filter_detections(detections)
+        detections = filter_detections(detections, scope=cwe_scope, exact_cwe=exact_cwe)
 
+    rejected_paths = sum(not d.file for d in detections)
     scan_name = scan_file.stem
     match_mode = dataset_meta.get("match_mode", "line")
     partial_labels = dataset_meta.get("partial_labels", False)
-    clean_files = dataset_meta.get("clean_files", [])
 
     # Calculate confusion matrix via bipartite matching
     metrics: Metrics = match(
@@ -480,6 +461,7 @@ def evaluate_single_scan(
         "scan_file": str(scan_file),
         "findings_count": len(findings_raw),
         "detections_count": len(detections),
+        "rejected_paths": rejected_paths,
         "metrics": metrics_dict,
         "per_cwe": per_cwe,
         "missed": metrics.missed,
@@ -700,7 +682,10 @@ def evaluate_scans(
     cwe_scope: str = "core10",
 ) -> Dict[str, Any]:
     """
-    Main evaluation routine: evaluates one or more scans against ground truth dataset.
+    Evaluate scans, passing original labels and metadata to evaluate_single_scan.
+
+    Only the report denominator and coverage are derived here from scoped labels;
+    evaluate_single_scan is the sole filtering owner for scoring all three sides.
 
     Args:
         scan_paths: List of paths to scan JSON files
@@ -718,12 +703,14 @@ def evaluate_scans(
     labels_full = len(labels)
     coverage = None
 
+    if cwe_scope not in ("core10", "full"):
+        raise ValueError(f"Unknown CWE scope: {cwe_scope}")
     if cwe_scope == "core10":
-        from eval.cwe_scope import filter_clean_files, filter_labels, scope_coverage
-        labels = filter_labels(labels)
-        dataset_meta = dict(dataset_meta)
-        dataset_meta["clean_files"] = filter_clean_files(dataset_meta)
-        coverage = scope_coverage(labels)
+        from eval.cwe_scope import filter_labels, scope_coverage
+        scoped_labels = filter_labels(labels)
+        coverage = scope_coverage(scoped_labels)
+    else:
+        scoped_labels = labels
 
     results: List[Dict[str, Any]] = []
     for path in scan_paths:
@@ -738,7 +725,7 @@ def evaluate_scans(
         results.append(res)
 
     dataset_name = dataset_meta.get("name", dataset_dir.name)
-    total_labels = len(labels)
+    total_labels = len(scoped_labels)
 
     if print_output:
         summary_table = render_summary_table(
@@ -774,6 +761,7 @@ def evaluate_scans(
         output_payload["name"] = s0["name"]
         output_payload["scan_file"] = s0["scan_file"]
         output_payload["findings_count"] = s0["findings_count"]
+        output_payload["rejected_paths"] = s0["rejected_paths"]
         output_payload["metrics"] = s0["metrics"]
         output_payload["per_cwe"] = s0["per_cwe"]
         output_payload["missed"] = s0["missed"]
