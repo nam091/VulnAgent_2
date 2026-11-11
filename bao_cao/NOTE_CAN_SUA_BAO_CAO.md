@@ -29,11 +29,48 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 
 ### Ảnh hưởng tới số liệu trong báo cáo
 
-**Số liệu trong docx đứng vững.** Bằng chứng đã kiểm chứng nhiều lần:
+**Số liệu trong docx đứng vững** — nhưng phạm vi bằng chứng còn giữ được hẹp hơn con số thường được trích.
 
-- 19 job lịch sử tái chấm lại bằng code hiện tại → **0 sai khác** TP/FP/FN/P/R/F1.
-- Số trong docx (ví dụ `[P422]` Beam 1.0: 380 TP / 191 FP / Precision 66,55% / F1 0,7983) khớp **chính xác** cột `core10` của `reports/rescored_history/metrics_core10.csv`.
-- Mẫu số ground truth đúng: **48** nhãn trên owasp-mini, **381** nhãn trên owasp-full.
+**Artifact thực tế còn lưu:**
+
+`reports/rescored_history/metrics_core10.csv` có **51 dòng**: **13 `scored`**, 1 `incomplete`, 1 `empty`, 36 `unsupported`.
+`reports/rescored_history/metrics_full.csv` cùng cấu trúc.
+
+13 job được chấm (`core10`):
+`26dfdce3277c`, `5ec88c710906`, `aebeb9df7201`, `c72fca194b29`, `ff60cd823550`, `52fb84884189`, `5cf511bb72df`, `dc790eb023ce` (owasp-full) · `62dbabbb2a42`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c` (owasp-mini)
+
+**Đối chiếu docx ↔ artifact (đã kiểm):**
+
+- `[P422]` Beam 1.0 owasp-full DeepVerify: 380 TP / 191 FP / Precision 66,55% / F1 0,7983 — khớp **chính xác** dòng `52fb84884189` trong `metrics_core10.csv`.
+- Mẫu số ground truth đúng và tái lập được: **48** nhãn trên owasp-mini, **381** nhãn trên owasp-full (clean 46 và 710).
+
+**Giới hạn phải nói rõ:**
+
+- **6 trong 20 job được trích trong báo cáo không còn trong snapshot**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Các hàng tương ứng trong bảng kết quả của docx **không còn artifact để tái chấm**. Không được tuyên bố "0 sai khác trên 20 job".
+- Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot**. Những job đó được chấm lại bằng code hiện tại và khớp archive.
+
+### Mất provenance — nguyên nhân và hệ quả
+
+`src/jobs.py` đặt `DEFAULT_RETENTION = 50`: mỗi lần `JobStore.create()` gọi, job đã xong cũ nhất bị xoá. Bộ test `pytest tests/` tạo **snippet job** ngay trong `cwd/.vulnagent-jobs`, nên mỗi lần chạy suite lại prune thêm job thật. Hệ quả: **toàn bộ 20 job gốc của báo cáo đã bị xoá** trong phiên sửa này.
+
+Nguồn truy nguyên còn lại:
+
+| Nguồn | Nội dung |
+|---|---|
+| `reports/rescored_history/metrics_core10.csv` | 13 job chấm được, kèm TP/FP/FN/P/R/F1 |
+| `reports/rescored_history/metrics_full.csv` | cùng 13 job ở phạm vi full |
+| `reports/rescored_history/metrics_all.json` | hash từng job file tại thời điểm chấm, `snapshot_at`, `glob_count_at_run` |
+| `99-work/review/job_inventory.json` | 20 job gốc: job ID, model, mode, findings, token, request, uncertain |
+
+Không còn file `.vulnagent-jobs/<job_id>.json` nào cho 20 job đó. Ai muốn tái lập phải chạy scan lại (tốn credit) hoặc dựa vào `job_inventory.json` làm bản ghi.
+
+### Baseline SAST không truy nguồn được
+
+Số `Bandit 108/381` và `Semgrep 51/381` trong `[P421]` **không có artifact nào** trong `reports/`. Kiểm bằng grep `"tp": 108` và `"tp": 51` trên toàn bộ `reports/**/*.json` → không kết quả.
+
+Trước đây note này từng gán Bandit 108/381 → job `f8b459734396` và Semgrep 51/381 → job `9ddc1f19c823`. **Cả hai gán đều sai**: `f8b459734396` là job semgrep trên owasp-mini với 38 findings (108 TP > 38 findings là bất khả); `9ddc1f19c823` có 342 detections, trong khi docx bảng 3.10 ghi Semgrep 51 TP / 116 FP = 167 detections.
+
+**Việc phải làm với `[P421]` và Bảng 3.10:** hoặc chạy lại Bandit/Semgrep rồi đính kèm JSON, hoặc đánh dấu hai con số là *không có artifact lưu trữ* thay vì trình bày như đã đo.
 
 ### Điều cần lưu ý khi viết báo cáo
 
@@ -312,6 +349,20 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 
 Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Em truy được **toàn bộ**, khớp tới từng đơn vị.
 
+### 4.0 — CẢNH BÁO: ba con số trong báo cáo KHÔNG có artifact
+
+Ba con số sau xuất hiện trong docx nhưng **không truy được về file nào** trong repo:
+
+| Con số | Vị trí docx | Trạng thái |
+|---|---|---|
+| Bandit 108 TP / 381 nhãn | `[P421]`, Bảng 3.10 | Không artifact. Grep `"tp": 108` trên toàn `reports/**/*.json` → 0 kết quả. |
+| Semgrep 51 TP / 381 nhãn | `[P421]`, Bảng 3.10 | Không artifact. Grep `"tp": 51` → 0 kết quả. |
+| F1 0,3558 / 0,1861 | `[P421]`, `[P456]` | Phụ thuộc hai con số trên, nên cũng không tái lập được. |
+
+**Việc phải làm:** hoặc chạy lại Bandit và Semgrep trên `eval/datasets/benchmark`, lưu JSON kết quả vào `reports/`, rồi cập nhật số; hoặc đánh dấu rõ trong docx là *"số liệu baseline SAST không còn artifact lưu trữ"*. Không được trình bày ba con số này như đã đo nếu vẫn không có file.
+
+---
+
 ### 4.1 — Đối chiếu mẫu (khớp tuyệt đối)
 
 | Claim trong docx | Job ID | Giá trị thật trong JSON |
@@ -323,8 +374,8 @@ Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Em truy được **toàn
 | `[P422]` 588 uncertain | `52fb84884189` | `verify_uncertain = 588` |
 | `[P421]` Gemma full DeepVerify, 54 uncertain | `5cf511bb72df` | `verify_uncertain = 54` |
 | `[P421]` Gemma LLM thuần 600 FP | `dc790eb023ce` | 1147 findings |
-| `[P421]` Bandit 108/381 | `f8b459734396` | 38 detections |
-| `[P421]` Semgrep 51/381 | `9ddc1f19c823` | 342 detections |
+| `[P421]` Bandit 108/381 | **KHÔNG TRUY NGUỒN ĐƯỢC** | Không artifact nào trong `reports/` chứa `tp=108`. `f8b459734396` là job semgrep owasp-mini với 38 findings — không thể là 108 TP trên 381 nhãn. |
+| `[P421]` Semgrep 51/381 | **KHÔNG TRUY NGUỒN ĐƯỢC** | Không artifact nào chứa `tp=51`. `9ddc1f19c823` có 342 detections, trong khi bảng 3.10 của docx ghi 51 TP + 116 FP = 167 detections. |
 
 ### 4.2 — Bảng ánh xạ đầy đủ 20 job benchmark
 
