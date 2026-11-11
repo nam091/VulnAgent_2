@@ -58,7 +58,8 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 **Giới hạn phải nói rõ:**
 
 - **6 trong 20 job được trích trong báo cáo không còn trong snapshot**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Các hàng tương ứng trong bảng kết quả của docx **không còn artifact để tái chấm**. Không được tuyên bố "0 sai khác trên 20 job".
-- Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot** — và chỉ so với archive **đã lưu**, không so với docx. Khi so với docx, **4 trong 13 job lệch FP** (mục 5.1): `62dbabbb2a42` +1, `5cf511bb72df` +2, `c72fca194b29` +13, `aebeb9df7201` +16.
+- Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot** — và chỉ so với archive **đã lưu**, không so với docx.
+- So với docx: trong **11 hàng có cả hai nguồn** (2 job `26dfdce3277c` và `5ec88c710906` không có hàng tương ứng trong bản trích docx), **7 hàng khớp hoàn toàn** và **4 hàng lệch FP** (mục 5.1): `62dbabbb2a42` +1, `5cf511bb72df` +2, `aebeb9df7201` +16, `c72fca194b29` +13. ΔTP = 0 và ΔFN = 0 ở **toàn bộ 11 hàng**.
 
 ### Mất provenance — nguyên nhân và hệ quả
 
@@ -449,21 +450,31 @@ Nguồn: `99-work/review/job_inventory.json` (sinh bằng `99-work/review/invent
 
 ## 5. PHÁT HIỆN RIÊNG (reviewer chưa thấy)
 
-### 5.1 — [BLOCKING] Docx dùng LUẬT CHẤM CŨ: FP thấp hơn thực tế ở 4/5 job
+### 5.1 — [BLOCKING] Docx dùng LUẬT CHẤM CŨ: FP thấp hơn thực tế ở 4/11 hàng so sánh được
 
 **Đính chính lần hai.** Một kiểm toán độc lập đối chiếu docx với `reports/rescored_history/metrics_core10.csv` và phát hiện FP lệch. Em đã tự kiểm lại — **kiểm toán đúng, em đã báo sai với người dùng hai lần**.
 
-**Đối chiếu 5 job có trong cả hai nguồn:**
+**Đối chiếu toàn bộ 11 hàng có trong cả hai nguồn:**
 
-| Job | Docx TP/FP/FN | CSV TP/FP/FN | Δ FP | Δ TP | Δ FN |
-|---|---|---|---|---:|---:|
-| `62dbabbb2a42` (Gemma DV mini) | 48 / 6 / 0 | 48 / **7** / 0 | **+1** | 0 | 0 |
-| `5cf511bb72df` (Gemma DV full) | 375 / 164 / 6 | 375 / **166** / 6 | **+2** | 0 | 0 |
-| `c72fca194b29` (GPT-6 DV full) | 347 / 123 / 34 | 347 / **136** / 34 | **+13** | 0 | 0 |
-| `aebeb9df7201` (GPT-6 LLM full) | 364 / 149 / 17 | 364 / **165** / 17 | **+16** | 0 | 0 |
-| `52fb84884189` (Beam DV full) | 380 / 191 / 1 | 380 / 191 / 1 | 0 | 0 | 0 |
+| Job | Docx TP/FP/FN | CSV TP/FP/FN | Δ FP | Δ TP | Δ FN | Kết luận |
+|---|---|---|---|---:|---:|---|
+| `62dbabbb2a42` (Gemma DV mini) | 48 / 6 / 0 | 48 / **7** / 0 | **+1** | 0 | 0 | Lệch |
+| `5cf511bb72df` (Gemma DV full) | 375 / 164 / 6 | 375 / **166** / 6 | **+2** | 0 | 0 | Lệch |
+| `c72fca194b29` (GPT-6 DV full) | 347 / 123 / 34 | 347 / **136** / 34 | **+13** | 0 | 0 | Lệch |
+| `aebeb9df7201` (GPT-6 LLM full) | 364 / 149 / 17 | 364 / **165** / 17 | **+16** | 0 | 0 | Lệch |
+| `52fb84884189` (Beam DV full) | 380 / 191 / 1 | 380 / 191 / 1 | 0 | 0 | 0 | Khớp |
+| `a8b2ef400f59` (Gemma LLM mini) | 48 / 34 / 0 | 48 / 34 / 0 | 0 | 0 | 0 | Khớp |
+| `c0f73dae2ea8` (GPT-6 DV mini) | 44 / 5 / 4 | 44 / 5 / 4 | 0 | 0 | 0 | Khớp |
+| `db5b38cd97c6` (GPT-6 LLM mini) | 46 / 6 / 2 | 46 / 6 / 2 | 0 | 0 | 0 | Khớp |
+| `ecbb350b7f2c` (Luna5.6 DV mini) | 42 / 7 / 6 | 42 / 7 / 6 | 0 | 0 | 0 | Khớp |
+| `dc790eb023ce` (Gemma LLM full) | 381 / 600 / 0 | 381 / 600 / 0 | 0 | 0 | 0 | Khớp |
+| `ff60cd823550` (Luna5.6 DV full) | 353 / 149 / 28 | 353 / 149 / 28 | 0 | 0 | 0 | Khớp |
 
-**Δ TP = 0 và Δ FN = 0 ở MỌI job. Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
+Không có hàng docx tương ứng cho `26dfdce3277c` và `5ec88c710906` (2 job còn lại trong 13 scored), nên không đối chiếu được — không được ghi chúng là "khớp".
+
+**Kết quả: 7/11 hàng khớp hoàn toàn, 4/11 hàng lệch FP.**
+
+**Δ TP = 0 và Δ FN = 0 ở MỌI 11 hàng. Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
 
 **Nguyên nhân đã truy ra:**
 
@@ -484,7 +495,7 @@ Code mới dùng `eligible()` — giữ chúng lại để chúng có cơ hội 
 
 Precision cũng phải tính lại theo FP mới ở 4 hàng trên. `52fb84884189` (Beam) giữ nguyên.
 
-**Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/5 job. Đúng ra chỉ khớp với `52fb84884189`.
+**Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/11 hàng. Khớp hoàn toàn: `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `dc790eb023ce`, `ecbb350b7f2c`, `ff60cd823550`.
 
 ### 5.2 — [BLOCKING] Legacy name `benchmark1000` không còn tồn tại
 
