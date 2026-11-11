@@ -472,6 +472,15 @@ Nguồn: `99-work/review/job_inventory.json` — **file cục bộ, KHÔNG track
 
 **Đính chính lần hai.** Một kiểm toán độc lập đối chiếu docx với `reports/rescored_history/metrics_core10.csv` và phát hiện FP lệch. Em đã tự kiểm lại — **kiểm toán đúng, em đã báo sai với người dùng hai lần**.
 
+**Cách ánh xạ job → hàng docx (phải nói rõ, không được ngầm hiểu):**
+
+Bản trích docx `99-work/review/report_tables.txt` **không chứa job ID** — chỉ có tên model, mode và các con số. Vì vậy ánh xạ `job_id → hàng docx` dưới đây là **suy luận theo bộ ba (model, mode, dataset)**, không phải khớp ID trực tiếp:
+
+- `62dbabbb2a42` = `ollama/gemma4` + `deep-verify` + `benchmark100` → hàng docx `Gemma 4 31B · DeepVerify` (T28, mini) = 48/6/0
+- `5cf511bb72df` = `ollama/gemma4` + `deep-verify` + `benchmark` → hàng `Gemma 4 31B · DeepVerify` (owasp-full) = 375/164/6
+
+Rủi ro của cách ánh xạ này: nếu docx có hai job cùng model+mode+dataset thì không phân biệt được. Trong 11 hàng dưới đây **không có cặp trùng** như vậy, nhưng người kiểm lại phải tự xác nhận điều đó.
+
 **Đối chiếu toàn bộ 11 hàng có trong cả hai nguồn:**
 
 | Job | Docx TP/FP/FN | CSV TP/FP/FN | Δ FP | Δ TP | Δ FN | Kết luận |
