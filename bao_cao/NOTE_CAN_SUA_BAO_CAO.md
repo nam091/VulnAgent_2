@@ -17,7 +17,7 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620, f71c99f, cd18304
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → cd0f49d (5 commit tài liệu)
 ```
 
 Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ ba commit tài liệu sau (`d2cd620`, `f71c99f`, `cd18304`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
@@ -101,10 +101,13 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 |---|---:|
 | BLOCKING phải sửa trước khi nộp | **12** |
 | NON-BLOCKING nên sửa | **4** |
-| Bảng số đã truy được nguồn (job ID) | **12** |
+| Bảng số **khớp** artifact (job ID) | **1** (`52fb84884189`) |
+| Bảng số **lệch FP** (docx dùng luật cũ) | **4** |
+| Bảng số **không truy nguồn được** | **2** (Bandit 108/381, Semgrep 51/381) |
+| Job trong báo cáo **không còn artifact** | **6**/20 |
 | Phát hiện riêng do em tìm, reviewer chưa thấy | **6** |
 
-**Điểm quan trọng nhất:** không có số nào bịa, nhưng **cũng không phải số nào cũng kiểm chứng được**. Trạng thái từng nhóm:
+**Điểm quan trọng nhất:** không có số nào bịa, nhưng **phần lớn số chưa kiểm chứng được**. Trạng thái từng nhóm:
 
 - **Khớp**: `52fb84884189` (Beam owasp-full DeepVerify) — 380 TP / 191 FP / F1 0,7983.
 - **Lệch FP** (docx dùng luật chấm cũ, CSV dùng luật mới — xem 5.1): `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201`.
@@ -357,6 +360,8 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 **Vị trí:** cần thêm đoạn mới ngay sau phần kết quả owasp-full
 
 **Số liệu:** mật độ FP tăng từ **7,45 lên 17,51 FP/100 tệp**. **CWE-611** là nguồn chính: 5/7 FP trên mini, 59/191 FP trên full.
+
+**Lưu ý về nguồn:** hai con số 7,45 và 17,51 **lấy nguyên từ docx cũ**, chưa tái chấm. Job mini `9750509c05d8` không còn trong `.vulnagent-jobs/` nên không thể xác minh lại. Khi viết vào báo cáo, phải ghi rõ nguồn này hoặc chấp nhận rủi ro không tái lập được.
 
 **Đoạn cần thêm:**
 > Kết quả trên owasp-mini không đủ để kết luận về khả năng tổng quát hoá. Khi mở rộng quy mô, mật độ cảnh báo sai tăng từ 7,45 lên 17,51 FP trên 100 tệp và Precision không còn đạt mục tiêu 85%. CWE-611 (XXE) là nguồn cảnh báo sai chính: 5/7 FP trên owasp-mini và 59/191 FP trên owasp-full, do việc phân biệt cấu hình parser XML an toàn và không an toàn chưa ổn định.

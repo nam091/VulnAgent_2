@@ -142,6 +142,6 @@ Auditor phát hiện docx và CSV lệch FP ở 4/5 job đối chiếu. Em đã 
 
 **ΔTP = 0 và ΔFN = 0 ở mọi job. Chỉ FP tăng.**
 
-Nguyên nhân: code cũ lọc detection bằng `in_scope()` nên **drop** mọi CWE không nằm trong `CORE_CWE_SCOPE`, kể cả CWE tương đương (CWE-327 cho nhãn 328, CWE-723 cho 22, v.v.). Code mới dùng `eligible()` nên **giữ** chúng; nếu không khớp nhãn thì phải tính FP.
+Nguyên nhân: code cũ lọc detection bằng `in_scope()` nên **drop** mọi CWE không nằm trong `CORE_CWE_SCOPE`, kể cả CWE tương đương (CWE-327 cho nhãn 328, CWE-23/35/36/73 cho 22, v.v.). Code mới dùng `eligible()` nên **giữ** chúng; nếu không khớp nhãn thì phải tính FP.
 
 **Kết luận: CSV đúng, docx dùng luật cũ.** Docx phải sửa FP/F1 theo CSV cho 4 job trên. Không được viết "khớp tới từng đơn vị" như mục 5.1 cũ.
