@@ -39,7 +39,7 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 
 ### Ảnh hưởng tới số liệu trong báo cáo
 
-**Số liệu trong docx KHÔNG đứng vững nguyên trạng.** Bốn **job** (6 cặp hàng, vì docx lặp mỗi cấu hình ở hai bảng) có FP sai so với lần chấm lại (mục 5.1); sáu job không còn đầu vào; hai baseline SAST không có artifact. Chi tiết bên dưới.
+**Số liệu trong docx KHÔNG đứng vững nguyên trạng.** Bốn **job** (6 cặp hàng, vì một số cấu hình lặp ở hai bảng) có FP sai so với lần chấm lại (mục 5.1); sáu job không còn đầu vào; hai baseline SAST không có artifact. Chi tiết bên dưới.
 
 **Artifact thực tế còn lưu:**
 
@@ -405,7 +405,7 @@ Không dùng con số "12 bảng" làm mẫu số nữa — nó gộp ba đơn v
 | Con số không truy nguồn | **2** | Bandit 108 TP/381, Semgrep 51 TP/381 — xem 4.0 |
 | Job không còn artifact | **6**/20 | Danh sách ở mục 0.0 |
 
-Tổng: 11 **job** đối chiếu được (7+4) + 2 job không có hàng docx = 13 job scored. Nếu đếm theo **cặp hàng** (docx lặp mỗi cấu hình ở 2 bảng): 16 cặp, 10 khớp / 6 lệch.
+Tổng: 11 **job** đối chiếu được (7+4) + 2 job không có hàng docx = 13 job scored. Nếu đếm theo **cặp hàng** (một số cấu hình lặp ở 2 bảng): 16 cặp, 10 khớp / 6 lệch.
 
 Không được đọc mục này như xác nhận "mọi số đều đúng".
 
@@ -476,7 +476,7 @@ Nguồn: `99-work/review/job_inventory.json` — **file cục bộ, KHÔNG track
 
 Bản trích docx (`99-work/review/report_tables.txt`) **không chứa job ID**, chỉ có tên model + mode + con số. Ánh xạ dưới đây là **suy luận theo bộ ba (model, mode, dataset)**, không phải join theo ID.
 
-Quan trọng hơn: docx lặp mỗi cấu hình ở **hai bảng**. Đo lại bằng script đối chiếu đủ 4 bảng:
+Quan trọng hơn: một số cấu hình lặp ở **hai bảng**. Đo lại bằng script đối chiếu đủ 4 bảng:
 
 | Bảng | Nội dung |
 |---|---|
