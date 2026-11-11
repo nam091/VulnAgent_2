@@ -17,7 +17,7 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → cd0f49d (5 commit tài liệu)
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → fd9e0eb (6 commit tài liệu)
 ```
 
 Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ ba commit tài liệu sau (`d2cd620`, `f71c99f`, `cd18304`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
@@ -359,12 +359,22 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 
 **Vị trí:** cần thêm đoạn mới ngay sau phần kết quả owasp-full
 
-**Số liệu:** mật độ FP tăng từ **7,45 lên 17,51 FP/100 tệp**. **CWE-611** là nguồn chính: 5/7 FP trên mini, 59/191 FP trên full.
+**Số liệu:** mật độ FP tăng từ **7,45 lên 17,51 FP/100 tệp** (CHƯA KIỂM CHỨNG — xem bảng nguồn bên dưới). **CWE-611** là nguồn chính.
 
-**Lưu ý về nguồn:** hai con số 7,45 và 17,51 **lấy nguyên từ docx cũ**, chưa tái chấm. Job mini `9750509c05d8` không còn trong `.vulnagent-jobs/` nên không thể xác minh lại. Khi viết vào báo cáo, phải ghi rõ nguồn này hoặc chấp nhận rủi ro không tái lập được.
+**Lưu ý về nguồn — ĐỌC KỸ TRƯỚC KHI DÙNG:**
 
-**Đoạn cần thêm:**
-> Kết quả trên owasp-mini không đủ để kết luận về khả năng tổng quát hoá. Khi mở rộng quy mô, mật độ cảnh báo sai tăng từ 7,45 lên 17,51 FP trên 100 tệp và Precision không còn đạt mục tiêu 85%. CWE-611 (XXE) là nguồn cảnh báo sai chính: 5/7 FP trên owasp-mini và 59/191 FP trên owasp-full, do việc phân biệt cấu hình parser XML an toàn và không an toàn chưa ổn định.
+Ba con số dưới đây **chưa kiểm chứng được**, không được trình bày như đã đo:
+
+| Con số | Nguồn | Trạng thái |
+|---|---|---|
+| 7,45 và 17,51 FP/100 tệp | docx cũ | Chưa tái chấm. Không có artifact tính mật độ. |
+| 5/7 FP trên owasp-mini (CWE-611) | docx cũ | **Chưa xác minh.** Job `9750509c05d8` không còn trong `.vulnagent-jobs/` và không có trong `metrics_core10.csv` (`in csv: False`). |
+| 59/191 FP trên owasp-full (CWE-611) | docx cũ | Chưa phân rã theo CWE trong artifact hiện có. |
+
+**Đoạn cần thêm** — bản an toàn, không trích ba con số chưa kiểm chứng:
+> Kết quả trên owasp-mini không đủ để kết luận về khả năng tổng quát hoá. Khi mở rộng lên owasp-full, Precision không còn đạt mục tiêu 85% và mật độ cảnh báo sai tăng rõ rệt. CWE-611 (XXE) là một trong các nguồn cảnh báo sai chính, do việc phân biệt cấu hình parser XML an toàn và không an toàn chưa ổn định.
+
+Nếu muốn giữ nguyên các tỷ lệ cụ thể, phải chạy lại phép tính mật độ trên `metrics_core10.csv` (và phân rã FP theo CWE) rồi mới trích.
 
 ---
 
@@ -576,5 +586,5 @@ Code có **17** nhóm `ABSTRACT_SINK_CATEGORIES`. Docx văn bản ghi **18** (4 
 - [ ] CVSS được mô tả là heuristic, không phải CVSS v3.1.
 - [ ] Ví dụ bản vá mật khẩu không dùng SHA-256 trực tiếp.
 - [ ] Có câu nêu owasp-mini ⊂ owasp-full.
-- [ ] Có đoạn thảo luận mật độ FP 7,45 → 17,51 và CWE-611.
+- [ ] Có đoạn thảo luận mật độ FP và CWE-611 — dùng bản an toàn ở mục 3.6, không trích 7,45/17,51/5/7 trừ khi đã chạy lại phép tính.
 - [ ] Không sửa nhầm "21 quy tắc" hay "5 công cụ" (đã đúng).
