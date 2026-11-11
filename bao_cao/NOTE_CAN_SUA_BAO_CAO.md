@@ -39,7 +39,7 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 
 ### Ảnh hưởng tới số liệu trong báo cáo
 
-**Số liệu trong docx KHÔNG đứng vững nguyên trạng.** Bốn hàng có FP sai so với lần chấm lại (mục 5.1); sáu job không còn đầu vào; hai baseline SAST không có artifact. Chi tiết bên dưới.
+**Số liệu trong docx KHÔNG đứng vững nguyên trạng.** Bốn **job** (6 cặp hàng, vì docx lặp mỗi cấu hình ở hai bảng) có FP sai so với lần chấm lại (mục 5.1); sáu job không còn đầu vào; hai baseline SAST không có artifact. Chi tiết bên dưới.
 
 **Artifact thực tế còn lưu:**
 
@@ -119,7 +119,7 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 - **Không truy nguồn được**: Bandit 108/381 và Semgrep 51/381 (mục 4.0).
 - **Không còn artifact**: 6/20 job vắng khỏi snapshot hiện tại (mục 0.0).
 
-Vấn đề nằm ở cả **cách diễn giải**, **phạm vi chấm điểm**, và **bốn hàng có FP sai**. Không phải "dữ liệu đúng hết".
+Vấn đề nằm ở cả **cách diễn giải**, **phạm vi chấm điểm**, và **bốn job có FP sai**. Không phải "dữ liệu đúng hết".
 
 ---
 
@@ -405,7 +405,7 @@ Không dùng con số "12 bảng" làm mẫu số nữa — nó gộp ba đơn v
 | Con số không truy nguồn | **2** | Bandit 108 TP/381, Semgrep 51 TP/381 — xem 4.0 |
 | Job không còn artifact | **6**/20 | Danh sách ở mục 0.0 |
 
-Tổng: 11 hàng đối chiếu được (7+4) + 2 job không có hàng docx = 13 job scored.
+Tổng: 11 **job** đối chiếu được (7+4) + 2 job không có hàng docx = 13 job scored. Nếu đếm theo **cặp hàng** (docx lặp mỗi cấu hình ở 2 bảng): 16 cặp, 10 khớp / 6 lệch.
 
 Không được đọc mục này như xác nhận "mọi số đều đúng".
 
@@ -521,7 +521,7 @@ Tổng: 11 + 2 = 13 job scored. Khớp với `metrics_core10.csv`.
 
 **Kết quả: 7/11 job khớp hoàn toàn, 4/11 job lệch FP.**
 
-**Δ TP = 0 và Δ FN = 0 ở MỌI 11 hàng. Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
+**Δ TP = 0 và Δ FN = 0 ở MỌI 11 job (và mọi 16 cặp hàng). Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
 
 **Nguyên nhân đã truy ra:**
 
@@ -540,7 +540,7 @@ Code mới dùng `eligible()` — giữ chúng lại để chúng có cơ hội 
 | `c72fca194b29` GPT-6 DV full | 123 → **136** | 0,8155 → **0,8032** |
 | `aebeb9df7201` GPT-6 LLM full | 149 → **165** | 0,8143 → **0,8000** |
 
-Precision cũng phải tính lại theo FP mới ở 4 hàng trên. `52fb84884189` (Beam) giữ nguyên.
+Precision cũng phải tính lại theo FP mới ở 4 job trên. `52fb84884189` (Beam) giữ nguyên.
 
 **Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/11 job. Khớp hoàn toàn: `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `dc790eb023ce`, `ecbb350b7f2c`, `ff60cd823550`.
 
