@@ -62,7 +62,7 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 
 - **6 trong 20 job được trích trong báo cáo không còn trong snapshot**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Các hàng tương ứng trong bảng kết quả của docx **không còn artifact để tái chấm**. Không được tuyên bố "0 sai khác trên 20 job".
 - Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot** — và chỉ so với archive **đã lưu**, không so với docx.
-- So với docx: trong **11 hàng có cả hai nguồn** (2 job `26dfdce3277c` và `5ec88c710906` không có hàng tương ứng trong bản trích docx), **7 hàng khớp hoàn toàn** và **4 hàng lệch FP** (mục 5.1): `62dbabbb2a42` +1, `5cf511bb72df` +2, `aebeb9df7201` +16, `c72fca194b29` +13. ΔTP = 0 và ΔFN = 0 ở **toàn bộ 11 hàng**.
+- So với docx: trong **11 job có hàng docx** (2 job `26dfdce3277c` và `5ec88c710906` là `cbai/hy3`, docx không có hàng hy3), **7 job khớp hoàn toàn** và **4 job lệch FP** (mục 5.1): `62dbabbb2a42` +1, `5cf511bb72df` +2, `aebeb9df7201` +16, `c72fca194b29` +13. ΔTP = 0 và ΔFN = 0 ở **toàn bộ 11 job**. 11 + 2 = 13 job scored.
 
 ### Mất provenance — nguyên nhân và hệ quả
 
@@ -105,9 +105,9 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 |---|---:|
 | BLOCKING phải sửa trước khi nộp | **12** |
 | NON-BLOCKING nên sửa | **4** |
-| **Hàng/job** khớp hoàn toàn giữa docx và CSV | **7**/11 hàng đối chiếu được |
-| **Hàng/job** lệch FP (docx dùng luật cũ) | **4**/11 |
-| **Job không có hàng docx** để đối chiếu | **2** (`26dfdce3277c`, `5ec88c710906`) |
+| **Job** khớp hoàn toàn giữa docx và CSV | **7**/11 job có hàng docx |
+| **Job** lệch FP (docx dùng luật cũ) | **4**/11 |
+| **Job không có hàng docx** (đều là `cbai/hy3`) | **2** (`26dfdce3277c`, `5ec88c710906`) |
 | **Baseline SAST** không truy nguồn được | **2** con số (Bandit 108/381, Semgrep 51/381) |
 | Job trong báo cáo **không còn artifact** | **6**/20 |
 | Phát hiện riêng do em tìm, reviewer chưa thấy | **6** |
@@ -399,9 +399,9 @@ Không dùng con số "12 bảng" làm mẫu số nữa — nó gộp ba đơn v
 
 | Loại | Số lượng | Chi tiết |
 |---|---:|---|
-| Hàng khớp hoàn toàn | **7** | `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c`, `dc790eb023ce`, `ff60cd823550` |
-| Hàng lệch FP | **4** | `62dbabbb2a42` (+1), `5cf511bb72df` (+2), `c72fca194b29` (+13), `aebeb9df7201` (+16) — xem 5.1 |
-| Job không có hàng docx | **2** | `26dfdce3277c`, `5ec88c710906` |
+| Job khớp hoàn toàn | **7** | `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c`, `dc790eb023ce`, `ff60cd823550` |
+| Job lệch FP | **4** | `62dbabbb2a42` (+1), `5cf511bb72df` (+2), `c72fca194b29` (+13), `aebeb9df7201` (+16) — xem 5.1 |
+| Job không có hàng docx | **2** | `26dfdce3277c`, `5ec88c710906` (cả hai `cbai/hy3`) |
 | Con số không truy nguồn | **2** | Bandit 108 TP/381, Semgrep 51 TP/381 — xem 4.0 |
 | Job không còn artifact | **6**/20 | Danh sách ở mục 0.0 |
 
@@ -468,20 +468,40 @@ Nguồn: `99-work/review/job_inventory.json` — **file cục bộ, KHÔNG track
 
 ## 5. PHÁT HIỆN RIÊNG (reviewer chưa thấy)
 
-### 5.1 — [BLOCKING] Docx dùng LUẬT CHẤM CŨ: FP thấp hơn thực tế ở 4/11 hàng so sánh được
+### 5.1 — [BLOCKING] Docx dùng LUẬT CHẤM CŨ: FP thấp hơn thực tế ở 4/11 job so sánh được
 
 **Đính chính lần hai.** Một kiểm toán độc lập đối chiếu docx với `reports/rescored_history/metrics_core10.csv` và phát hiện FP lệch. Em đã tự kiểm lại — **kiểm toán đúng, em đã báo sai với người dùng hai lần**.
 
-**Cách ánh xạ job → hàng docx (phải nói rõ, không được ngầm hiểu):**
+**Cách ánh xạ job → hàng docx — và một điểm phải nói rõ trước:**
 
-Bản trích docx `99-work/review/report_tables.txt` **không chứa job ID** — chỉ có tên model, mode và các con số. Vì vậy ánh xạ `job_id → hàng docx` dưới đây là **suy luận theo bộ ba (model, mode, dataset)**, không phải khớp ID trực tiếp:
+Bản trích docx (`99-work/review/report_tables.txt`) **không chứa job ID**, chỉ có tên model + mode + con số. Ánh xạ dưới đây là **suy luận theo bộ ba (model, mode, dataset)**, không phải join theo ID.
 
-- `62dbabbb2a42` = `ollama/gemma4` + `deep-verify` + `benchmark100` → hàng docx `Gemma 4 31B · DeepVerify` (T28, mini) = 48/6/0
-- `5cf511bb72df` = `ollama/gemma4` + `deep-verify` + `benchmark` → hàng `Gemma 4 31B · DeepVerify` (owasp-full) = 375/164/6
+Quan trọng hơn: docx lặp mỗi cấu hình ở **hai bảng**. Đo lại bằng script đối chiếu đủ 4 bảng:
 
-Rủi ro của cách ánh xạ này: nếu docx có hai job cùng model+mode+dataset thì không phân biệt được. Trong 11 hàng dưới đây **không có cặp trùng** như vậy, nhưng người kiểm lại phải tự xác nhận điều đó.
+| Bảng | Nội dung |
+|---|---|
+| `T24` | owasp-mini, 6 cấu hình (gồm Bandit/Semgrep) |
+| `T28` | owasp-mini, 7 cấu hình (bảng 3 tầng) |
+| `T30` | owasp-full, 6 cấu hình |
+| `T32` | owasp-full, 7 cấu hình |
 
-**Đối chiếu toàn bộ 11 hàng có trong cả hai nguồn:**
+Cùng một cấu hình xuất hiện ở cả bảng "con số" và bảng "3 tầng" với **trị số giống hệt** (8 cặp trùng đã kiểm). Vì vậy số **cặp hàng** đo được là 16, nhưng số **job duy nhất** là **11**.
+
+**Kết quả đo lại (script, không suy diễn):**
+
+| Đại lượng | Giá trị |
+|---|---|
+| Cặp hàng docx ↔ CSV đối chiếu được | **16** |
+| Trong đó khớp hoàn toàn | **10** |
+| Trong đó lệch FP | **6** (do T24/T28 và T30/T32 lặp cùng một job) |
+| **Job duy nhất** có hàng docx | **11** |
+| Job duy nhất khớp | **7** |
+| Job duy nhất lệch FP | **4** |
+| Job không có hàng docx | **2** (`26dfdce3277c`, `5ec88c710906` — cả hai là `cbai/hy3`; docx không có hàng hy3) |
+
+Tổng: 11 + 2 = 13 job scored. Khớp với `metrics_core10.csv`.
+
+**Đơn vị dùng trong tài liệu:** từ đây nói **job**, không nói "bảng". Con số 4 job lệch FP là bất biến, bất kể đếm theo cặp hàng hay theo job.
 
 | Job | Docx TP/FP/FN | CSV TP/FP/FN | Δ FP | Δ TP | Δ FN | Kết luận |
 |---|---|---|---|---:|---:|---|
@@ -497,9 +517,9 @@ Rủi ro của cách ánh xạ này: nếu docx có hai job cùng model+mode+dat
 | `dc790eb023ce` (Gemma LLM full) | 381 / 600 / 0 | 381 / 600 / 0 | 0 | 0 | 0 | Khớp |
 | `ff60cd823550` (Luna5.6 DV full) | 353 / 149 / 28 | 353 / 149 / 28 | 0 | 0 | 0 | Khớp |
 
-Không có hàng docx tương ứng cho `26dfdce3277c` và `5ec88c710906` (2 job còn lại trong 13 scored), nên không đối chiếu được — không được ghi chúng là "khớp".
+`26dfdce3277c` và `5ec88c710906` là hai job `cbai/hy3`; docx không có hàng hy3 nào, nên không đối chiếu được — không được ghi chúng là "khớp".
 
-**Kết quả: 7/11 hàng khớp hoàn toàn, 4/11 hàng lệch FP.**
+**Kết quả: 7/11 job khớp hoàn toàn, 4/11 job lệch FP.**
 
 **Δ TP = 0 và Δ FN = 0 ở MỌI 11 hàng. Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
 
@@ -522,7 +542,7 @@ Code mới dùng `eligible()` — giữ chúng lại để chúng có cơ hội 
 
 Precision cũng phải tính lại theo FP mới ở 4 hàng trên. `52fb84884189` (Beam) giữ nguyên.
 
-**Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/11 hàng. Khớp hoàn toàn: `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `dc790eb023ce`, `ecbb350b7f2c`, `ff60cd823550`.
+**Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/11 job. Khớp hoàn toàn: `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `dc790eb023ce`, `ecbb350b7f2c`, `ff60cd823550`.
 
 ### 5.2 — [BLOCKING] Legacy name `benchmark1000` không còn tồn tại
 
