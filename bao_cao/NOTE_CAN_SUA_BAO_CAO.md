@@ -17,15 +17,17 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [VERIFIED: sound @ review #20] — nội dung tài liệu tại fa5b063 (10 commit d2cd620→fa5b063); commit b0f1ffc chỉ ghi lại dòng gate này
+GATE STATUS (docs)   : [VERIFIED: sound @ review #22]  — phủ commit eb6f870
+                       (vòng #20 sound ở fa5b063; #21 bắt 4 câu đếm sai đơn vị,
+                        #22 sound sau khi sửa; d25f781 chỉ sửa một từ ngữ)
 ```
 
 Hai verdict, hai phạm vi:
 
 - **Code** — `Verdict: sound` cho diff code tại `1b5f381` sau 13 vòng nghiệm thu.
-- **Tài liệu** — `Verdict: sound` cho toàn bộ diff tài liệu `d2cd620 → fa5b063` (10 commit) sau 9 vòng (review #14 → #20).
+- **Tài liệu** — `Verdict: sound` tại `eb6f870` (review #22), sau 9 vòng (#14 → #22). `d25f781` chỉ đổi "mỗi cấu hình" thành "một số cấu hình" — không đổi số liệu, không đổi kết luận.
 
-Code tại `1b5f381` không bị đổi sau đó: `git diff --stat 1b5f381..fa5b063` chỉ chạm hai file `.md`.
+Code tại `1b5f381` không bị đổi sau đó: `git diff --stat 1b5f381..HEAD` chỉ chạm hai file `.md` (`bao_cao/NOTE_CAN_SUA_BAO_CAO.md`, `99-work/TRANG_THAI_SUA_CODE.md`).
 
 | Chỉ số | Trước phiên sửa | Sau |
 |---|---|---|
