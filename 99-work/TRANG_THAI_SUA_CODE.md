@@ -92,7 +92,7 @@ Trạng thái thật (kiểm ngày 2026-11-11): **51 dòng**, trong đó **13 sc
 
 **6 trong 20 job được trích trong báo cáo KHÔNG còn trong snapshot**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Không được tuyên bố "0 sai khác trên 20 job" — chỉ đúng cho 13 job còn lại.
 
-**Mất provenance:** `src/jobs.py` có `DEFAULT_RETENTION = 50`; mỗi `JobStore.create()` xoá job cũ nhất. `pytest tests/` tạo snippet job trong `cwd/.vulnagent-jobs` nên prune dần. Toàn bộ 20 job gốc đã bị xoá trong phiên này. Nguồn truy nguyên còn lại: `reports/rescored_history/` và `99-work/review/job_inventory.json`.
+**Mất provenance:** `src/jobs.py` có `DEFAULT_RETENTION = 50`; mỗi `JobStore.create()` xoá job cũ nhất. `pytest tests/` tạo snippet job trong `cwd/.vulnagent-jobs` nên prune dần. Toàn bộ 20 job gốc đã bị xoá trong phiên này. Nguồn truy nguyên còn lại: `reports/rescored_history/` (đã track trong git) và `99-work/review/job_inventory.json` (**file cục bộ, KHÔNG tracked**).
 
 `bao_cao/NOTE_CAN_SUA_BAO_CAO.md` — danh mục sửa báo cáo docx (số dòng thay đổi theo từng lần sửa; đừng ghim số):
 - Mục 0.0: trạng thái gate (verdict #13 CHỈ phủ code `1b5f381`, tài liệu chưa nghiệm thu) + 13 scored + 6/20 job vắng + mất provenance

@@ -17,7 +17,7 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → 0fbb298 (8 commit tài liệu)
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → c7e0f19 (9 commit tài liệu)
 ```
 
 Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ ba commit tài liệu sau (`d2cd620`, `f71c99f`, `cd18304`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
@@ -72,9 +72,9 @@ Nguồn truy nguyên còn lại:
 | `reports/rescored_history/metrics_core10.csv` | 13 job chấm được, kèm TP/FP/FN/P/R/F1 |
 | `reports/rescored_history/metrics_full.csv` | cùng 13 job ở phạm vi full |
 | `reports/rescored_history/metrics_all.json` | hash từng job file tại thời điểm chấm, `snapshot_at`, `glob_count_at_run` |
-| `99-work/review/job_inventory.json` | 20 job gốc: job ID, model, mode, findings, token, request, uncertain |
+| `99-work/review/job_inventory.json` | 20 job gốc: job ID, model, mode, findings, token, request, uncertain. **LƯU Ý: file này KHÔNG nằm trong git** (`git ls-files` không khớp; `99-work/` là untracked). Người clone HEAD sẽ không có nó. Bảng ánh xạ ở mục 4.2 vì thế **không kiểm chứng được từ HEAD** — chỉ kiểm được trên máy đã chạy phiên này. |
 
-Không còn file `.vulnagent-jobs/<job_id>.json` nào cho 20 job đó. Ai muốn tái lập phải chạy scan lại (tốn credit) hoặc dựa vào `job_inventory.json` làm bản ghi.
+Không còn file `.vulnagent-jobs/<job_id>.json` nào cho 20 job đó. Ai muốn tái lập phải chạy scan lại (tốn credit). `job_inventory.json` là bản ghi duy nhất còn lại nhưng **không nằm trong git**, nên người clone HEAD không truy được các job này.
 
 ### Baseline SAST không truy nguồn được
 
@@ -361,7 +361,7 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 
 **Vị trí:** cần thêm đoạn mới ngay sau phần kết quả owasp-full
 
-**Số liệu:** mật độ FP tăng từ **7,45 lên 17,51 FP/100 tệp** (CHƯA KIỂM CHỨNG — xem bảng nguồn bên dưới). **CWE-611** là nguồn chính.
+**Số liệu:** mật độ FP tăng từ **7,45 lên 17,51 FP/100 tệp** (CHƯA KIỂM CHỨNG — xem bảng nguồn bên dưới). Chưa xác định được CWE nào đóng góp nhiều FP nhất (xem lý do bên dưới).
 
 **Lưu ý về nguồn — ĐỌC KỸ TRƯỚC KHI DÙNG:**
 
@@ -459,7 +459,7 @@ Ba con số sau xuất hiện trong docx nhưng **không truy được về file
 | `52fb84884189` | owasp-full | deep-verify | rl/Beam-1.0-501B | 659 | 452 | 381 | 588 | 25.47 | 2507 | 8575.2 |
 | `b43b14a0782a` | owasp-full | llm | rl/Beam-1.0-501B | 651 | 452 | 381 | 0 | 16.73 | 1231 | 2332.8 |
 
-Nguồn: `99-work/review/job_inventory.json` (sinh bằng `99-work/review/inventory_jobs.py`, chỉ đọc `.vulnagent-jobs/`).
+Nguồn: `99-work/review/job_inventory.json` — **file cục bộ, KHÔNG tracked trong git**; sinh bằng `99-work/review/inventory_jobs.py`, chỉ đọc `.vulnagent-jobs/`. Bảng này không kiểm chứng được từ HEAD.
 
 ---
 
