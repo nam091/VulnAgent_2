@@ -17,7 +17,7 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [VERIFIED: sound @ review #20] — d2cd620 → fa5b063 (10 commit tài liệu)
+GATE STATUS (docs)   : [VERIFIED: sound @ review #20] — nội dung tài liệu tại fa5b063 (10 commit d2cd620→fa5b063); commit b0f1ffc chỉ ghi lại dòng gate này
 ```
 
 Hai verdict, hai phạm vi:
