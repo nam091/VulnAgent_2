@@ -36,7 +36,7 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 
 ### Ảnh hưởng tới số liệu trong báo cáo
 
-**Số liệu trong docx đứng vững** — nhưng phạm vi bằng chứng còn giữ được hẹp hơn con số thường được trích.
+**Số liệu trong docx KHÔNG đứng vững nguyên trạng.** Bốn hàng có FP sai so với lần chấm lại (mục 5.1); sáu job không còn đầu vào; hai baseline SAST không có artifact. Chi tiết bên dưới.
 
 **Artifact thực tế còn lưu:**
 
@@ -104,7 +104,7 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 | Bảng số đã truy được nguồn (job ID) | **12** |
 | Phát hiện riêng do em tìm, reviewer chưa thấy | **6** |
 
-**Điểm quan trọng nhất:** không có số nào bịa. 12 bảng số kết quả đều truy được về job ID cụ thể, **nhưng không phải bảng nào cũng khớp**:
+**Điểm quan trọng nhất:** không có số nào bịa, nhưng **cũng không phải số nào cũng kiểm chứng được**. Trạng thái từng nhóm:
 
 - **Khớp**: `52fb84884189` (Beam owasp-full DeepVerify) — 380 TP / 191 FP / F1 0,7983.
 - **Lệch FP** (docx dùng luật chấm cũ, CSV dùng luật mới — xem 5.1): `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201`.
@@ -365,7 +365,7 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 
 ## 4. TRUY NGUỒN 12 BẢNG SỐ — KHÔNG CÓ SỐ BỊA, NHƯNG KHÔNG PHẢI BẢNG NÀO CŨNG KHỚP
 
-Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Em truy được nguồn của **toàn bộ 12 bảng**, nhưng kết quả đối chiếu chia ba loại:
+Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Đối chiếu xong, kết quả chia ba loại — **không phải tất cả đều truy nguồn được**:
 
 | Loại | Job | Kết luận |
 |---|---|---|
