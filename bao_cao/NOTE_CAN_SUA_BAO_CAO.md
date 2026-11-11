@@ -11,11 +11,18 @@
 
 ---
 
-## 0.0 TRẠNG THÁI GATE — ĐÃ ĐẠT
+## 0.0 TRẠNG THÁI GATE
 
-**GATE STATUS: [VERIFIED: sound @ review #13]**
+**Phạm vi verdict: CHỈ CODE.**
 
-Reviewer `openai-codex/gpt-6-sol` đã cấp `Verdict: sound` với **0 BLOCKING** sau 13 vòng nghiệm thu toàn bộ diff.
+```
+GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620, f71c99f, và các sửa sau đó
+```
+
+Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ hai commit tài liệu sau (`d2cd620`, `f71c99f`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
+
+Code tại `1b5f381` không bị đổi từ đó: `git diff --stat 1b5f381..f71c99f` chỉ chạm file `.md`.
 
 | Chỉ số | Trước phiên sửa | Sau |
 |---|---|---|
@@ -51,7 +58,7 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 **Giới hạn phải nói rõ:**
 
 - **6 trong 20 job được trích trong báo cáo không còn trong snapshot**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Các hàng tương ứng trong bảng kết quả của docx **không còn artifact để tái chấm**. Không được tuyên bố "0 sai khác trên 20 job".
-- Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot**. Những job đó được chấm lại bằng code hiện tại và khớp archive.
+- Con số "0 sai khác" chỉ đúng cho **13 job còn trong snapshot** — và chỉ so với archive **đã lưu**, không so với docx. Khi so với docx, **4 trong 13 job lệch FP** (mục 5.1): `62dbabbb2a42` +1, `5cf511bb72df` +2, `c72fca194b29` +13, `aebeb9df7201` +16.
 
 ### Mất provenance — nguyên nhân và hệ quả
 
@@ -97,7 +104,14 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 | Bảng số đã truy được nguồn (job ID) | **12** |
 | Phát hiện riêng do em tìm, reviewer chưa thấy | **6** |
 
-**Điểm quan trọng nhất:** không có số nào bịa. Toàn bộ 12 bảng số kết quả truy được về job ID cụ thể và khớp tới từng đơn vị (xem mục 4). Vấn đề nằm ở **cách diễn giải** và **phạm vi chấm điểm**, không phải ở dữ liệu.
+**Điểm quan trọng nhất:** không có số nào bịa. 12 bảng số kết quả đều truy được về job ID cụ thể, **nhưng không phải bảng nào cũng khớp**:
+
+- **Khớp**: `52fb84884189` (Beam owasp-full DeepVerify) — 380 TP / 191 FP / F1 0,7983.
+- **Lệch FP** (docx dùng luật chấm cũ, CSV dùng luật mới — xem 5.1): `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201`.
+- **Không truy nguồn được**: Bandit 108/381 và Semgrep 51/381 (mục 4.0).
+- **Không còn artifact**: 6/20 job vắng khỏi snapshot hiện tại (mục 0.0).
+
+Vấn đề nằm ở cả **cách diễn giải**, **phạm vi chấm điểm**, và **bốn hàng có FP sai**. Không phải "dữ liệu đúng hết".
 
 ---
 
@@ -349,9 +363,17 @@ Quan trọng hơn: `reports/multi_codebase_benchmark/metrics_summary.csv` ghi 3-
 
 ---
 
-## 4. TRUY NGUỒN 12 BẢNG SỐ — KHÔNG CÓ SỐ BỊA
+## 4. TRUY NGUỒN 12 BẢNG SỐ — KHÔNG CÓ SỐ BỊA, NHƯNG KHÔNG PHẢI BẢNG NÀO CŨNG KHỚP
 
-Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Em truy được **toàn bộ**, khớp tới từng đơn vị.
+Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Em truy được nguồn của **toàn bộ 12 bảng**, nhưng kết quả đối chiếu chia ba loại:
+
+| Loại | Job | Kết luận |
+|---|---|---|
+| Khớp hoàn toàn | `52fb84884189` | Dùng được nguyên trạng |
+| Lệch FP (docx dùng luật cũ) | `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201` | Phải sửa FP/F1 theo mục 5.1 |
+| Không truy nguồn được | Bandit 108/381, Semgrep 51/381 | Xem mục 4.0 |
+
+Không được đọc mục này như xác nhận "mọi số đều đúng".
 
 ### 4.0 — CẢNH BÁO: ba con số trong báo cáo KHÔNG có artifact
 
@@ -520,7 +542,11 @@ Code có **17** nhóm `ABSTRACT_SINK_CATEGORIES`. Docx văn bản ghi **18** (4 
 
 ## 7. THỨ TỰ THỰC HIỆN ĐỀ XUẤT
 
-1. **Re-score** toàn bộ 20 job ở `core10` (đã sửa code, chờ xuất bảng) → cập nhật mọi bảng kết quả.
+1. **Bảng kết quả đã có** — không cần chờ ai xuất. Dùng `reports/rescored_history/metrics_core10.csv` (đã tái chấm 13 job) làm nguồn sửa docx:
+   - **13 job có số đúng**: `5ec88c710906`, `aebeb9df7201`, `c72fca194b29`, `ff60cd823550`, `52fb84884189`, `5cf511bb72df`, `dc790eb023ce`, `26dfdce3277c`, `62dbabbb2a42`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c`.
+   - **4 job trong số đó phải sửa FP/F1** (docx dùng luật cũ): `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201` — chi tiết ở mục 5.1.
+   - **6 job không còn đầu vào**: `f27efb428d30`, `f8b459734396`, `9750509c05d8`, `27114c6c3af0`, `9ddc1f19c823`, `b43b14a0782a`. Không thể tái chấm từ `.vulnagent-jobs/` vì job đã bị prune. Phải **quét lại** (tốn credit) hoặc **xoá hàng tương ứng khỏi docx** và ghi rõ trong phần hạn chế.
+   - **Bandit/Semgrep 108/381 và 51/381**: không có artifact, phải chạy lại hai công cụ này rồi lưu JSON, hoặc đánh dấu "không có artifact lưu trữ" trong docx (mục 4.0).
 2. Sửa 3 khoảng số tự mâu thuẫn: `[P430]`, `[P456]`, `[P465]`.
 3. Sửa 6 lỗi mô tả cài đặt (mục 1.1 – 1.6).
 4. Xoá/thay 10 vị trí "75%" (mục 2.1).
