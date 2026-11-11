@@ -36,8 +36,12 @@ Reviewer đề nghị bổ sung test tự động ghim hai ca biên: (a) LLM bá
 `reports/rescored_history/metrics_core10.csv` có **51 dòng**: **13 `scored`**, 1 `incomplete`, 1 `empty`, 36 `unsupported`.
 `reports/rescored_history/metrics_full.csv` cùng cấu trúc.
 
-13 job được chấm (`core10`):
-`26dfdce3277c`, `5ec88c710906`, `aebeb9df7201`, `c72fca194b29`, `ff60cd823550`, `52fb84884189`, `5cf511bb72df`, `dc790eb023ce` (owasp-full) · `62dbabbb2a42`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c` (owasp-mini)
+13 job được chấm (`core10`), tách theo dataset lấy từ cột `dataset` của CSV:
+
+- **owasp-full (7 job)**: `5ec88c710906`, `aebeb9df7201`, `c72fca194b29`, `ff60cd823550`, `52fb84884189`, `5cf511bb72df`, `dc790eb023ce`
+- **owasp-mini (6 job)**: `26dfdce3277c`, `62dbabbb2a42`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c`
+
+(`26dfdce3277c` là `benchmark100` / owasp-mini, `labels_in_scope = 48` — bản trước của note xếp nhầm vào nhóm full.)
 
 **Đối chiếu docx ↔ artifact (đã kiểm):**
 
@@ -408,23 +412,42 @@ Nguồn: `99-work/review/job_inventory.json` (sinh bằng `99-work/review/invent
 
 ## 5. PHÁT HIỆN RIÊNG (reviewer chưa thấy)
 
-### 5.1 — [ĐÃ ĐÍNH CHÍNH] Bảng số trong docx KHỚP core10, không phải full
+### 5.1 — [BLOCKING] Docx dùng LUẬT CHẤM CŨ: FP thấp hơn thực tế ở 4/5 job
 
-**Kết luận cuối: báo cáo đã dùng số `core10` chính xác. Không phải sửa.**
+**Đính chính lần hai.** Một kiểm toán độc lập đối chiếu docx với `reports/rescored_history/metrics_core10.csv` và phát hiện FP lệch. Em đã tự kiểm lại — **kiểm toán đúng, em đã báo sai với người dùng hai lần**.
 
-Bằng chứng đối chiếu trực tiếp (job `52fb84884189`, Beam 1.0 owasp-full DeepVerify):
+**Đối chiếu 5 job có trong cả hai nguồn:**
 
-| Nguồn | TP | FP | FN | Precision | Recall | F1 |
-|---|---:|---:|---:|---:|---:|---:|
-| Docx `[P422]` | 380 | 191 | 1 | 66,55% | 99,74% | 0,7983 |
-| CSV `metrics_core10.csv` | **380** | **191** | **1** | **0,6655** | **0,9974** | **0,7983** |
-| CSV `metrics_full.csv` | 451 | 208 | 1 | 0,6844 | 0,9978 | 0,8119 |
+| Job | Docx TP/FP/FN | CSV TP/FP/FN | Δ FP | Δ TP | Δ FN |
+|---|---|---|---|---:|---:|
+| `62dbabbb2a42` (Gemma DV mini) | 48 / 6 / 0 | 48 / **7** / 0 | **+1** | 0 | 0 |
+| `5cf511bb72df` (Gemma DV full) | 375 / 164 / 6 | 375 / **166** / 6 | **+2** | 0 | 0 |
+| `c72fca194b29` (GPT-6 DV full) | 347 / 123 / 34 | 347 / **136** / 34 | **+13** | 0 | 0 |
+| `aebeb9df7201` (GPT-6 LLM full) | 364 / 149 / 17 | 364 / **165** / 17 | **+16** | 0 | 0 |
+| `52fb84884189` (Beam DV full) | 380 / 191 / 1 | 380 / 191 / 1 | 0 | 0 | 0 |
 
-Docx khớp cột `core10` tới từng đơn vị, và mẫu số 381 cũng đúng (`380/381 = 99,74%`).
+**Δ TP = 0 và Δ FN = 0 ở MỌI job. Chỉ FP tăng.** Đây là dấu hiệu quyết định: không mất phát hiện nào, không sinh FN nào; chỉ có detection **được giữ lại thay vì bị âm thầm bỏ**.
 
-**Ghi chú lịch sử:** trước khi sửa code, `eval/run_eval.py` không có `--cwe-scope` nên không thể tái lập các số này bằng công cụ. Việc sửa code hôm nay làm cho chúng **tái lập được**, không phải làm đổi số.
+**Nguyên nhân đã truy ra:**
 
-**Việc còn phải làm duy nhất:** nếu bảng nào trong docx dùng số `full` (TP=451 cho Beam) thì phải đổi sang `core10`. Đối chiếu bằng CSV ở `reports/rescored_history/`.
+Code cũ lọc detection bằng `in_scope()` — chỉ giữ đúng 10 mã trong `CORE_CWE_SCOPE`. Mọi detection mang CWE **tương đương** nhưng không đồng nhất (CWE-327 cho nhãn CWE-328, CWE-23/35/36/73 cho CWE-22, CWE-80/83/116 cho CWE-79, CWE-77/88 cho CWE-78, CWE-95/96 cho CWE-94, CWE-827 cho CWE-611, CWE-915 cho CWE-502, CWE-564/943 cho CWE-89, CWE-335/338 cho CWE-330) đều **bị drop trước khi chấm**, nên không bao giờ thành FP.
+
+Code mới dùng `eligible()` — giữ chúng lại để chúng có cơ hội khớp nhãn theo lớp tương đương (đó là mục đích của `CWE_EQUIVALENCE`). Detection không khớp nhãn thì **phải tính FP**.
+
+**Kết luận: CSV đúng, docx dùng luật cũ.**
+
+**Việc phải làm trong docx:**
+
+| Job | Sửa FP | Sửa F1 |
+|---|---|---|
+| `62dbabbb2a42` Gemma DV mini | 6 → **7** | 0,9412 → **0,9320** |
+| `5cf511bb72df` Gemma DV full | 164 → **166** | 0,8152 → **0,8134** |
+| `c72fca194b29` GPT-6 DV full | 123 → **136** | 0,8155 → **0,8032** |
+| `aebeb9df7201` GPT-6 LLM full | 149 → **165** | 0,8143 → **0,8000** |
+
+Precision cũng phải tính lại theo FP mới ở 4 hàng trên. `52fb84884189` (Beam) giữ nguyên.
+
+**Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/5 job. Đúng ra chỉ khớp với `52fb84884189`.
 
 ### 5.2 — [BLOCKING] Legacy name `benchmark1000` không còn tồn tại
 
