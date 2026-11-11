@@ -17,12 +17,12 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620, f71c99f, và các sửa sau đó
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620, f71c99f, cd18304
 ```
 
-Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ hai commit tài liệu sau (`d2cd620`, `f71c99f`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
+Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ ba commit tài liệu sau (`d2cd620`, `f71c99f`, `cd18304`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
 
-Code tại `1b5f381` không bị đổi từ đó: `git diff --stat 1b5f381..f71c99f` chỉ chạm file `.md`.
+Code tại `1b5f381` không bị đổi từ đó: `git diff --stat 1b5f381..cd18304` chỉ chạm file `.md`.
 
 | Chỉ số | Trước phiên sửa | Sau |
 |---|---|---|
