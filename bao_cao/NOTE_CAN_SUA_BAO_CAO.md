@@ -17,7 +17,7 @@
 
 ```
 GATE STATUS (code)   : [VERIFIED: sound @ review #13]  — phủ commit 1b5f381
-GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → fd9e0eb (6 commit tài liệu)
+GATE STATUS (docs)   : [CHƯA NGHIỆM THU]               — d2cd620 → 0fbb298 (8 commit tài liệu)
 ```
 
 Reviewer `openai-codex/gpt-6-sol` cấp `Verdict: sound`, **0 BLOCKING**, cho **diff code** tại commit `1b5f381` sau 13 vòng. Verdict đó **không** phủ ba commit tài liệu sau (`d2cd620`, `f71c99f`, `cd18304`) và cũng không phủ các lần sửa note tiếp theo. Không được đọc dòng `sound` phía trên như xác nhận "toàn bộ HEAD đã đạt".
@@ -102,9 +102,10 @@ Scope 10 CWE một nguồn duy nhất · prompt core10 có CWE tương đương 
 |---|---:|
 | BLOCKING phải sửa trước khi nộp | **12** |
 | NON-BLOCKING nên sửa | **4** |
-| Bảng số **khớp** artifact (job ID) | **1** (`52fb84884189`) |
-| Bảng số **lệch FP** (docx dùng luật cũ) | **4** |
-| Bảng số **không truy nguồn được** | **2** (Bandit 108/381, Semgrep 51/381) |
+| **Hàng/job** khớp hoàn toàn giữa docx và CSV | **7**/11 hàng đối chiếu được |
+| **Hàng/job** lệch FP (docx dùng luật cũ) | **4**/11 |
+| **Job không có hàng docx** để đối chiếu | **2** (`26dfdce3277c`, `5ec88c710906`) |
+| **Baseline SAST** không truy nguồn được | **2** con số (Bandit 108/381, Semgrep 51/381) |
 | Job trong báo cáo **không còn artifact** | **6**/20 |
 | Phát hiện riêng do em tìm, reviewer chưa thấy | **6** |
 
@@ -372,10 +373,18 @@ Ba con số dưới đây **chưa kiểm chứng được**, không được tr�
 | 5/7 FP trên owasp-mini (CWE-611) | docx cũ | **Chưa xác minh.** Job `9750509c05d8` không còn trong `.vulnagent-jobs/` và không có trong `metrics_core10.csv` (`in csv: False`). |
 | 59/191 FP trên owasp-full (CWE-611) | docx cũ | Chưa phân rã theo CWE trong artifact hiện có. |
 
-**Đoạn cần thêm** — bản an toàn, không trích ba con số chưa kiểm chứng:
-> Kết quả trên owasp-mini không đủ để kết luận về khả năng tổng quát hoá. Khi mở rộng lên owasp-full, Precision không còn đạt mục tiêu 85% và mật độ cảnh báo sai tăng rõ rệt. CWE-611 (XXE) là một trong các nguồn cảnh báo sai chính, do việc phân biệt cấu hình parser XML an toàn và không an toàn chưa ổn định.
+**Đoạn cần thêm** — bản an toàn, không trích tỷ lệ nào và không xếp hạng CWE:
+> Kết quả trên owasp-mini không đủ để kết luận về khả năng tổng quát hoá. Khi mở rộng lên owasp-full, Precision không còn đạt mục tiêu 85% và số cảnh báo sai tăng rõ rệt. Nguyên nhân cần được phân rã theo từng CWE trước khi kết luận nhóm nào đóng góp nhiều nhất.
 
-Nếu muốn giữ nguyên các tỷ lệ cụ thể, phải chạy lại phép tính mật độ trên `metrics_core10.csv` (và phân rã FP theo CWE) rồi mới trích.
+**CẤM viết trong báo cáo** (chưa có artifact hỗ trợ):
+- "CWE-611 là nguồn cảnh báo sai chính / hàng đầu" — chưa phân rã FP theo CWE trên artifact hiện có.
+- "5/7 FP", "59/191 FP", "7,45 → 17,51 FP/100 tệp" — job mini đã mất, không tái chấm được.
+
+**Nếu muốn khẳng định CWE-611**, phải chạy phân rã FP theo CWE trên `metrics_core10.csv` trước:
+```python
+# ví dụ: đếm FP theo cwe_id từ detections, rồi mới được trích số
+```
+Chỉ sau khi có bảng phân rã đó mới được nêu thứ hạng.
 
 ---
 
@@ -383,11 +392,17 @@ Nếu muốn giữ nguyên các tỷ lệ cụ thể, phải chạy lại phép 
 
 Reviewer báo cáo đánh `[UNVERIFIED]` cho 12 bảng. Đối chiếu xong, kết quả chia ba loại — **không phải tất cả đều truy nguồn được**:
 
-| Loại | Job | Kết luận |
-|---|---|---|
-| Khớp hoàn toàn | `52fb84884189` | Dùng được nguyên trạng |
-| Lệch FP (docx dùng luật cũ) | `62dbabbb2a42`, `5cf511bb72df`, `c72fca194b29`, `aebeb9df7201` | Phải sửa FP/F1 theo mục 5.1 |
-| Không truy nguồn được | Bandit 108/381, Semgrep 51/381 | Xem mục 4.0 |
+Không dùng con số "12 bảng" làm mẫu số nữa — nó gộp ba đơn vị khác nhau (bảng, hàng, con số). Đơn vị đối chiếu được là **hàng/job**:
+
+| Loại | Số lượng | Chi tiết |
+|---|---:|---|
+| Hàng khớp hoàn toàn | **7** | `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `ecbb350b7f2c`, `dc790eb023ce`, `ff60cd823550` |
+| Hàng lệch FP | **4** | `62dbabbb2a42` (+1), `5cf511bb72df` (+2), `c72fca194b29` (+13), `aebeb9df7201` (+16) — xem 5.1 |
+| Job không có hàng docx | **2** | `26dfdce3277c`, `5ec88c710906` |
+| Con số không truy nguồn | **2** | Bandit 108 TP/381, Semgrep 51 TP/381 — xem 4.0 |
+| Job không còn artifact | **6**/20 | Danh sách ở mục 0.0 |
+
+Tổng: 11 hàng đối chiếu được (7+4) + 2 job không có hàng docx = 13 job scored.
 
 Không được đọc mục này như xác nhận "mọi số đều đúng".
 

@@ -94,7 +94,7 @@ Trạng thái thật (kiểm ngày 2026-11-11): **51 dòng**, trong đó **13 sc
 
 **Mất provenance:** `src/jobs.py` có `DEFAULT_RETENTION = 50`; mỗi `JobStore.create()` xoá job cũ nhất. `pytest tests/` tạo snippet job trong `cwd/.vulnagent-jobs` nên prune dần. Toàn bộ 20 job gốc đã bị xoá trong phiên này. Nguồn truy nguyên còn lại: `reports/rescored_history/` và `99-work/review/job_inventory.json`.
 
-`bao_cao/NOTE_CAN_SUA_BAO_CAO.md` — **575 dòng**, danh mục sửa báo cáo docx:
+`bao_cao/NOTE_CAN_SUA_BAO_CAO.md` — danh mục sửa báo cáo docx (số dòng thay đổi theo từng lần sửa; đừng ghim số):
 - Mục 0.0: trạng thái gate (verdict #13 CHỈ phủ code `1b5f381`, tài liệu chưa nghiệm thu) + 13 scored + 6/20 job vắng + mất provenance
 - Mục 1: 6 lỗi mô tả cài đặt (Pydantic, out-of-scope, cú pháp, ngưỡng 0, CVSS, SHA-256)
 - Mục 2: ngôn từ tuyệt đối (10 chỗ "75%", 12 "triệt tiêu")
