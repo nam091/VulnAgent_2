@@ -3295,31 +3295,47 @@ function toggleOwaspSpecTable() {
 
 function renderOwaspOfficialSpecsCard() {
   const specs = [
-    { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, sink: 'sqlite3.execute, cursor.execute (string formatting)' },
-    { cwe: 'CWE-78', name: 'Command Injection (OS CmdI)', b100: 5, b1000: 13, sink: 'os.system, subprocess.call, popen' },
-    { cwe: 'CWE-79', name: 'Cross-Site Scripting (XSS)', b100: 5, b1000: 31, sink: 'render_template_string, unescaped HTTP response' },
-    { cwe: 'CWE-22', name: 'Path Traversal', b100: 5, b1000: 65, sink: 'open(), os.path.join with relative traversal' },
-    { cwe: 'CWE-94', name: 'Code Injection', b100: 5, b1000: 20, sink: 'eval(), exec(), dynamic compilation' },
-    { cwe: 'CWE-502', name: 'Insecure Deserialization', b100: 5, b1000: 18, sink: 'pickle.loads, yaml.load, marshal.loads' },
-    { cwe: 'CWE-643', name: 'XPath Injection', b100: 5, b1000: 51, sink: 'etree.xpath, unparameterized XML queries' },
-    { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, sink: 'xml.etree.ElementTree, external DTD loading' },
-    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, sink: 'ldap3.Connection.search, unescaped user filter' },
-    { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, sink: 'hashlib.md5, hashlib.sha1' },
-    { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, sink: 'random.random, random.randint in security context' },
-    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, sink: 'flask.redirect to unvalidated destination' },
-    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, sink: 'Set-Cookie missing Secure / HttpOnly flags' },
-    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, sink: 'Untrusted user input written into session context' },
-    { cwe: 'Control', name: 'Clean Testcases (True Negatives / Controls)', b100: 50, b1000: 778, sink: 'Sanitized/defensive implementations (FP check)' },
+    // Counts are read from eval/datasets/*/labels.json, not from the OWASP site:
+    // the Python benchmark ships 1,230 testcases (452 vulnerable + 778 clean),
+    // and these are the counts the scorer compares against. `scored` marks the
+    // ten CWEs the default scope evaluates; the rest are visible for reference
+    // and count as out of scope unless the run uses --cwe-scope full.
+    { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, scored: true, sink: 'sqlite3.execute, cursor.execute (string formatting)' },
+    { cwe: 'CWE-78', name: 'Command Injection (OS CmdI)', b100: 5, b1000: 13, scored: true, sink: 'os.system, subprocess.call, popen' },
+    { cwe: 'CWE-79', name: 'Cross-Site Scripting (XSS)', b100: 5, b1000: 31, scored: true, sink: 'render_template_string, unescaped HTTP response' },
+    { cwe: 'CWE-22', name: 'Path Traversal', b100: 5, b1000: 65, scored: true, sink: 'open(), os.path.join with relative traversal' },
+    { cwe: 'CWE-94', name: 'Code Injection', b100: 5, b1000: 20, scored: true, sink: 'eval(), exec(), dynamic compilation' },
+    { cwe: 'CWE-502', name: 'Insecure Deserialization', b100: 5, b1000: 18, scored: true, sink: 'pickle.loads, yaml.load, marshal.loads' },
+    { cwe: 'CWE-643', name: 'XPath Injection', b100: 5, b1000: 51, scored: true, sink: 'etree.xpath, unparameterized XML queries' },
+    { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, scored: true, sink: 'xml.etree.ElementTree, external DTD loading' },
+    { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, scored: true, sink: 'hashlib.md5, hashlib.sha1' },
+    { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, scored: true, sink: 'random.random, random.randint in security context' },
+    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, scored: false, sink: 'ldap3.Connection.search, unescaped user filter' },
+    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, scored: false, sink: 'flask.redirect to unvalidated destination' },
+    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, scored: false, sink: 'Set-Cookie missing Secure / HttpOnly flags' },
+    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, scored: false, sink: 'Untrusted user input written into session context' },
+    { cwe: 'Control', name: 'Clean Testcases (True Negatives / Controls)', b100: 50, b1000: 778, scored: false, sink: 'Sanitized/defensive implementations (FP check)' },
   ];
 
-  const rows = specs.map(s => `
-    <tr style="${s.cwe === 'Control' ? 'background:rgba(184,194,207,0.06);font-style:italic' : ''}">
+  const rows = specs.map(s => {
+    const isControl = s.cwe === 'Control';
+    const rowStyle = isControl ? 'background:rgba(184,194,207,0.06);font-style:italic' : '';
+    const scopeCell = isControl
+      ? '<span class="muted" style="font-size:11px">n/a</span>'
+      : (s.scored
+          ? '<span style="color:var(--low);font-weight:700;font-size:11px">scored</span>'
+          : '<span class="muted" style="font-size:11px">out of scope</span>');
+    const dim = (!isControl && !s.scored) ? 'opacity:.55' : '';
+    return `
+    <tr style="${rowStyle}${dim ? ';' + dim : ''}">
       <td style="font-weight:700"><code>${esc(s.cwe)}</code></td>
       <td class="wrap-cell" style="font-weight:600">${esc(s.name)}</td>
       <td style="text-align:center;font-weight:700;color:${s.b100 > 0 ? 'var(--text)' : 'var(--text-faint)'}">${s.b100}</td>
       <td style="text-align:center;font-weight:700;color:${s.b1000 > 0 ? 'var(--text)' : 'var(--text-faint)'}">${s.b1000}</td>
+      <td style="text-align:center">${scopeCell}</td>
       <td class="wrap-cell muted" style="font-size:12px"><code>${esc(s.sink)}</code></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   return `
     <div class="card" style="margin-bottom:28px">
@@ -3329,7 +3345,7 @@ function renderOwaspOfficialSpecsCard() {
             Official OWASP Benchmark Ground-Truth Specifications
           </div>
           <p class="muted" style="margin:0;font-size:12.5px">
-            Authoritative testcase distribution officially published for the OWASP BenchmarkPython 1000 corpus.
+            Ground-truth distribution across both bundled suites. The full corpus is the OWASP Benchmark for Python (v0.1): 1,230 testcases, of which 452 are vulnerable and 778 are clean controls.
           </p>
         </div>
         <div class="row" style="gap:8px">
@@ -3347,7 +3363,7 @@ function renderOwaspOfficialSpecsCard() {
         <div class="bench-metric-card neutral" style="padding:12px 16px">
           <div class="bench-metric-val" style="font-size:22px">100 / 1,230</div>
           <div class="bench-metric-label">Total Testcases</div>
-          <div class="bench-metric-sub">Benchmark 100 / Benchmark 1000</div>
+          <div class="bench-metric-sub">OWASP Mini / OWASP Full</div>
         </div>
         <div class="bench-metric-card good" style="padding:12px 16px">
           <div class="bench-metric-val" style="font-size:22px">50 / 452</div>
@@ -3362,7 +3378,7 @@ function renderOwaspOfficialSpecsCard() {
         <div class="bench-metric-card neutral" style="padding:12px 16px">
           <div class="bench-metric-val" style="font-size:22px">11 / 14</div>
           <div class="bench-metric-label">CWE Categories</div>
-          <div class="bench-metric-sub">Core injection &amp; logic flaws</div>
+          <div class="bench-metric-sub">Mini covers 11 of 14 corpus CWEs</div>
         </div>
       </div>
 
@@ -3374,8 +3390,9 @@ function renderOwaspOfficialSpecsCard() {
               <tr>
                 <th style="width:100px">CWE ID</th>
                 <th class="wrap-cell">OWASP Vulnerability Category</th>
-                <th style="text-align:center;width:130px">Benchmark 100 (TP)</th>
-                <th style="text-align:center;width:140px">Benchmark 1000 (TP)</th>
+                <th style="text-align:center;width:130px">OWASP Mini (TP)</th>
+                <th style="text-align:center;width:140px">OWASP Full (TP)</th>
+                <th style="text-align:center;width:100px">Scoring Scope</th>
                 <th class="wrap-cell">Primary Sink &amp; Detection Anchor</th>
               </tr>
             </thead>
@@ -3386,7 +3403,8 @@ function renderOwaspOfficialSpecsCard() {
                 <td class="wrap-cell">ALL TESTCASES (VULNERABLE + CLEAN)</td>
                 <td style="text-align:center;color:var(--signal)">100 Files</td>
                 <td style="text-align:center;color:var(--signal)">1,230 Files</td>
-                <td class="wrap-cell muted" style="font-size:12px">Official OWASP Benchmark Ground Truth</td>
+                <td style="text-align:center;color:var(--signal)">10 scored</td>
+                <td class="wrap-cell muted" style="font-size:12px">OWASP Benchmark for Python v0.1 ground truth</td>
               </tr>
             </tbody>
           </table>
@@ -3397,24 +3415,24 @@ function renderOwaspOfficialSpecsCard() {
 
 async function copyOwaspSpecMarkdown() {
   let md = `### Official OWASP Benchmark Ground-Truth Specifications\n\n`;
-  md += `| CWE ID | Vulnerability Category | Benchmark 100 (TP) | Benchmark 1000 (TP) | Primary Sink & Detection Anchor |\n`;
-  md += `| :--- | :--- | :---: | :---: | :--- |\n`;
-  md += `| **CWE-89** | SQL Injection (SQLi) | 5 | 5 | \`sqlite3.execute\`, raw query string concatenation |\n`;
-  md += `| **CWE-78** | Command Injection (OS CmdI) | 5 | 13 | \`os.system\`, \`subprocess.call\`, \`popen\` |\n`;
-  md += `| **CWE-79** | Cross-Site Scripting (XSS) | 5 | 31 | \`render_template_string\`, unescaped reflected output |\n`;
-  md += `| **CWE-22** | Path Traversal | 5 | 65 | \`open()\`, relative traversal resolution |\n`;
-  md += `| **CWE-94** | Code Injection | 5 | 20 | \`eval()\`, \`exec()\`, dynamic compilation |\n`;
-  md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | \`pickle.loads\`, \`yaml.load\`, \`marshal.loads\` |\n`;
-  md += `| **CWE-643** | XPath Injection | 5 | 51 | \`etree.xpath\`, unparameterized XML queries |\n`;
-  md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | \`xml.etree.ElementTree\`, external DTD resolution |\n`;
-  md += `| **CWE-90** | LDAP Injection | 0 | 16 | \`ldap3.Connection.search\`, unescaped filters |\n`;
-  md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | \`hashlib.md5\`, \`hashlib.sha1\` |\n`;
-  md += `| **CWE-330** | Insecure Randomness | 5 | 99 | \`random.random\`, \`random.randint\` for secret generation |\n`;
-  md += `| **CWE-601** | Open Redirect | 2 | 13 | \`flask.redirect\` to untrusted destinations |\n`;
-  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | \`Set-Cookie\` missing \`Secure\` or \`HttpOnly\` flag |\n`;
-  md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | Untrusted input placed into trusted session context |\n`;
-  md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | *Sanitized/defensive implementations (FP evaluation)* |\n`;
-  md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **Official OWASP BenchmarkPython 1000 Corpus** |\n`;
+  md += `| CWE ID | Vulnerability Category | OWASP Mini (TP) | OWASP Full (TP) | Scoring Scope | Primary Sink & Detection Anchor |\n`;
+  md += `| :--- | :--- | :---: | :---: | :---: | :--- |\n`;
+  md += `| **CWE-89** | SQL Injection (SQLi) | 5 | 5 | **scored** |\`sqlite3.execute\`, raw query string concatenation |\n`;
+  md += `| **CWE-78** | Command Injection (OS CmdI) | 5 | 13 | **scored** |\`os.system\`, \`subprocess.call\`, \`popen\` |\n`;
+  md += `| **CWE-79** | Cross-Site Scripting (XSS) | 5 | 31 | **scored** |\`render_template_string\`, unescaped reflected output |\n`;
+  md += `| **CWE-22** | Path Traversal | 5 | 65 | **scored** |\`open()\`, relative traversal resolution |\n`;
+  md += `| **CWE-94** | Code Injection | 5 | 20 | **scored** |\`eval()\`, \`exec()\`, dynamic compilation |\n`;
+  md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | **scored** |\`pickle.loads\`, \`yaml.load\`, \`marshal.loads\` |\n`;
+  md += `| **CWE-643** | XPath Injection | 5 | 51 | **scored** |\`etree.xpath\`, unparameterized XML queries |\n`;
+  md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | **scored** |\`xml.etree.ElementTree\`, external DTD resolution |\n`;
+  md += `| **CWE-90** | LDAP Injection | 0 | 16 | out of scope | \`ldap3.Connection.search\`, unescaped filters |\n`;
+  md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | **scored** |\`hashlib.md5\`, \`hashlib.sha1\` |\n`;
+  md += `| **CWE-330** | Insecure Randomness | 5 | 99 | **scored** |\`random.random\`, \`random.randint\` for secret generation |\n`;
+  md += `| **CWE-601** | Open Redirect | 2 | 13 | out of scope | \`flask.redirect\` to untrusted destinations |\n`;
+  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | out of scope | \`Set-Cookie\` missing \`Secure\` or \`HttpOnly\` flag |\n`;
+  md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | out of scope | Untrusted input placed into trusted session context |\n`;
+  md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | n/a | *Sanitized/defensive implementations (FP evaluation)* |\n`;
+  md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **10 scored** | **OWASP Benchmark for Python v0.1** |\n`;
 
   try {
     await navigator.clipboard.writeText(md);
