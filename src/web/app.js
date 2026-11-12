@@ -3300,20 +3300,20 @@ function renderOwaspOfficialSpecsCard() {
     // and these are the counts the scorer compares against. `scored` marks the
     // ten CWEs the default scope evaluates; the rest are visible for reference
     // and count as out of scope unless the run uses --cwe-scope full.
-    { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, scored: true, sink: 'sqlite3.execute, cursor.execute (string formatting)' },
-    { cwe: 'CWE-78', name: 'Command Injection (OS CmdI)', b100: 5, b1000: 13, scored: true, sink: 'os.system, subprocess.call, popen' },
-    { cwe: 'CWE-79', name: 'Cross-Site Scripting (XSS)', b100: 5, b1000: 31, scored: true, sink: 'render_template_string, unescaped HTTP response' },
-    { cwe: 'CWE-22', name: 'Path Traversal', b100: 5, b1000: 65, scored: true, sink: 'open(), os.path.join with relative traversal' },
-    { cwe: 'CWE-94', name: 'Code Injection', b100: 5, b1000: 20, scored: true, sink: 'eval(), exec(), dynamic compilation' },
-    { cwe: 'CWE-502', name: 'Insecure Deserialization', b100: 5, b1000: 18, scored: true, sink: 'pickle.loads, yaml.load, marshal.loads' },
-    { cwe: 'CWE-643', name: 'XPath Injection', b100: 5, b1000: 51, scored: true, sink: 'etree.xpath, unparameterized XML queries' },
-    { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, scored: true, sink: 'xml.etree.ElementTree, external DTD loading' },
-    { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, scored: true, sink: 'hashlib.md5, hashlib.sha1' },
-    { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, scored: true, sink: 'random.random, random.randint in security context' },
-    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, scored: false, sink: 'ldap3.Connection.search, unescaped user filter' },
-    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, scored: false, sink: 'flask.redirect to unvalidated destination' },
-    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, scored: false, sink: 'Set-Cookie missing Secure / HttpOnly flags' },
-    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, scored: false, sink: 'Untrusted user input written into session context' },
+    { cwe: 'CWE-89', name: 'SQL Injection (SQLi)', b100: 5, b1000: 5, scored: true, sink: 'cursor.execute(sql) via helpers.db_sqlite.get_connection()' },
+    { cwe: 'CWE-78', name: 'Command Injection (OS CmdI)', b100: 5, b1000: 13, scored: true, sink: 'subprocess.run(argStr, shell=True)' },
+    { cwe: 'CWE-79', name: 'Cross-Site Scripting (XSS)', b100: 5, b1000: 31, scored: true, sink: 'render_template(...) with user data, reflected into the page' },
+    { cwe: 'CWE-22', name: 'Path Traversal', b100: 5, b1000: 65, scored: true, sink: 'open(bar) where bar comes from the request' },
+    { cwe: 'CWE-94', name: 'Code Injection', b100: 5, b1000: 20, scored: true, sink: 'eval(bar)' },
+    { cwe: 'CWE-502', name: 'Insecure Deserialization', b100: 5, b1000: 18, scored: true, sink: 'yaml.load(bar) and pickle.loads(bar)' },
+    { cwe: 'CWE-643', name: 'XPath Injection', b100: 5, b1000: 51, scored: true, sink: 'ElementTree xpath() with a request-supplied expression' },
+    { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, scored: true, sink: 'ElementTree.fromstring(bar) / external DTD resolution' },
+    { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, scored: true, sink: 'hashlib.md5 / hashlib.sha1 on a password' },
+    { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, scored: true, sink: 'random.random() / random.randint() used to generate a secret' },
+    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, scored: false, sink: 'conn.search(base, filter, attributes=ldap3.ALL_ATTRIBUTES)' },
+    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, scored: false, sink: 'flask.redirect(param)' },
+    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, scored: false, sink: 'RESPONSE.set_cookie(cookie, value, ...) without Secure/HttpOnly' },
+    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, scored: false, sink: 'flask.session[key] = user input' },
     { cwe: 'Control', name: 'Clean Testcases (True Negatives / Controls)', b100: 50, b1000: 778, scored: false, sink: 'Sanitized/defensive implementations (FP check)' },
   ];
 
@@ -3417,20 +3417,20 @@ async function copyOwaspSpecMarkdown() {
   let md = `### Official OWASP Benchmark Ground-Truth Specifications\n\n`;
   md += `| CWE ID | Vulnerability Category | OWASP Mini (TP) | OWASP Full (TP) | Scoring Scope | Primary Sink & Detection Anchor |\n`;
   md += `| :--- | :--- | :---: | :---: | :---: | :--- |\n`;
-  md += `| **CWE-89** | SQL Injection (SQLi) | 5 | 5 | **scored** |\`sqlite3.execute\`, raw query string concatenation |\n`;
-  md += `| **CWE-78** | Command Injection (OS CmdI) | 5 | 13 | **scored** |\`os.system\`, \`subprocess.call\`, \`popen\` |\n`;
-  md += `| **CWE-79** | Cross-Site Scripting (XSS) | 5 | 31 | **scored** |\`render_template_string\`, unescaped reflected output |\n`;
-  md += `| **CWE-22** | Path Traversal | 5 | 65 | **scored** |\`open()\`, relative traversal resolution |\n`;
-  md += `| **CWE-94** | Code Injection | 5 | 20 | **scored** |\`eval()\`, \`exec()\`, dynamic compilation |\n`;
-  md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | **scored** |\`pickle.loads\`, \`yaml.load\`, \`marshal.loads\` |\n`;
-  md += `| **CWE-643** | XPath Injection | 5 | 51 | **scored** |\`etree.xpath\`, unparameterized XML queries |\n`;
-  md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | **scored** |\`xml.etree.ElementTree\`, external DTD resolution |\n`;
-  md += `| **CWE-90** | LDAP Injection | 0 | 16 | out of scope | \`ldap3.Connection.search\`, unescaped filters |\n`;
-  md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | **scored** |\`hashlib.md5\`, \`hashlib.sha1\` |\n`;
-  md += `| **CWE-330** | Insecure Randomness | 5 | 99 | **scored** |\`random.random\`, \`random.randint\` for secret generation |\n`;
-  md += `| **CWE-601** | Open Redirect | 2 | 13 | out of scope | \`flask.redirect\` to untrusted destinations |\n`;
-  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | out of scope | \`Set-Cookie\` missing \`Secure\` or \`HttpOnly\` flag |\n`;
-  md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | out of scope | Untrusted input placed into trusted session context |\n`;
+  md += `| **CWE-89** | SQL Injection (SQLi) | 5 | 5 | **scored** |\`sqlite3.execute\`, cursor.execute(sql) via helpers.db_sqlite |\n`;
+  md += `| **CWE-78** | Command Injection (OS CmdI) | 5 | 13 | **scored** |\`subprocess.run(argStr, shell=True)\` |\n`;
+  md += `| **CWE-79** | Cross-Site Scripting (XSS) | 5 | 31 | **scored** |\`render_template(...)\` reflecting user data |\n`;
+  md += `| **CWE-22** | Path Traversal | 5 | 65 | **scored** |\`open(bar)\` with a request-supplied path |\n`;
+  md += `| **CWE-94** | Code Injection | 5 | 20 | **scored** |\`eval(bar)\` |\n`;
+  md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | **scored** |\`yaml.load(bar)\`, \`pickle.loads(bar)\` |\n`;
+  md += `| **CWE-643** | XPath Injection | 5 | 51 | **scored** |ElementTree \`xpath()\` with user expression |\n`;
+  md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | **scored** |ElementTree \`fromstring(bar)\`, DTD resolution |\n`;
+  md += `| **CWE-90** | LDAP Injection | 0 | 16 | out of scope | \`conn.search(base, filter, ...)\` |\n`;
+  md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | **scored** |\`hashlib.md5\` / \`hashlib.sha1\` on a password |\n`;
+  md += `| **CWE-330** | Insecure Randomness | 5 | 99 | **scored** |\`random.random()\` / \`random.randint()\` for a secret |\n`;
+  md += `| **CWE-601** | Open Redirect | 2 | 13 | out of scope | \`flask.redirect(param)\` |\n`;
+  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | out of scope | \`set_cookie(...)\` without Secure/HttpOnly |\n`;
+  md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | out of scope | \`flask.session[key] = user input\` |\n`;
   md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | n/a | *Sanitized/defensive implementations (FP evaluation)* |\n`;
   md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **10 scored** | **OWASP Benchmark for Python v0.1** |\n`;
 
