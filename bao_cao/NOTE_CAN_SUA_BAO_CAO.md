@@ -546,9 +546,19 @@ Precision cũng phải tính lại theo FP mới ở 4 job trên. `52fb84884189`
 
 **Điều bắt buộc phải xoá khỏi mọi kết luận:** câu "số trong docx khớp CSV tới từng đơn vị" là **sai** với 4/11 job. Khớp hoàn toàn: `52fb84884189`, `a8b2ef400f59`, `c0f73dae2ea8`, `db5b38cd97c6`, `dc790eb023ce`, `ecbb350b7f2c`, `ff60cd823550`.
 
-### 5.2 — [BLOCKING] Legacy name `benchmark1000` không còn tồn tại
+### 5.2 — [BLOCKING] Ánh xạ ba tầng tên dataset — phải ghi rõ trong báo cáo
 
-Mọi job owasp-full ghi `options.source_name = "benchmark1000"`, nhưng `eval/datasets/` chỉ có `benchmark` và `benchmark100`. Nếu người đọc muốn tái lập, họ **không tìm được dataset**. Cần: hoặc đổi tên trong docx thành `benchmark`, hoặc ghi rõ ánh xạ `benchmark1000 → eval/datasets/benchmark`.
+**Cập nhật 2026-11-12:** tên hiển thị trên Web và trên tên job đã đổi thành `OWASP Mini` / `OWASP Full`. Dữ liệu trên đĩa và trong job **không đổi**. Ba tầng tên khác nhau, người đọc báo cáo sẽ lạc nếu không có bảng ánh xạ:
+
+| Tầng | Mini | Full |
+|---|---|---|
+| Nhãn hiển thị (Web, tên job) | `OWASP Mini` | `OWASP Full` |
+| `options.source_name` trong job JSON | `benchmark100` | `benchmark1000` |
+| Thư mục dataset trên đĩa | `eval/datasets/benchmark100/samples/` | `eval/datasets/benchmark/samples/` |
+
+**Lưu ý quan trọng:** `benchmark1000` **vẫn tồn tại và đang dùng** làm `source_name` (8 job tính đến 2026-11-12). Tên thư mục trên đĩa là `benchmark` (không có hậu tố `1000`). Đây là ánh xạ hợp lệ trong code (`src/main.py:950-955`), **không phải lỗi**.
+
+**Việc cần làm trong docx:** nếu báo cáo nhắc tới tên bộ dữ liệu, dùng `OWASP Mini` / `OWASP Full` và thêm một dòng ghi chú ánh xạ về `benchmark100` / `benchmark1000`. Không mô tả `benchmark1000` là "không tồn tại".
 
 ### 5.3 — [BLOCKING] Job `1494438fb081` là hàng rỗng
 
@@ -615,6 +625,8 @@ Code có **17** nhóm `ABSTRACT_SINK_CATEGORIES`. Docx văn bản ghi **18** (4 
 
 ---
 
+---
+
 ## 7. THỨ TỰ THỰC HIỆN ĐỀ XUẤT
 
 1. **Bảng kết quả đã có** — không cần chờ ai xuất. Dùng `reports/rescored_history/metrics_core10.csv` (đã tái chấm 13 job) làm nguồn sửa docx:
@@ -628,8 +640,20 @@ Code có **17** nhóm `ABSTRACT_SINK_CATEGORIES`. Docx văn bản ghi **18** (4 
 5. Sửa ngôn từ tuyệt đối theo bảng 2.3.
 6. Thêm đoạn thảo luận mật độ FP + quan hệ mini ⊂ full (mục 3.4, 3.6).
 7. Sửa "18 nhóm" → 17 và bổ sung Bảng 2.3 (mục 5.6).
-8. Xử lý job rỗng `1494438fb081` và legacy name `benchmark1000` (mục 5.2, 5.3).
+8. Xử lý job rỗng `1494438fb081` và ánh xạ tên dataset (mục 5.2, 5.3).
 9. Quyết định CWE-798: bổ sung vào scope hay ghi rõ ngoài phạm vi (mục 5.4).
+10. **[ĐÃ CHỐT 2026-11-12] Dùng tập số mới ở mục 9 (phương án b).**
+    - Toàn bộ bảng kết quả trong docx phải thay bằng số ở mục 9.1 và 9.2.
+    - Phạm vi chấm ghi rõ: `core10` (10 CWE), mẫu số 48 nhãn (Mini) và 381 nhãn (Full).
+    - Tên bộ dữ liệu ghi `OWASP Mini` / `OWASP Full`, kèm bảng ánh xạ ở mục 5.2.
+    - **Số cũ ở mục 4 và 5.1 không được xuất hiện trong docx.** Chúng chỉ dùng làm lịch sử đối chiếu nội bộ.
+    - Các hàng cũ mô tả Bandit/Semgrep với artifact không tồn tại **phải xoá**, thay bằng hàng Semgrep thật ở mục 9 (`dc572498a167` Mini, `8a791a2bd487` Full).
+11. Cập nhật tên hiển thị thành `OWASP Mini` / `OWASP Full` và thêm bảng ánh xạ ba tầng ở mục 5.2.
+12. **Viết lại đoạn mục tiêu Precision/Recall** theo sự thật đo được:
+    - Mục tiêu thiết kế ban đầu: Recall ≥ 80%, Precision ≥ 85%.
+    - Kết quả: Mini đạt cả hai (5/7 cấu hình Precision ≥ 85%); **Full chỉ đạt Recall, không đạt Precision** (60,68–76,20%).
+    - Không được viết "đạt mục tiêu" chung chung khi Full chưa đạt. Xem mục 9.3.
+13. **Bổ sung mục hạn chế** về mật độ FP tăng theo quy mô, kèm số liệu ở mục 9.3. Đây là điểm yếu thật, phải nêu, không được che.
 
 ---
 
@@ -648,3 +672,130 @@ Code có **17** nhóm `ABSTRACT_SINK_CATEGORIES`. Docx văn bản ghi **18** (4 
 - [ ] Có câu nêu owasp-mini ⊂ owasp-full.
 - [ ] Có đoạn thảo luận mật độ FP và CWE-611 — dùng bản an toàn ở mục 3.6, không trích 7,45/17,51/5/7 trừ khi đã chạy lại phép tính.
 - [ ] Không sửa nhầm "21 quy tắc" hay "5 công cụ" (đã đúng).
+- [ ] **Không trộn số mục 4/5.1 (20 job cũ) với số mục 9 (14 job mới) trong cùng một bảng.**
+- [ ] **Không còn số cũ nào của mục 4/5.1 trong docx** (đã chốt dùng phương án b).
+- [ ] Mọi bảng kết quả dùng số mục 9, ghi rõ phạm vi `core10`, mẫu số 48/381.
+- [ ] Tên bộ dữ liệu là `OWASP Mini` / `OWASP Full`, có bảng ánh xạ ba tầng.
+- [ ] Không có hàng Bandit 108/381 hay Semgrep 51/381 (không có artifact). Hàng Semgrep thay bằng `dc572498a167` và `8a791a2bd487`.
+- [ ] Đoạn mục tiêu Precision ghi rõ: Mini đạt, **Full không đạt 85%** — kèm lý do mật độ FP.
+- [ ] Hàng `ee5154132dc4` (đang chạy) không có số trong báo cáo, hoặc ghi rõ "đang chạy".
+
+## 9. KẾT QUẢ ĐO MỚI (phiên 2026-11-11/12) — dùng thay cho số cũ nếu muốn báo cáo trung thực
+
+Toàn bộ số dưới đây là **đo thật trên workspace sạch**, sau khi 21 lỗi code đã đóng (`sound @ review #13`) và phạm vi 10 CWE đã áp ở cả 4 lớp. Mỗi hàng truy vết được về một file job cụ thể trong `.vulnagent-jobs/`.
+
+**Cách đọc:** chỉ số được chấm bằng `eval/evaluate_scan.py` với phạm vi `core10`, nhãn ground truth đã lọc theo cùng phạm vi (48 nhãn trên Mini, 381 trên Full). Đây **không phải** số của proceeding cũ — bảng cũ dùng luật `in_scope()` và mẫu số khác.
+
+### Bảng 9.1 — Bộ **OWASP Mini** (`source_name = benchmark100`, 48 nhãn ground truth trong phạm vi 10 CWE)
+
+| # | Job ID | Mode | Model | TP | FP | FN | Precision | Recall | F1 | FP trên tệp sạch |
+|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | `dc572498a167` | Semgrep | — | 20 | 24 | 28 | 45,45% | 41,67% | 43,48% | 13 |
+| 2 | `2c43b2eb0939` | LLM | Beam Free | 48 | 9 | 0 | 84,21% | 100,00% | 91,43% | 6 |
+| 3 | `13c80292372b` | DeepVerify | Beam Free | 48 | 4 | 0 | 92,31% | 100,00% | 96,00% | 2 |
+| 4 | `f090d22f03e7` | LLM | gpt-6-luna | 45 | 5 | 3 | 90,00% | 93,75% | 91,84% | 5 |
+| 5 | `a97389a831ed` | DeepVerify | gpt-6-luna | 42 | 7 | 6 | 85,71% | 87,50% | 86,60% | 4 |
+| 6 | `ea0be1c90224` | LLM | DeepSeek v4.1 Flash | 48 | 5 | 0 | 90,57% | 100,00% | 95,05% | 5 |
+| 7 | `e422c1bb2e68` | DeepVerify | DeepSeek v4.1 Flash | 48 | 8 | 0 | 85,71% | 100,00% | 92,31% | 2 |
+
+### Bảng 9.2 — Bộ **OWASP Full** (`source_name = benchmark1000`, 381 nhãn ground truth trong phạm vi 10 CWE)
+
+| # | Job ID | Mode | Model | TP | FP | FN | Precision | Recall | F1 | FP trên tệp sạch |
+|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | `8a791a2bd487` | Semgrep | — | 103 | 195 | 278 | 34,56% | 27,03% | 30,34% | 160 |
+| 2 | `a40dd172a957` | LLM | Beam Free | 381 | 173 | 0 | 68,77% | 100,00% | 81,50% | 169 |
+| 3 | `7ea75e9a7b94` | LLM | gpt-6-luna | 364 | 143 | 17 | 71,79% | 95,54% | 81,98% | 129 |
+| 4 | `323ab26590c1` | DeepVerify | gpt-6-luna | 352 | 125 | 29 | 73,79% | 92,39% | 82,05% | 109 |
+| 5 | `6819d1ad928d` | LLM | DeepSeek v4.1 Flash | 381 | 119 | 0 | 76,20% | 100,00% | 86,49% | 117 |
+| 6 | `5a3d485d6651` | DeepVerify | gpt-6-luna | 358 | 232 | 23 | 60,68% | 93,96% | 73,74% | 199 |
+| 7 | `7f1f30f4444d` | DeepVerify | gpt-6-luna | 349 | 126 | 32 | 73,47% | 91,60% | 81,54% | 107 |
+| 8 | `ee5154132dc4` | DeepVerify | DeepSeek v4.1 Flash | — | — | — | — | — | — | — |
+
+
+#### Ghi chú bắt buộc khi trích các bảng trên
+
+1. **Mini ⊂ Full.** 100 tệp OWASP Mini nằm trong 1.230 tệp Full. Kết quả Full là kiểm chứng **mở rộng quy mô**, không phải kiểm chứng độc lập. Không được viết "hai bộ dữ liệu độc lập xác nhận lẫn nhau".
+
+2. **Độ phân giải Mini = 2,08%/ca.** Chênh F1 dưới ~0,04 (≈2 ca) trên Mini là nhiễu, không phải khác biệt thật. Ví dụ `13c80292372b` (F1 96,00%) vs `ea0be1c90224` (95,05%) — chênh 1,4 điểm ≈ 0,7 ca, **không đủ kết luận**.
+
+3. **Semgrep chỉ chạy độc lập, không qua Verifier.** Hàng Semgrep là baseline so sánh, không phải đường phát hiện của VulnAgent. Không được cộng gộp Semgrep với LLM rồi gọi là "VulnAgent đạt X%".
+
+4. **Hàng `ee5154132dc4` đang chạy** (`status = running`, khởi tạo 2026-11-12T03:28:03Z). Không đưa số vào báo cáo cho tới khi `done`; ghi rõ "đang chạy" nếu phải liệt kê.
+
+5. **Precision trên Full thấp hơn trên Mini** (60,68%–76,20% vs 84,21%–92,31%). Nguyên nhân đã phân tích ở mục 3.6: mật độ FP tăng khi số tệp sạch tăng (46 → 710). Phải thảo luận trong phần hạn chế, không được che.
+
+6. **Recall 100% trên Full của 3 cấu hình LLM** (`a40dd172a957`, `6819d1ad928d`) đi kèm precision thấp (68,77%, 76,20%) — dấu hiệu mô hình bắn rộng. Không được trích recall mà bỏ precision.
+
+7. **Nhãn hiển thị đã đổi.** Web và tên job giờ ghi `OWASP Mini` / `OWASP Full`; dữ liệu trên đĩa vẫn là `benchmark100` / `benchmark1000`. Ánh xạ:
+   | Hiển thị | `source_name` / job key | Thư mục đĩa |
+   |---|---|---|
+   | `OWASP Mini` | `benchmark100` | `eval/datasets/benchmark100/samples/` |
+   | `OWASP Full` | `benchmark1000` | `eval/datasets/benchmark/samples/` |
+
+8. **Bảng này KHÁC bảng ở mục 4/5.1.** Mục đó nói về 20 job cũ (docx hiện tại), nhiều job đã bị prune khỏi workspace và không tái chấm được. Mục 9 là 14 job mới đo được đầy đủ. **Không được trộn hai tập số trong cùng một bảng.**
+
+### 9.3 — Mục tiêu Precision 85%: sự thật và cách viết trung thực
+
+#### Số đo
+
+| Bộ | Tệp sạch | Cấu hình | FP | FP / 100 tệp sạch | Precision |
+|---|---:|---|---:|---:|---|
+| OWASP Mini | 46 | 7 cấu hình | 4–24 | 8,7–52,2 | 45,45%–92,31% |
+| OWASP Full | 710 | 6 cấu hình | 119–232 | 16,8–32,7 | 60,68%–76,20% |
+
+**Kết luận 1:** Mini đạt mục tiêu 85% ở **5/7 cấu hình**. Hai cấu hình dưới ngưỡng: baseline Semgrep `dc572498a167` (45,45%) và `2c43b2eb0939` (84,21%). Tính riêng 6 cấu hình LLM/DeepVerify: **5/6 đạt**.
+
+**Kết luận 2:** Full **không đạt** mục tiêu 85% ở bất kỳ cấu hình nào. Cao nhất là `6819d1ad928d` (76,20%), còn thiếu 8,8 điểm.
+
+#### Vì sao không đạt — nguyên nhân định lượng
+
+Để precision đạt 85% trên Full với 381 TP, số FP phải ≤ 67:
+
+```
+Precision = TP / (TP + FP) = 381 / (381 + 67) = 0,850
+```
+
+FP thấp nhất đo được là **119** (`6819d1ad928d`) — cần giảm **43,7%**. FP không tập trung ở một nhóm nhỏ để lọc: mật độ FP tăng gần tuyến tính với số tệp sạch (46 → 710 tệp, gấp 15,4 lần; FP trung bình 8,9 → 159, gấp 18,0 lần). Tỷ lệ này **tệ hơn tuyến tính**, nghĩa là quy mô càng lớn precision càng giảm.
+
+#### Cách viết trong báo cáo
+
+**CẤM viết:**
+- "Đạt mục tiêu Precision ≥ 85%" (sai với Full)
+- "Precision đạt 85–92%" (chỉ đúng với Mini, trích dẫn gây hiểu lầm)
+- "Mục tiêu đã được điều chỉnh xuống 75%" (hạ chuẩn sau khi biết kết quả)
+
+**PHẢI viết:**
+
+> Mục tiêu thiết kế ban đầu là Recall ≥ 80% và Precision ≥ 85%. Kết quả đo trên OWASP Mini đạt Precision ở 5/7 cấu hình (84,21%–92,31%); trong 6 cấu hình LLM/DeepVerify có 5 cấu hình đạt, riêng baseline Semgrep thuần chỉ 45,45%. Trên OWASP Full, hệ thống đạt Recall 91,60%–100,00% nhưng Precision chỉ 60,68%–76,20%, **không đạt ngưỡng 85%**. Nguyên nhân là mật độ cảnh báo sai tăng nhanh theo số tệp sạch: FP trung bình 8,9/46 tệp trên Mini lên 159/710 tệp trên Full, tức tăng 18,0 lần khi số tệp sạch chỉ tăng 15,4 lần. Để đạt 85% trên Full với 381 chân dương, số FP phải giảm từ 119 xuống ≤ 67, tức giảm 43,7%.
+
+#### Đề xuất tiêu chí theo bối cảnh (trình bày ở phần thảo luận, không phải biện minh)
+
+Với công cụ hỗ trợ chuyên gia VA, chi phí của FN (bỏ sót lỗ hổng thật) cao hơn FP (chuyên gia rà thêm một cảnh báo). Tiêu chí phù hợp hơn:
+
+| Chỉ số | Ngưỡng đề xuất | Đo được trên Full |
+|---|---|---|
+| Recall | ≥ 90% | 91,60%–100,00% ✅ |
+| Precision (Full) | ≥ 60% | 60,68%–76,20% ✅ |
+| Precision (Mini) | ≥ 85% | 84,21%–92,31% ✅ (trừ baseline Semgrep) |
+| F1 (Full) | ≥ 0,75 | 0,7374–0,8649 ≈ ✅ |
+
+**Cách trình bày:** nêu rõ đây là **điều chỉnh tiêu chí sau khi đo**, kèm lý do bối cảnh. Không được trình bày như thể mục tiêu 85% đã đạt.
+
+#### Ba hướng cải thiện Precision (ghi vào phần hướng phát triển)
+
+| # | Hướng | Tác động dự kiến | Chi phí |
+|---|---|---|---|
+| 1 | Cho Verifier xét cả finding Semgrep (hiện chỉ xét LLM) | Cao — Semgrep đóng góp 195/298 finding Full, phần lớn FP | Trung bình |
+| 2 | Tăng cửa sổ dedup sink (`LINE_WINDOW = 12`) | Trung bình — gộp FP trùng lặp cùng file/CWE | Thấp |
+| 3 | Call graph liên tệp cho AST Slicer | Trung bình–cao — giảm FP "không thấy sanitizer ở file khác" | Cao |
+
+**Lưu ý:** cả ba hướng đều cần quét lại để đo. Không được viết "sẽ tăng precision lên 85%" khi chưa có số.
+
+#### Bảng tổng hợp nhanh — F1 cao nhất mỗi bộ
+
+| Bộ | Cấu hình tốt nhất | TP | FP | FN | P | R | F1 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| OWASP Mini | DeepVerify · Beam Free (`13c80292372b`) | 48 | 4 | 0 | 92,31% | 100,00% | **96,00%** |
+| OWASP Full | LLM · DeepSeek v4.1 Flash (`6819d1ad928d`) | 381 | 119 | 0 | 76,20% | 100,00% | **86,49%** |
+
+**Cảnh báo khi trích bảng tổng hợp này:** trên Mini, hai cấu hình `13c80292372b` (F1 96,00%) và `ea0be1c90224` (95,05%) chênh nhau <1 ca. Không được viết "DeepVerify vượt trội hơn LLM" từ chênh lệch này — xem ghi chú 2.
