@@ -995,8 +995,13 @@ class Scanner:
                 raw_text = trace_meta.get("raw_content") or ""
                 served_by = (raw.get("_served_by") if isinstance(raw, dict) else None) or {}
 
+                # Sep = os.sep is avoided here on purpose: the replacement
+                # target is a literal backslash so the code stays valid on
+                # Python 3.10/3.11, where f-string expressions cannot contain
+                # one.
+                trace_id_suffix = relative.replace("/", "_").replace("\\", "_")
                 trace_item = {
-                    "id": f"trace_scan_{relative.replace('/', '_').replace('\\', '_')}",
+                    "id": f"trace_scan_{trace_id_suffix}",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "type": "llm_scan",
                     "phase": "llm",
