@@ -9,6 +9,7 @@ can be refreshed, closed or reopened without losing one.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 from datetime import datetime, timezone
 import json
@@ -83,13 +84,30 @@ MAX_SINGLE_FILE_BYTES = _limit("VULNAGENT_MAX_FILE_BYTES", 8 * 1024 * 1024)
 MAX_CODE_CHARS = _limit("VULNAGENT_MAX_CODE_CHARS", 2_000_000)
 SCANNABLE_SUFFIXES = {".py", ".pyi", ".txt", ".cfg", ".ini", ".toml", ".env", ".yml", ".yaml"}
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Flush the benchmark score cache on shutdown.
+
+    The store saves on a debounce, so this only catches the last couple of
+    seconds of writes; without it a clean restart can drop them.
+    """
+    yield
+    if _BENCHMARK_DISK_CACHE is not None:
+        try:
+            _BENCHMARK_DISK_CACHE.save(force=True)
+        except Exception:
+            pass
+
+
 app = FastAPI(
     title="VulnAgent",
     description="Hybrid vulnerability detection: rule-based static analysis + LLM agent",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 
 store = JobStore()
 
@@ -1236,6 +1254,17 @@ async def get_job_debug(job_id: str) -> Dict[str, Any]:
 _BENCHMARK_EVAL_CACHE: Dict[str, Dict[str, Any]] = {}
 _SCORER_VERSION = 2
 
+# Scores survive a restart: without this the first /api/benchmarks call after
+# every deploy re-scores every job (~0.55 s each).
+try:
+    from cache.benchmark_cache import BenchmarkCacheStore
+    _BENCHMARK_DISK_CACHE: Optional[BenchmarkCacheStore] = BenchmarkCacheStore(
+        Path.cwd() / ".vulnagent-cache" / "benchmark_eval.json"
+    )
+except Exception as _exc:  # pragma: no cover - cache must never break import
+    _BENCHMARK_DISK_CACHE = None
+    _benchmark_disk_cache_error = str(_exc)
+
 
 def evaluate_job_benchmark_data(job: Any, exact_cwe: bool = False) -> Dict[str, Any]:
     """
@@ -1316,6 +1345,12 @@ def evaluate_job_benchmark_data(job: Any, exact_cwe: bool = False) -> Dict[str, 
                 pass  # Non-JSON findings cannot be keyed reliably.
         if cache_key is not None and cache_key in _BENCHMARK_EVAL_CACHE:
             return _BENCHMARK_EVAL_CACHE[cache_key]
+        # Second tier: scores computed before the last restart.
+        if cache_key is not None and _BENCHMARK_DISK_CACHE is not None:
+            persisted = _BENCHMARK_DISK_CACHE.get(cache_key)
+            if persisted is not None:
+                _BENCHMARK_EVAL_CACHE[cache_key] = persisted
+                return persisted
 
         if labels_hash is None:
             return {"supported": False, "reason": f"Dataset labels unavailable: {labels_file}"}
@@ -1387,6 +1422,8 @@ def evaluate_job_benchmark_data(job: Any, exact_cwe: bool = False) -> Dict[str, 
         }
         if cache_key is not None:
             _BENCHMARK_EVAL_CACHE[cache_key] = res
+            if _BENCHMARK_DISK_CACHE is not None:
+                _BENCHMARK_DISK_CACHE.put(cache_key, res, job_id=getattr(job, "id", ""))
         return res
     except Exception as e:
         return {"supported": False, "reason": f"Benchmark evaluation failed: {e}"}
