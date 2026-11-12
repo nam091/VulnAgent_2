@@ -204,12 +204,98 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const api = async (path, options) => {
-  const res = await fetch(path, options);
+  const opts = Object.assign({}, options);
+  const auth = apiAuthHeader(path, opts);
+  if (auth) {
+    opts.headers = Object.assign({}, opts.headers, { Authorization: auth });
+  }
+  const res = await fetch(path, opts);
   let body = null;
   try { body = await res.json(); } catch (e) { /* empty body */ }
   if (!res.ok) throw new Error((body && body.detail) || `HTTP ${res.status}`);
   return body;
 };
+
+/* ----- settings credentials (deployment gate) ----------------------------
+   The settings surface is protected on the deployment host. The dashboard
+   stays public. Credentials live in sessionStorage only, so closing the tab
+   forgets them; they are re-sent as Basic auth on the few gated calls below
+   and on nothing else. */
+const SETTINGS_CRED_KEY = 'vulnagent_admin_auth';
+const GATED_PATH_RE = /^\/api\/(settings|models)/;
+
+function settingsCredentials() {
+  try {
+    const raw = sessionStorage.getItem(SETTINGS_CRED_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setSettingsCredentials(user, pass) {
+  sessionStorage.setItem(SETTINGS_CRED_KEY, JSON.stringify({ u: user, p: pass }));
+}
+
+function clearSettingsCredentials() {
+  try { sessionStorage.removeItem(SETTINGS_CRED_KEY); } catch (e) { /* ignore */ }
+}
+
+function apiAuthHeader(path, opts) {
+  // Only attach credentials to the gated endpoints, never to public calls.
+  const method = ((opts && opts.method) || 'GET').toUpperCase();
+  if (!GATED_PATH_RE.test(String(path || ''))) return null;
+  const cred = settingsCredentials();
+  if (!cred) return null;
+  try {
+    return 'Basic ' + btoa(`${cred.u}:${cred.p}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+function submitSettingsLogin(ev) {
+  if (ev) ev.preventDefault();
+  const user = (document.getElementById('admin-user') || {}).value || '';
+  const pass = (document.getElementById('admin-pass') || {}).value || '';
+  if (!user || !pass) {
+    renderSettingsLogin('Enter both a username and a password.');
+    return;
+  }
+  setSettingsCredentials(user.trim(), pass);
+  renderSettings();
+}
+
+function signOutSettings() {
+  clearSettingsCredentials();
+  renderSettingsLogin('Signed out.');
+}
+
+function renderSettingsLogin(message) {
+  view.innerHTML = `
+    <div class="page-head">
+      <div class="row" style="align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <h1>Settings access</h1>
+          <p>This host protects the model configuration. Sign in to continue.</p>
+        </div>
+      </div>
+    </div>
+    <form class="card" style="max-width:420px;padding:20px 22px" onsubmit="return submitSettingsLogin(event)">
+      ${message ? `<div class="banner err" style="margin-bottom:14px">${esc(message)}</div>` : ''}
+      <label style="display:block;margin-bottom:12px">
+        <span class="muted" style="display:block;font-size:12px;margin-bottom:4px">Username</span>
+        <input id="admin-user" type="text" autocomplete="username" style="width:100%">
+      </label>
+      <label style="display:block;margin-bottom:16px">
+        <span class="muted" style="display:block;font-size:12px;margin-bottom:4px">Password</span>
+        <input id="admin-pass" type="password" autocomplete="current-password" style="width:100%">
+      </label>
+      <button type="submit" class="btn">Sign in</button>
+    </form>`;
+  const el = document.getElementById('admin-user');
+  if (el) el.focus();
+}
 
 const ago = iso => {
   if (!iso) return '';
@@ -2176,6 +2262,14 @@ async function clearAllJobs() {
 /* ---------------- settings view & model profiles ---------------- */
 
 async function renderSettings() {
+  // The settings surface is gated on the deployment host only. Ask for the
+  // credentials here, in the page, instead of hiding the sidebar entry: the
+  // user has to be able to reach it to be prompted.
+  if (!settingsCredentials()) {
+    renderSettingsLogin();
+    return;
+  }
+
   view.innerHTML = `
     <div class="page-head">
       <div class="row" style="align-items:flex-start">
@@ -2210,7 +2304,12 @@ async function renderSettings() {
       cachedModelProfiles = modelsList;
     }
   } catch (e) {
-    // fallback
+    // A 401 here means the stored credentials are stale: drop them and re-ask.
+    if (String(e.message || '').includes('401')) {
+      clearSettingsCredentials();
+      renderSettingsLogin('Credentials rejected. Sign in again.');
+      return;
+    }
   }
 
   const modelRowsHtml = modelsList.map(p => {
@@ -2251,6 +2350,7 @@ async function renderSettings() {
         <button type="button" class="btn sm" onclick="openModelProfileModal()">
           <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Model Profile
         </button>
+        <button type="button" class="btn ghost sm" onclick="signOutSettings()" title="Forget the settings credentials">Sign out</button>
       </div>
     </div>
 
