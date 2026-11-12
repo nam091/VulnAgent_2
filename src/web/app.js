@@ -3289,7 +3289,7 @@ function toggleOwaspSpecTable() {
     if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Hide Specifications Table`;
   } else {
     container.classList.add('hide');
-    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> View Specifications Table (14 CWEs)`;
+    if (btn) btn.innerHTML = `<svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> View Specifications Table (10 CWEs)`;
   }
 }
 
@@ -3310,10 +3310,6 @@ function renderOwaspOfficialSpecsCard() {
     { cwe: 'CWE-611', name: 'XML External Entity (XXE)', b100: 3, b1000: 8, scored: true, sink: 'ElementTree.fromstring(bar) / external DTD resolution' },
     { cwe: 'CWE-328', name: 'Weak Hashing Algorithm', b100: 5, b1000: 71, scored: true, sink: 'hashlib.md5 / hashlib.sha1 on a password' },
     { cwe: 'CWE-330', name: 'Insecure Randomness', b100: 5, b1000: 99, scored: true, sink: 'random.random() / random.randint() used to generate a secret' },
-    { cwe: 'CWE-90', name: 'LDAP Injection', b100: 0, b1000: 16, scored: false, sink: 'conn.search(base, filter, attributes=ldap3.ALL_ATTRIBUTES)' },
-    { cwe: 'CWE-601', name: 'Open Redirect', b100: 2, b1000: 13, scored: false, sink: 'flask.redirect(param)' },
-    { cwe: 'CWE-614', name: 'Insecure Cookie', b100: 0, b1000: 24, scored: false, sink: 'RESPONSE.set_cookie(cookie, value, ...) without Secure/HttpOnly' },
-    { cwe: 'CWE-501', name: 'Trust Boundary Violation', b100: 0, b1000: 18, scored: false, sink: 'flask.session[key] = user input' },
     { cwe: 'Control', name: 'Clean Testcases (True Negatives / Controls)', b100: 50, b1000: 778, scored: false, sink: 'Sanitized/defensive implementations (FP check)' },
   ];
 
@@ -3345,13 +3341,13 @@ function renderOwaspOfficialSpecsCard() {
             Official OWASP Benchmark Ground-Truth Specifications
           </div>
           <p class="muted" style="margin:0;font-size:12.5px">
-            Ground-truth distribution across both bundled suites. The full corpus is the OWASP Benchmark for Python (v0.1): 1,230 testcases, of which 452 are vulnerable and 778 are clean controls.
+            Ground-truth distribution for the ten CWEs this system scores. The full corpus is the OWASP Benchmark for Python (v0.1) with 1,230 testcases; the rows below account for 381 of its 452 vulnerable cases. Cases outside these ten CWEs are never scored.
           </p>
         </div>
         <div class="row" style="gap:8px">
           <button type="button" class="btn sm" id="btn-toggle-owasp-spec" onclick="toggleOwaspSpecTable()">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            <span>View Specifications Table (14 CWEs)</span>
+            <span>View Specifications Table (10 CWEs)</span>
           </button>
           <button type="button" class="btn ghost sm" onclick="copyOwaspSpecMarkdown()">
             <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Specification Table
@@ -3361,24 +3357,24 @@ function renderOwaspOfficialSpecsCard() {
 
       <div class="bench-grid" style="margin-bottom:18px">
         <div class="bench-metric-card neutral" style="padding:12px 16px">
-          <div class="bench-metric-val" style="font-size:22px">100 / 1,230</div>
-          <div class="bench-metric-label">Total Testcases</div>
-          <div class="bench-metric-sub">OWASP Mini / OWASP Full</div>
+          <div class="bench-metric-val" style="font-size:22px">48 / 381</div>
+          <div class="bench-metric-label">Scored Vulnerable Cases</div>
+          <div class="bench-metric-sub">Labels inside the 10-CWE scope</div>
         </div>
         <div class="bench-metric-card good" style="padding:12px 16px">
-          <div class="bench-metric-val" style="font-size:22px">50 / 452</div>
-          <div class="bench-metric-label">True Positives (Vuln)</div>
-          <div class="bench-metric-sub">Actual exploitable defects</div>
+          <div class="bench-metric-val" style="font-size:22px">46 / 710</div>
+          <div class="bench-metric-label">Scored Clean Cases</div>
+          <div class="bench-metric-sub">Controls whose files fall in scope</div>
         </div>
         <div class="bench-metric-card warn" style="padding:12px 16px">
-          <div class="bench-metric-val" style="font-size:22px">50 / 778</div>
-          <div class="bench-metric-label">True Negatives (Clean)</div>
-          <div class="bench-metric-sub">Clean control files for FP test</div>
+          <div class="bench-metric-val" style="font-size:22px">94 / 1,091</div>
+          <div class="bench-metric-label">Scored Files</div>
+          <div class="bench-metric-sub">Denominator used for precision</div>
         </div>
         <div class="bench-metric-card neutral" style="padding:12px 16px">
-          <div class="bench-metric-val" style="font-size:22px">11 / 14</div>
+          <div class="bench-metric-val" style="font-size:22px">10</div>
           <div class="bench-metric-label">CWE Categories</div>
-          <div class="bench-metric-sub">Mini covers 11 of 14 corpus CWEs</div>
+          <div class="bench-metric-sub">Every row below is scored</div>
         </div>
       </div>
 
@@ -3401,9 +3397,9 @@ function renderOwaspOfficialSpecsCard() {
               <tr style="background:var(--raised);font-weight:700">
                 <td>TOTAL</td>
                 <td class="wrap-cell">ALL TESTCASES (VULNERABLE + CLEAN)</td>
-                <td style="text-align:center;color:var(--signal)">100 Files</td>
-                <td style="text-align:center;color:var(--signal)">1,230 Files</td>
-                <td style="text-align:center;color:var(--signal)">10 scored</td>
+                <td style="text-align:center;color:var(--signal)">48</td>
+                <td style="text-align:center;color:var(--signal)">381</td>
+                <td style="text-align:center;color:var(--signal)">10</td>
                 <td class="wrap-cell muted" style="font-size:12px">OWASP Benchmark for Python v0.1 ground truth</td>
               </tr>
             </tbody>
@@ -3425,11 +3421,9 @@ async function copyOwaspSpecMarkdown() {
   md += `| **CWE-502** | Insecure Deserialization | 5 | 18 | **scored** |\`yaml.load(bar)\`, \`pickle.loads(bar)\` |\n`;
   md += `| **CWE-643** | XPath Injection | 5 | 51 | **scored** |ElementTree \`xpath()\` with user expression |\n`;
   md += `| **CWE-611** | XML External Entity (XXE) | 3 | 8 | **scored** |ElementTree \`fromstring(bar)\`, DTD resolution |\n`;
-  md += `| **CWE-90** | LDAP Injection | 0 | 16 | out of scope | \`conn.search(base, filter, ...)\` |\n`;
   md += `| **CWE-328** | Weak Hashing Algorithm | 5 | 71 | **scored** |\`hashlib.md5\` / \`hashlib.sha1\` on a password |\n`;
   md += `| **CWE-330** | Insecure Randomness | 5 | 99 | **scored** |\`random.random()\` / \`random.randint()\` for a secret |\n`;
   md += `| **CWE-601** | Open Redirect | 2 | 13 | out of scope | \`flask.redirect(param)\` |\n`;
-  md += `| **CWE-614** | Insecure Cookie | 0 | 24 | out of scope | \`set_cookie(...)\` without Secure/HttpOnly |\n`;
   md += `| **CWE-501** | Trust Boundary Violation | 0 | 18 | out of scope | \`flask.session[key] = user input\` |\n`;
   md += `| *Control* | *Clean Testcases (True Negatives)* | *50* | *778* | n/a | *Sanitized/defensive implementations (FP evaluation)* |\n`;
   md += `| **TOTAL** | **ALL TESTCASES** | **100 Files** | **1,230 Files** | **10 scored** | **OWASP Benchmark for Python v0.1** |\n`;
