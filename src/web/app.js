@@ -18,6 +18,20 @@ const PHASES = [
 let liveStream = null;
 let pollTimer = null;
 
+/* Display-only labels for the benchmark suites. The disk keys in
+   `eval/datasets/` and the `source_name` stored on every existing job stay
+   `benchmark100` / `benchmark1000`; only the text a human reads changes. Do not
+   replace `value=`, `dataset_key` or `source_name` with these labels. */
+const BENCH_LABEL = {
+  benchmark100: 'OWASP Mini',
+  benchmark1000: 'OWASP Full'
+};
+
+function benchLabel(key) {
+  const k = String(key || '').trim();
+  return BENCH_LABEL[k] || k;
+}
+
 const TOKEN_SVG = `<svg class="tok-svg-icon" width="10.5" height="10.5" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-1px;margin-right:3px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`;
 
 var cachedModelProfiles = [];
@@ -625,14 +639,14 @@ async function renderScan() {
               <input type="radio" name="bench-suite" value="benchmark100" checked style="width:18px;height:18px;margin-top:2px;accent-color:var(--signal)">
               <div style="min-width:0;flex:1">
                 <div style="font-weight:700;font-size:15.5px;color:var(--text);margin-bottom:4px">
-                  OWASP Benchmark 100
+                  OWASP Mini <span class="muted" style="font-weight:500;font-size:12.5px">key: benchmark100</span>
                 </div>
                 <p class="muted" style="margin:0;font-size:13px">
                   Balanced academic benchmark containing <b>100 Python testcases</b> (50 vulnerable + 50 clean files).
                   Ideal for quick evaluations (~1-3 minutes).
                 </p>
                 <div class="muted" style="margin-top:6px;font-size:12px">
-                  Path: <code>eval/datasets/benchmark100/samples</code>
+                  Path: <code>eval/datasets/benchmark100/samples</code> <span class="muted">(key: <code>benchmark100</code>)</span>
                 </div>
               </div>
             </div>
@@ -643,7 +657,7 @@ async function renderScan() {
               <input type="radio" name="bench-suite" value="benchmark1000" style="width:18px;height:18px;margin-top:2px;accent-color:var(--signal)">
               <div style="min-width:0;flex:1">
                 <div style="font-weight:700;font-size:15.5px;color:var(--text);margin-bottom:4px">
-                  OWASP Benchmark 1000
+                  OWASP Full <span class="muted" style="font-weight:500;font-size:12.5px">key: benchmark1000</span>
                 </div>
                 <p class="muted" style="margin:0;font-size:13px">
                   Full comprehensive suite containing <b>1,230 Python testcases</b> (452 vulnerable + 778 clean files).
@@ -2612,7 +2626,7 @@ function renderConfigurationHistoryTabContent(job) {
 function renderBenchmarkTabContent(job) {
   const bench = job.benchmark_evaluation;
   if (!bench || !bench.supported) {
-    return `<div class="banner info">Automatic benchmark evaluation is only supported for benchmark100 and benchmark1000 datasets.</div>`;
+    return `<div class="banner info">Automatic benchmark evaluation is only supported for <b>${esc(benchLabel('benchmark100'))}</b> and <b>${esc(benchLabel('benchmark1000'))}</b> datasets.</div>`;
   }
 
   const m = bench.metrics || {};
@@ -2657,7 +2671,7 @@ function renderBenchmarkTabContent(job) {
             <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Automated Ground-Truth Benchmark Evaluation
           </div>
           <p class="muted" style="margin:0">
-            Dataset: <b>${esc(bench.dataset_name)}</b> (<code>${esc(bench.dataset_key)}</code>) ·
+            Dataset: <b>${esc(benchLabel(bench.dataset_key))}</b> (<code>${esc(bench.dataset_key)}</code>) ·
             Ground-Truth Labels: <b>${totalGroundTruth}</b> · Evaluated via bipartite sink-matching (&plusmn;3 lines tolerance, CWE equivalence classes).
           </p>
           ${bench.cwe_scope ? `
@@ -3056,7 +3070,7 @@ function renderSuiteComparisonInner(agg, datasetKey) {
 
 function renderBenchmarkSuiteAggregation(agg, datasetKey) {
   if (!agg || !agg.runs || !agg.runs.length) {
-    return `<div class="card muted" style="margin-bottom:24px">No completed runs found for <code>${esc(datasetKey)}</code> yet. Run a scan targeting this benchmark to generate comparative metrics.</div>`;
+    return `<div class="card muted" style="margin-bottom:24px">No completed runs found for <code>${esc(benchLabel(datasetKey))}</code> yet. Run a scan targeting this benchmark to generate comparative metrics.</div>`;
   }
 
   const runs = agg.runs;
@@ -3070,7 +3084,7 @@ function renderBenchmarkSuiteAggregation(agg, datasetKey) {
       <div class="row" style="margin-bottom:14px;align-items:flex-start">
         <div style="min-width:0;flex:1">
           <h2 style="font-size:18px;font-weight:700;margin:0;color:var(--text)">
-            ${esc(agg.dataset_name)}
+            ${esc(benchLabel(datasetKey))}
           </h2>
           <p class="muted" style="margin-top:4px;font-size:12px">
             Suite: <code>${esc(datasetKey)}</code> · <b>${agg.total_ground_truth}</b> Ground-Truth Defects · <b>${runs.length}</b> Scan Runs Available
@@ -3313,7 +3327,7 @@ async function renderBenchmarkCenter() {
   view.innerHTML = `
     <div class="page-head">
       <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
-      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>${esc(benchLabel('benchmark100'))}</b> and <b>${esc(benchLabel('benchmark1000'))}</b>.</p>
     </div>
     <div class="empty"><span class="spinner"></span>Loading benchmark evaluations...</div>`;
 
@@ -3337,7 +3351,7 @@ async function renderBenchmarkCenter() {
   view.innerHTML = `
     <div class="page-head">
       <h1><svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Benchmark Evaluation Center</h1>
-      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>benchmark100</b> and <b>benchmark1000</b>.</p>
+      <p>Automated ground-truth scoring and aggregated comparative matrices for <b>${esc(benchLabel('benchmark100'))}</b> and <b>${esc(benchLabel('benchmark1000'))}</b>.</p>
     </div>
 
     ${renderOwaspOfficialSpecsCard()}
@@ -3345,7 +3359,7 @@ async function renderBenchmarkCenter() {
     <div class="card" style="margin-bottom:22px;background:var(--raised)">
       <div style="font-weight:700;margin-bottom:4px">Strict Benchmark Dataset Scope &amp; Run Aggregation</div>
       <p class="muted" style="margin:0">
-        In accordance with research methodology, automated ground-truth scoring and comparative matrix aggregation are strictly applied to <b>benchmark100</b> (50 vulnerable + 50 clean testcases) and <b>benchmark1000</b> (OWASP 1,230 files). All runs targeting the same benchmark suite are aggregated together below.
+        In accordance with research methodology, automated ground-truth scoring and comparative matrix aggregation are strictly applied to <b>${esc(benchLabel('benchmark100'))}</b> (50 vulnerable + 50 clean testcases) and <b>${esc(benchLabel('benchmark1000'))}</b> (OWASP 1,230 files). All runs targeting the same benchmark suite are aggregated together below.
       </p>
     </div>
 

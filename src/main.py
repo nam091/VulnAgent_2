@@ -494,6 +494,22 @@ def format_mode_display(mode: Optional[str], verify: Optional[bool] = None) -> s
     return "DeepVerify"
 
 
+# Display names for the two bundled OWASP suites. The keys stay `benchmark100`
+# and `benchmark1000` on disk (`eval/datasets/`), in `job.options.source_name`
+# and in every stored job file; only the human-readable label changes. Anything
+# that compares or filters must use the raw key, never this map.
+BENCH_DISPLAY_NAME = {
+    "benchmark100": "OWASP Mini",
+    "benchmark1000": "OWASP Full",
+}
+
+
+def benchmark_display_name(key: Optional[str]) -> str:
+    """Human-readable suite name for a stored benchmark key."""
+    k = str(key or "").strip()
+    return BENCH_DISPLAY_NAME.get(k, k)
+
+
 def build_job_standard_label(
     source: str,
     mode: str = "deep-verify",
@@ -975,7 +991,10 @@ async def scan_benchmark_preset(
         v_prof = resolve_model_profile(verify_model_param)
         chosen_verify_model = v_prof["model"] if v_prof else normalize_model_identifier(str(verify_model_param).strip())
 
-    job_label = build_job_standard_label(suite_name, request.mode, chosen_model, verify, verify_model_id=chosen_verify_model)
+    job_label = build_job_standard_label(
+        benchmark_display_name(suite_name), request.mode, chosen_model, verify,
+        verify_model_id=chosen_verify_model,
+    )
     job = store.create(
         kind="folder",
         label=job_label,
